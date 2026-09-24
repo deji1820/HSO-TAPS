@@ -5,6 +5,7 @@
  *   { type: "temperature_reading", celsius: 36.8 }
  *   { type: "height_reading", cm: 170 }
  *   { type: "weight_reading", kg: 62.5 }
+ *   { type: "blood_pressure_reading", bloodPressure: "120/80", classification: "..." }
  *
  * In VITE_MOCK_HARDWARE=true mode, this fires believable fake events instead,
  * so the UI/UX can be built and demoed on a laptop with zero hardware.
@@ -21,6 +22,8 @@ export function connectDeviceBridge(onEvent) {
         onEvent({ type: "height_reading", cm });
         onEvent({ type: "weight_reading", kg });
       },
+      simulateBloodPressure: (bloodPressure = "120/80", classification) =>
+        onEvent({ type: "blood_pressure_reading", bloodPressure, classification }),
       close: () => {},
     };
   }

@@ -10,14 +10,14 @@ export default function ConsultationEntryScreen({
   isOnline,
 }) {
   return (
-    <div className="kiosk-shell">
+    <div className="kiosk-shell wic-screen wic-screen--entry">
       <KioskHeader isOnline={isOnline} />
-      <div className="kiosk-content">
-        <p className="wic-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
-        <h1 className="wic-heading wic-heading--danger">
-          NO PRE-SCHEDULED APPOINTMENT FOUND FOR TODAY
-        </h1>
-        <p className="wic-subtext">How would you like to proceed?</p>
+      <main className="wic-content">
+        <div className="wic-alert-banner">No pre-scheduled appointment today.</div>
+        <div className="wic-heading-block">
+          <p className="wic-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
+          <h1 className="wic-heading">How would you like to proceed?</h1>
+        </div>
 
         <div className="wic-choice-row">
           <button className="wic-choice-card" onClick={onWalkIn}>
@@ -43,7 +43,7 @@ export default function ConsultationEntryScreen({
         <a className="wic-faq-link" onClick={onFaq}>
           Frequently Asked Questions (FAQ's)
         </a>
-      </div>
+      </main>
     </div>
   );
 }

@@ -1,0 +1,192 @@
+.clearance-screen { background: var(--bg-page); }
+.clearance-screen .kiosk-header {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 3.5%;
+}
+.clearance-screen .kiosk-header-brand { gap: 9px; }
+.clearance-screen .kiosk-header-title { font-size: .75rem; }
+.clearance-screen .kiosk-header-subtitle { font-size: .6rem; line-height: 1; }
+.clearance-screen .kiosk-header-status { gap: 7px; font-size: .6rem; }
+.clearance-screen .kiosk-header-divider { height: 12px; }
+.clearance-screen .kiosk-header-dot { width: 5px; height: 5px; box-shadow: none; }
+
+.clearance-content {
+  position: relative;
+  width: 100%;
+  min-height: calc(100vh - 44px);
+  padding: 34px 2.4% 32px;
+  text-align: left;
+}
+.clearance-alert, .clearance-info-banner {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 20px;
+  color: #fff;
+  font-size: 13px;
+}
+.clearance-alert { background: #f5252c; }
+.clearance-info-banner { background: #54bfd2; }
+.clearance-heading {
+  width: min(770px, 100%);
+  margin: 24px auto 28px;
+  padding: 0 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.clearance-heading p {
+  margin: 0 0 5px;
+  color: var(--nu-blue-dark);
+  font-size: 13px;
+  font-weight: 700;
+}
+.clearance-heading h1 {
+  margin: 0;
+  color: var(--nu-blue);
+  font-size: 30px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+.clearance-choice-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 295px));
+  gap: 54px;
+  width: max-content;
+  max-width: calc(100% - 20px);
+  margin: 0 auto;
+}
+.clearance-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 180px;
+  padding: 22px 20px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: #fff;
+  color: var(--nu-blue-dark);
+  text-align: left;
+  cursor: pointer;
+}
+.clearance-choice:hover, .clearance-choice:focus-visible { border-color: var(--nu-blue); outline: none; }
+.clearance-choice-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 16px;
+  border: 1px solid #c8c9d1;
+  border-radius: 10px;
+  background: #dedee2;
+  font-size: 21px;
+}
+.clearance-choice strong { margin-bottom: 7px; font-size: 21px; }
+.clearance-choice > span:last-child { color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.clearance-back, .clearance-proceed, .clearance-done {
+  width: 104px;
+  height: 24px;
+  padding: 2px 8px;
+  border: 1px solid #17345b;
+  border-radius: 0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.clearance-back { background: var(--nu-blue); }
+.clearance-proceed, .clearance-done { border-color: #18532e; background: var(--success); }
+.clearance-entry .clearance-back { display: block; margin: 24px 0 0 max(12px, calc((100% - 645px) / 2)); }
+.clearance-faq {
+  position: absolute;
+  bottom: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--nu-blue-dark);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.clearance-intake .clearance-heading { margin-top: 8px; margin-bottom: 26px; }
+.clearance-intake .clearance-panel {
+  width: min(755px, 100%);
+  margin: 0 auto 18px;
+  padding: 18px 25px;
+  border: 1px solid #e8e8e8;
+  border-radius: 3px;
+}
+.clearance-panel h2 {
+  margin: 0;
+  padding: 0 9px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--nu-blue-dark);
+  font-size: 16px;
+}
+.clearance-hint { margin: 7px 9px 18px; color: var(--nu-blue-dark); font-size: 11px; font-style: italic; }
+.clearance-purpose-panel select {
+  display: block;
+  width: calc(100% - 34px);
+  height: 19px;
+  margin: 0 auto;
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  background: #f8f8f8;
+  color: var(--nu-blue-dark);
+  text-align: center;
+  font-size: 11px;
+}
+.clearance-documents-panel { min-height: 124px; }
+.clearance-document-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  padding: 18px 10px 4px;
+  color: var(--nu-blue-dark);
+  font-size: 13px;
+}
+.clearance-document-list label, .clearance-acknowledge { display: flex; align-items: center; gap: 8px; }
+.clearance-document-list input, .clearance-acknowledge input { accent-color: var(--nu-blue); }
+.clearance-empty-documents { margin: 27px 0 0; color: var(--text-secondary); font-size: 13px; font-style: italic; text-align: center; }
+.clearance-policy { width: min(755px, 100%); margin: -4px auto 14px; color: var(--nu-blue-dark); font-size: 12px; font-style: italic; line-height: 1.35; }
+.clearance-acknowledge { width: min(755px, 100%); margin: 0 auto; color: var(--nu-blue-dark); font-size: 12px; font-style: italic; }
+.clearance-actions { display: flex; gap: 13px; width: min(755px, 100%); margin: 30px auto 0; }
+.clearance-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.clearance-error { width: min(755px, 100%); margin: 10px auto 0; color: var(--danger); font-size: 13px; }
+.clearance-intake .clearance-faq { bottom: 48px; }
+
+.clearance-result .clearance-content { padding-top: 34px; }
+.clearance-result .clearance-heading { margin-top: 22px; margin-bottom: 22px; }
+.clearance-queue-card {
+  width: min(755px, 100%);
+  min-height: 118px;
+  margin: 0 auto;
+  padding: 20px 26px;
+  border: 1px solid #e5e5e5;
+  border-radius: 3px;
+  background: #f7f7f7;
+  text-align: center;
+}
+.clearance-queue-card h2 {
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--nu-blue-dark);
+  font-size: 16px;
+}
+.clearance-queue-card strong { display: block; margin-top: 9px; color: var(--nu-gold); font-size: 25px; font-style: italic; }
+.clearance-done { display: block; margin: 24px 0 0 max(12px, calc((100% - 755px) / 2)); }
+.clearance-done span { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 3px; border-radius: 50%; background: #fff; color: var(--success); }
+.clearance-autoclose { margin: 8px 0 0 max(12px, calc((100% - 755px) / 2)); color: var(--text-secondary); font-size: 12px; font-style: italic; }
+.clearance-result .clearance-faq { bottom: 52px; }
+
+@media (max-width: 700px) {
+  .clearance-content { padding-left: 16px; padding-right: 16px; }
+  .clearance-choice-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; width: 100%; }
+  .clearance-choice { padding: 16px 12px; }
+  .clearance-choice strong { font-size: 17px; }
+  .clearance-heading h1 { font-size: 25px; }
+  .clearance-intake .clearance-panel { padding: 14px; }
+  .clearance-purpose-panel select { width: 100%; }
+  .clearance-faq { bottom: 20px; }
+}

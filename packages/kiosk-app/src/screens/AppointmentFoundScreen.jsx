@@ -15,12 +15,14 @@ export default function AppointmentFoundScreen({
   isOnline,
 }) {
   return (
-    <div className="kiosk-shell">
+    <div className="kiosk-shell apt-screen apt-screen--found">
       <KioskHeader isOnline={isOnline} />
-      <div className="kiosk-content apt-page">
-        <p className="apt-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
-        <h1 className="apt-heading apt-heading--success">APPOINTMENT FOUND TODAY</h1>
-        <p className="apt-subtext">Please complete your vital signs before proceeding to the clinic.</p>
+      <main className="kiosk-content apt-page apt-page--found">
+        <div className="apt-banner apt-banner--success">Pre-scheduled appointment found today.</div>
+        <div className="apt-heading-block">
+          <p className="apt-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
+          <h1 className="apt-heading">Please take your vitals to check in</h1>
+        </div>
 
         <div className="apt-details-card">
           <p className="apt-details-title">APPOINTMENT DETAILS</p>
@@ -50,7 +52,7 @@ export default function AppointmentFoundScreen({
 
         <button className="apt-btn apt-btn--single" onClick={onBack}>⬅ Back to service selection</button>
         <button className="apt-faq" onClick={onFaq}>Frequently Asked Questions (FAQ's)</button>
-      </div>
+      </main>
     </div>
   );
 }

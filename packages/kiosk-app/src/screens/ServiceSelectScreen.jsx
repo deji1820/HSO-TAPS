@@ -29,6 +29,12 @@ const SERVICES = [
     icon: "\u{1F48A}",
   },
   {
+    value: "General Inquiry",
+    title: "General Inquiry",
+    desc: "For other clinic services and general concerns.",
+    icon: "\u{2139}\u{FE0F}",
+  },
+  {
     value: "Quick Health Screening",
     title: "Quick Health Screening",
     desc: "Self-Service Body Temperature, Blood Pressure, Height, Weight & BMI Calculation.",

@@ -39,12 +39,13 @@ export default function WalkInIntakeScreen({
   const canContinue = temperatureC != null && selectedComplaints.length > 0;
 
   return (
-    <div className="kiosk-shell">
+    <div className="kiosk-shell wic-screen wic-screen--intake">
       <KioskHeader isOnline={isOnline} />
-      <div className="kiosk-content">
-        <p className="wic-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
-        <h1 className="wic-heading">WALK-IN CONSULTATION</h1>
-        <p className="wic-subtext">Please answer the questions below to begin your visit.</p>
+      <main className="wic-content">
+        <div className="wic-heading-block">
+          <p className="wic-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION &gt; WALK-IN CONSULTATION</p>
+          <h1 className="wic-heading">Please complete your initial intake</h1>
+        </div>
 
         <div className="wic-panel">
           <p className="wic-panel-title">CHIEF COMPLAINT SELECTION</p>
@@ -65,14 +66,14 @@ export default function WalkInIntakeScreen({
 
         <div className="wic-panel">
           <p className="wic-panel-title">MANDATORY VITAL SIGNS INTAKE</p>
-          <p className={`wic-panel-hint${isAbnormal ? " wic-panel-hint--danger" : ""}`}>
-            Please position your right wrist in front of the temperature sensor to acquire your vital signs.
+          <p className={`wic-panel-hint wic-instruction${isAbnormal ? " wic-panel-hint--danger" : ""}`}>
+            Please position your right wrist in front of the temperature sensor and your left arm into the blood pressure cuff to acquire your vital signs.
           </p>
           <div className="wic-vitals-row">
             <span className="wic-vitals-label">Temperature:</span>
             <span className={`wic-vitals-value${isAbnormal ? " wic-vitals-value--danger" : ""}`}>
               {temperatureC != null
-                ? `${temperatureC.toFixed(1)}°C — ${tempClass}`
+                ? `${temperatureC.toFixed(1)}°C - ${tempClass}`
                 : <span className="wic-vitals-value--pending">Waiting for reading...</span>}
             </span>
 
@@ -95,7 +96,7 @@ export default function WalkInIntakeScreen({
         <a className="wic-faq-link" onClick={onFaq}>
           Frequently Asked Questions (FAQ's)
         </a>
-      </div>
+      </main>
     </div>
   );
 }

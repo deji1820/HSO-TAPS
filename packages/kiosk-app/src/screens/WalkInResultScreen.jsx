@@ -4,6 +4,7 @@ import "../styles/screens/WalkInConsultation.css";
 
 export default function WalkInResultScreen({
   consultSubType,
+  serviceLabel,
   overrideTriggered,   // bool — matches App.jsx state name
   queueCode,           // e.g. "M0014"
   temperatureC,
@@ -29,21 +30,32 @@ export default function WalkInResultScreen({
   }, [remaining]);
 
   return (
-    <div className="kiosk-shell">
+    <div className={`kiosk-shell wic-screen wic-screen--result${overrideTriggered ? " wic-screen--urgent" : " wic-screen--complete"}`}>
       <KioskHeader isOnline={isOnline} />
-      <div className="kiosk-content">
-        <p className="wic-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
-        <h1 className="wic-heading">WALK-IN CONSULTATION</h1>
+      <main className="wic-content">
+        {overrideTriggered ? (
+          <div className="wic-alert-banner">
+            An elevated vital sign reading was detected. Please proceed directly into the clinic.
+          </div>
+        ) : (
+          <div className="wic-info-banner">
+            Take a picture of the queue number before you leave the kiosk, and wait on the clinic queue.
+          </div>
+        )}
+        <div className="wic-heading-block">
+          <p className="wic-eyebrow">SERVICE: {serviceLabel || `${consultSubType?.toUpperCase()} CONSULTATION > WALK-IN CONSULTATION`}</p>
+          <h1 className="wic-heading">{overrideTriggered ? "Please see clinic staff immediately" : "Check-In Complete"}</h1>
+        </div>
 
         {overrideTriggered ? (
           <>
-            <div className="wic-result-box">
-              <p className="wic-result-box-title">VITAL SIGNS SUMMARY</p>
+            <div className="wic-result-box wic-result-box--urgent-summary">
+              <p className="wic-result-box-title">INITIAL VITAL SIGNS SUMMARY</p>
               <div className="wic-vitals-summary">
                 <div className="wic-vitals-row">
                   <span className="wic-vitals-label">Temperature:</span>
                   <span className="wic-vitals-value--danger">
-                    {temperatureC?.toFixed(1)}°C — {temperatureClassification}
+                    {temperatureC?.toFixed(1)}°C - {temperatureClassification}
                   </span>
                   <span className="wic-vitals-label">Blood Pressure:</span>
                   <span className="wic-vitals-value--pending">Manual entry required</span>
@@ -59,17 +71,17 @@ export default function WalkInResultScreen({
           </>
         ) : (
           <>
-            <div className="wic-result-box">
+            <div className="wic-result-box wic-result-box--queue">
               <p className="wic-result-box-title">YOUR QUEUE NUMBER:</p>
               <p className="wic-queue-code">{queueCode}</p>
             </div>
-            <div className="wic-result-box">
-              <p className="wic-result-box-title">VITAL SIGNS AND PHYSICAL METRICS SUMMARY</p>
+            <div className="wic-result-box wic-result-box--vitals">
+              <p className="wic-result-box-title">INITIAL VITAL SIGNS SUMMARY</p>
               <div className="wic-vitals-summary">
                 <div className="wic-vitals-row">
                   <span className="wic-vitals-label">Temperature:</span>
                   <span className="wic-vitals-value">
-                    {temperatureC?.toFixed(1)}°C — {temperatureClassification}
+                    {temperatureC?.toFixed(1)}°C - {temperatureClassification}
                   </span>
                   <span className="wic-vitals-label">Blood Pressure:</span>
                   <span className="wic-vitals-value--pending">Manual entry required</span>
@@ -83,13 +95,14 @@ export default function WalkInResultScreen({
           </>
         )}
 
-        <button className="wic-back-btn" disabled>
-          Returning to welcome screen in {remaining}s...
+        <button className={`wic-done-btn${overrideTriggered ? " wic-done-btn--urgent" : ""}`} onClick={() => onTimeout?.()}>
+          Done <span aria-hidden="true">✓</span>
         </button>
+        <p className="wic-autoclose">Auto-closes in {remaining}s...</p>
         <a className="wic-faq-link" onClick={onFaq}>
           Frequently Asked Questions (FAQ's)
         </a>
-      </div>
+      </main>
     </div>
   );
 }

@@ -31,7 +31,7 @@ function classifyBmi(bmi) {
  */
 export async function submitIntake(req, res) {
   const io = req.app.get("io");
-  const { studentId, serviceType, reason, requestDetails, temperatureC, heightCm, weightKg, source } = req.body;
+  const { studentId, serviceType, reason, requestDetails, temperatureC, bloodPressure, bloodPressureClassification, heightCm, weightKg, source } = req.body;
 
   const student = await Student.findOne({
     $or: [{ studentId }, { rfidTagUid: studentId?.toUpperCase() }],
@@ -53,6 +53,8 @@ export async function submitIntake(req, res) {
     source: source || "kiosk",
     temperatureC,
     temperatureStatus,
+    bloodPressure,
+    bloodPressureClassification,
     heightCm,
     weightKg,
     bmi,

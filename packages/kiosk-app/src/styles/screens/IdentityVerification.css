@@ -11,15 +11,6 @@
   border-bottom-width: 4px;
 }
 .identity-verification .kiosk-header-brand { gap: 9px; }
-.identity-verification .kiosk-header-crest {
-  width: 22px;
-  height: 28px;
-  border: 1px solid rgba(255,255,255,.55);
-  border-radius: 3px;
-  background: transparent;
-  color: #f6c744;
-  font-size: .6rem;
-}
 .identity-verification .kiosk-header-title { font-size: .72rem; }
 .identity-verification .kiosk-header-subtitle { font-size: .58rem; line-height: 1; }
 .identity-verification .kiosk-header-status { gap: 7px; font-size: .58rem; }

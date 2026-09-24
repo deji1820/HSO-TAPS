@@ -16,15 +16,17 @@ export default function AppointmentSummaryScreen({
   const remaining = useCountdown(15, onDone);
 
   return (
-    <div className="kiosk-shell">
+    <div className="kiosk-shell apt-screen apt-screen--summary">
       <KioskHeader isOnline={isOnline} />
-      <div className="kiosk-content apt-page">
-        <p className="apt-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
-        <h1 className="apt-heading apt-heading--success">APPOINTMENT FOUND TODAY</h1>
-        <p className="apt-subtext">Your vital signs have been recorded.</p>
+      <main className="kiosk-content apt-page apt-page--summary">
+        <div className="apt-banner apt-banner--success">Please proceed inside the clinic for your appointment schedule.</div>
+        <div className="apt-heading-block">
+          <p className="apt-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
+          <h1 className="apt-heading">Check-In Complete</h1>
+        </div>
 
         <div className="apt-details-card">
-          <p className="apt-details-title">VITAL SIGNS SUMMARY</p>
+          <p className="apt-details-title">INITIAL VITAL SIGNS SUMMARY</p>
           <VitalsRows
             temperatureC={temperatureC}
             temperatureClass={temperatureClass}
@@ -33,16 +35,12 @@ export default function AppointmentSummaryScreen({
           />
         </div>
 
-        <div className="apt-proceed">
-          <p className="apt-proceed-title">PLEASE PROCEED DIRECTLY INSIDE THE CLINIC.</p>
-          <p className="apt-proceed-body">Proceed inside the clinic for your appointment schedule.</p>
-        </div>
-
         <button className="apt-btn apt-btn--end" onClick={onDone}>
           End — returning to welcome screen in {remaining}s
         </button>
+        <p className="apt-autoclose">Auto-closes in {remaining}s...</p>
         <button className="apt-faq" onClick={onFaq}>Frequently Asked Questions (FAQ's)</button>
-      </div>
+      </main>
     </div>
   );
 }

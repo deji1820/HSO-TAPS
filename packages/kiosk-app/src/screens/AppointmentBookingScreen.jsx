@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
+import { getAppointmentAvailability } from "../services/api.js";
 import "../styles/screens/Appointment.css";
 
 const MORNING = ["8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM"];
@@ -40,6 +41,9 @@ function PlaceholderQr() {
 
 export default function AppointmentBookingScreen({
   consultSubType,            // "Medical" | "Dental"
+  serviceLabel,
+  serviceType,
+  purpose,
   unavailableTimes = [],     // e.g. ["9:00 AM"] for the selected date
   isDateDisabled = defaultDisabled,
   qrSrc,                     // optional image URL for the booking QR code
@@ -52,11 +56,29 @@ export default function AppointmentBookingScreen({
   const [viewMonth, setViewMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
+  const [serverUnavailable, setServerUnavailable] = useState([]);
+  const [availabilityError, setAvailabilityError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const cells = buildMonthCells(viewMonth);
   const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase();
   const atCurrentMonth =
     viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() === today.getMonth();
+
+  const selectedDateKey = selectedDate
+    ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
+    : "";
+
+  useEffect(() => {
+    let active = true;
+    setServerUnavailable([]);
+    setAvailabilityError("");
+    if (!selectedDateKey || !serviceType) return () => { active = false; };
+    getAppointmentAvailability(serviceType, selectedDateKey)
+      .then(({ unavailableTimes = [] }) => { if (active) setServerUnavailable(unavailableTimes); })
+      .catch(() => { if (active) setAvailabilityError("Could not load available times. Check the connection and choose the date again."); });
+    return () => { active = false; };
+  }, [selectedDateKey, serviceType]);
 
   const shiftMonth = (delta) =>
     setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
@@ -71,7 +93,7 @@ export default function AppointmentBookingScreen({
       <button
         key={t}
         className={`apt-slot${selectedTime === t ? " apt-slot--selected" : ""}`}
-        disabled={!selectedDate || unavailableTimes.includes(t)}
+        disabled={!selectedDate || unavailableTimes.includes(t) || serverUnavailable.includes(t)}
         onClick={() => setSelectedTime(t)}
       >
         {t}
@@ -79,12 +101,11 @@ export default function AppointmentBookingScreen({
     ));
 
   return (
-    <div className="kiosk-shell">
+    <div className="kiosk-shell apt-screen apt-screen--booking">
       <KioskHeader isOnline={isOnline} />
-      <div className="kiosk-content apt-page">
-        <p className="apt-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
-        <h1 className="apt-heading">BOOK AN APPOINTMENT</h1>
-        <p className="apt-subtext">Choose an available date, then pick a time slot.</p>
+      <main className="kiosk-content apt-page apt-page--booking">
+        <p className="apt-eyebrow">SERVICE: {serviceLabel || `${consultSubType?.toUpperCase()} CONSULTATION`}{serviceLabel ? " > BOOK AN APPOINTMENT" : ""}</p>
+        <h1 className="apt-heading">Select your preferred date and time</h1>
 
         <div className="apt-booking-grid">
           {/* Calendar */}
@@ -112,33 +133,46 @@ export default function AppointmentBookingScreen({
           </div>
 
           {/* Time slots */}
-          <div className="apt-card">
+          <div className="apt-card apt-time-card">
             <p className="apt-card-title">MORNING</p>
             <div className="apt-slot-grid">{renderSlots(MORNING)}</div>
             <p className="apt-card-title apt-card-title--spaced">AFTERNOON</p>
             <div className="apt-slot-grid">{renderSlots(AFTERNOON)}</div>
           </div>
 
-          {/* QR */}
-          <div className="apt-card apt-qr-card">
-            <p className="apt-card-title">SCAN QR CODE TO BOOK ON YOUR PHONE</p>
-            {qrSrc ? <img className="apt-qr-img" src={qrSrc} alt="Booking QR code" /> : <PlaceholderQr />}
-          </div>
         </div>
 
         <div className="apt-actions">
-          <button className="apt-btn" onClick={onBack}>⬅ Back to service selection</button>
+          <button className="apt-btn apt-btn--back" onClick={onBack}>&lt;&lt; Back</button>
           <button
             className="apt-btn apt-btn--primary"
-            disabled={!selectedDate || !selectedTime}
-            onClick={() => onProceed?.({ date: selectedDate, time: selectedTime })}
+            disabled={!selectedDate || !selectedTime || saving || !!availabilityError}
+            onClick={async () => {
+              setSaving(true);
+              setAvailabilityError("");
+              try {
+                await onProceed?.({ date: selectedDate, time: selectedTime, dateKey: selectedDateKey, purpose });
+              } catch (error) {
+                setSelectedTime(null);
+                setAvailabilityError(error?.response?.data?.message || "Could not save this appointment. Please try again.");
+                if (error?.response?.status === 409) {
+                  getAppointmentAvailability(serviceType, selectedDateKey)
+                    .then(({ unavailableTimes = [] }) => setServerUnavailable(unavailableTimes))
+                    .catch(() => {});
+                }
+              } finally {
+                setSaving(false);
+              }
+            }}
           >
-            Proceed ➡
+            {saving ? "Saving..." : "Proceed >>"}
           </button>
         </div>
 
+        {availabilityError && <p className="apt-autoclose" role="alert">{availabilityError}</p>}
+
         <button className="apt-faq" onClick={onFaq}>Frequently Asked Questions (FAQ's)</button>
-      </div>
+      </main>
     </div>
   );
 }

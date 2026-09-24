@@ -12,3 +12,9 @@ export const api = axios.create({
 export const lookupStudent = (studentId) => api.get(`/students/lookup/${studentId}`).then((r) => r.data);
 
 export const submitIntake = (payload) => api.post("/kiosk/intake", payload).then((r) => r.data);
+
+export const getAppointmentAvailability = (serviceType, date) =>
+  api.get("/appointments/availability", { params: { serviceType, date } }).then((r) => r.data);
+
+export const createAppointment = (payload) =>
+  api.post("/appointments", payload).then((r) => r.data);

@@ -15,18 +15,26 @@
   gap: 14px;
 }
 
-.kiosk-header-crest {
-  width: 46px;
-  height: 46px;
-  border-radius: 10px;
-  background: var(--nu-gold);
-  color: var(--nu-blue-dark);
-  font-weight: 800;
-  font-size: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.kiosk-header-crest-frame {
+  position: relative;
+  display: block;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
   flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, .8);
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+}
+.kiosk-header-crest {
+  position: absolute;
+  left: -9px;
+  top: -12px;
+  width: 54px;
+  height: 61px;
+  max-width: none;
+  object-fit: fill;
 }
 
 .kiosk-header-title {

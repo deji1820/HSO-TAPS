@@ -58,6 +58,7 @@ const icons = {
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: icons.home, end: true },
+  { to: "/appointments", label: "Appointments", icon: icons.list },
   { to: "/emr", label: "Electronic Medical Records", icon: icons.folder },
   { to: "/analytics", label: "Data Analytics", icon: icons.chart },
   { to: "/forms", label: "Forms", icon: icons.doc },

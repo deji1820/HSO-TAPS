@@ -14,11 +14,18 @@ import ResultScreen from "./screens/ResultScreen.jsx";
 import OfflineScreen from "./screens/OfflineScreen.jsx";
 import { connectDeviceBridge } from "./services/deviceBridge.js";
 import { supabase } from "./services/supabase.js";
-import { lookupStudent, submitIntake } from "./services/api.js";
+import { lookupStudent, submitIntake, createAppointment } from "./services/api.js";
 import { startHealthMonitor } from "./services/healthCheck.js";
 import ConsultationEntryScreen from "./screens/ConsultationEntryScreen.jsx";
+import AppointmentBookingScreen from "./screens/AppointmentBookingScreen.jsx";
+import AppointmentConfirmedScreen from "./screens/AppointmentConfirmedScreen.jsx";
 import WalkInIntakeScreen, { COMPLAINTS, classifyTemp } from "./screens/WalkInIntakeScreen.jsx";
 import WalkInResultScreen from "./screens/WalkInResultScreen.jsx";
+import ClearanceEntryScreen from "./screens/ClearanceEntryScreen.jsx";
+import ClearanceIntakeScreen from "./screens/ClearanceIntakeScreen.jsx";
+import ClearanceResultScreen from "./screens/ClearanceResultScreen.jsx";
+import PrescriptionIntakeScreen from "./screens/PrescriptionIntakeScreen.jsx";
+import ScreeningReadingsScreen from "./screens/ScreeningReadingsScreen.jsx";
 
 const IDLE_TIMEOUT_MS = 30_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
@@ -27,7 +34,9 @@ const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
 const REQUIRED_FIELDS = {
   complete: ["temperatureC", "heightCm", "weightKg"],
   temperature: ["temperatureC"],
+  bloodPressure: ["bloodPressure"],
   physical: ["heightCm", "weightKg"],
+  bmi: ["heightCm", "weightKg"],
 };
 
 export default function App() {
@@ -47,9 +56,15 @@ export default function App() {
   const [consultSubType, setConsultSubType] = useState(null); // "Medical" | "Dental"
   const [otherServiceSubType, setOtherServiceSubType] = useState(null); // "Prescription/OTC" | "General Inquiry"
   const [checkInInfo, setCheckInInfo] = useState(null); // shown on CheckedInScreen
+  const [appointmentSelection, setAppointmentSelection] = useState(null);
+  const [clearanceAppointmentPurpose, setClearanceAppointmentPurpose] = useState(null);
+  const [clearanceQueueNumber, setClearanceQueueNumber] = useState(null);
   const [walkInComplaints, setWalkInComplaints] = useState([]); // array of complaint keys
+  const [medicineSymptoms, setMedicineSymptoms] = useState([]);
+  const [medicineSafetyAnswers, setMedicineSafetyAnswers] = useState({});
 
   const bridgeRef = useRef(null);
+  const deviceEventHandlerRef = useRef(null);
   const idleTimer = useRef(null);
   const captureTimerRef = useRef(null);
   const stepRef = useRef(step);
@@ -57,6 +72,14 @@ export default function App() {
   const currentSessionIdRef = useRef(null);
 
   useEffect(() => { stepRef.current = step; }, [step]);
+
+  useEffect(() => {
+    bridgeRef.current = connectDeviceBridge((event) => deviceEventHandlerRef.current?.(event));
+    return () => {
+      bridgeRef.current?.close();
+      bridgeRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     // Supabase Real-time listener for wireless ESP32 RFID taps and sensor triggers
@@ -104,11 +127,14 @@ export default function App() {
         { event: "UPDATE", schema: "public", table: "kiosk_sessions" },
         (payload) => {
           console.log("[Supabase Realtime] Session updated:", payload.new);
-          const { height_m, temp_c, weight_kg } = payload.new;
+          const { height_m, temp_c, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, bp_classification } = payload.new;
           const patch = {};
           if (temp_c != null) patch.temperatureC = temp_c;
           if (height_m != null) patch.heightCm = height_m * 100;
           if (weight_kg != null) patch.weightKg = weight_kg;
+          const pressure = blood_pressure ?? (systolic_mmhg != null && diastolic_mmhg != null ? `${systolic_mmhg}/${diastolic_mmhg}` : null);
+          if (pressure != null) patch.bloodPressure = String(pressure);
+          if (bp_classification != null) patch.bloodPressureClassification = String(bp_classification);
 
           if (Object.keys(patch).length > 0) {
             clearTimeout(captureTimerRef.current);
@@ -166,8 +192,13 @@ export default function App() {
     setConsultSubType(null);
     setOtherServiceSubType(null);
     setCheckInInfo(null);
+    setAppointmentSelection(null);
+    setClearanceAppointmentPurpose(null);
+    setClearanceQueueNumber(null);
     setStep("welcome");
     setWalkInComplaints([]);
+    setMedicineSymptoms([]);
+    setMedicineSafetyAnswers({});
 
     if (sessionIdToUpdate) {
       try {
@@ -202,18 +233,24 @@ export default function App() {
       return;
     }
 
-    if (stepRef.current !== "capturing") return;
+    if (stepRef.current !== "capturing" && stepRef.current !== "medicineIntake") return;
 
     const fieldMap = {
       temperature_reading: { temperatureC: evt.celsius },
       height_reading: { heightCm: evt.cm },
       weight_reading: { weightKg: evt.kg },
+      blood_pressure_reading: {
+        bloodPressure: evt.bloodPressure ?? evt.reading ?? (evt.systolic != null && evt.diastolic != null ? `${evt.systolic}/${evt.diastolic}` : undefined),
+        bloodPressureClassification: evt.classification,
+      },
     };
     const patch = fieldMap[evt.type];
-    if (!patch) return;
+    if (!patch || Object.values(patch).every((value) => value == null)) return;
 
     setReadings((prev) => ({ ...prev, ...patch }));
   }
+
+  deviceEventHandlerRef.current = handleDeviceEvent;
 
   async function handleManualSubmit(studentId) {
     const found = await lookupStudent(studentId);
@@ -238,10 +275,54 @@ export default function App() {
   } else if (value === "Dental Consultation") {
     handleConsultTypeSelect("Dental");
   } else if (value === "Prescription/OTC Pickup") {
-    handleOtherServiceTypeSelect("Prescription/OTC"); // goes to requestText
+    setOtherServiceSubType("Prescription/OTC");
+    setFlowType("medicine");
+    setReadings({});
+    setMedicineSymptoms([]);
+    setMedicineSafetyAnswers({});
+    setStep("medicineIntake");
+    triggerHardwareSensors("temperature", "Prescription/OTC Pickup");
+  } else if (value === "General Inquiry") {
+    setOtherServiceSubType("General Inquiry");
+    setStep("requestText");
+  } else if (value === "Medical Clearance") {
+    setFlowType("clearance");
+    setClearanceQueueNumber(null);
+    setStep("clearanceEntry");
   } else {
-    // "Medical Clearance": placeholder until we build its own screen
     submitIntake({ studentId: student.studentId, serviceType: value, source: "kiosk" }).finally(resetSession);
+  }
+}
+
+function toggleMedicineSymptom(symptom) {
+  setMedicineSymptoms((current) => current.includes(symptom)
+    ? current.filter((item) => item !== symptom)
+    : [...current, symptom]);
+}
+
+async function handleMedicineSubmit() {
+  if (submittingRef.current || readings.temperatureC == null || medicineSymptoms.length === 0 || Object.keys(medicineSafetyAnswers).length < 3) return;
+  submittingRef.current = true;
+  const temperatureC = Number(readings.temperatureC);
+  const temperatureClass = classifyTemp(temperatureC);
+  const reasonText = medicineSymptoms.join(", ");
+  try {
+    const result = await submitIntake({
+      studentId: student?.studentId || student?.rfidTagUid,
+      serviceType: "Prescription/OTC Pickup",
+      source: "kiosk",
+      reason: reasonText.length > 60 ? `${reasonText.slice(0, 57)}...` : reasonText,
+      temperatureC,
+      requestDetails: JSON.stringify({ symptoms: medicineSymptoms, safetyAnswers: medicineSafetyAnswers }),
+    });
+    currentSessionIdRef.current = null;
+    setResultQueueNumber(result?.queueEntry?.queueNumber ?? null);
+    setOverrideTriggered(temperatureClass !== "Normal");
+    setStep("medicineResult");
+  } catch (error) {
+    console.warn("[handleMedicineSubmit] intake submission failed:", error);
+    submittingRef.current = false;
+    alert("We couldn't complete your request. Please try again or see the clinic staff.");
   }
 }
 
@@ -252,8 +333,35 @@ export default function App() {
 }
 
 function handleBookAppointment() {
-  // TODO: appointment booking isn't built yet
-  alert("Appointment booking isn't available yet. Please choose Walk-in Consultation.");
+  setAppointmentSelection(null);
+  setStep("appointmentBooking");
+}
+
+async function handleAppointmentProceed(selection) {
+  const serviceType = clearanceAppointmentPurpose
+    ? "Medical Clearance"
+    : consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation";
+  const { appointment } = await createAppointment({
+    studentId: student?.studentId || student?.rfidTagUid,
+    serviceType,
+    purpose: clearanceAppointmentPurpose || undefined,
+    date: selection.dateKey,
+    timeSlot: selection.time,
+  });
+  setAppointmentSelection({ ...selection, appointmentId: appointment._id });
+  setStep("appointmentConfirmed");
+}
+
+async function handleClearanceSubmit({ purpose, documents }) {
+  const result = await submitIntake({
+    studentId: student?.studentId || student?.rfidTagUid,
+    serviceType: "Medical Clearance",
+    source: "kiosk",
+    reason: purpose,
+    requestDetails: JSON.stringify({ purpose, documents }),
+  });
+  setClearanceQueueNumber(result?.queueEntry?.queueNumber ?? null);
+  setStep("clearanceResult");
 }
 
 async function handleWalkIn() {
@@ -280,6 +388,8 @@ async function handleLeaveWalkIn() {
   submittingRef.current = false;
   setReadings({});
   setWalkInComplaints([]);
+  setMedicineSymptoms([]);
+  setMedicineSafetyAnswers({});
   setCaptureMode(null);
   setFlowType(null);
   setConsultSubType(null);
@@ -352,11 +462,41 @@ async function handleWalkInSubmit() {
   }
 
   function handleScreeningOptionSelect(mode) {
+    submittingRef.current = false;
+    setReadings({});
+    setManualFields([]);
     setCaptureMode(mode);
-    setStep("vitalsEntry");
+    setFlowType("screening");
+    if (mode === "bloodPressure") {
+      setStep("capturing");
+      triggerHardwareSensors("bloodPressure", "Quick Health Screening");
+      return;
+    }
+    setStep("capturing");
+    const sensorMode = mode === "bmi" ? "physical" : mode;
+    triggerHardwareSensors(sensorMode, "Quick Health Screening");
   }
 
-  async function triggerHardwareSensors(sensorCmd) {
+  async function handleCancelScreening() {
+    clearTimeout(captureTimerRef.current);
+    setSensorFailed(false);
+    const sessionId = currentSessionIdRef.current;
+    currentSessionIdRef.current = null;
+    submittingRef.current = false;
+    setReadings({});
+    setCaptureMode(null);
+    setFlowType(null);
+    setStep("screeningOptions");
+    if (sessionId) {
+      try {
+        await supabase.from("kiosk_sessions").update({ status: "cancelled" }).eq("id", sessionId).in("status", ["pending_sensor", "tap_logged"]);
+      } catch (error) {
+        console.warn("[handleCancelScreening] Failed to cancel sensor session:", error);
+      }
+    }
+  }
+
+  async function triggerHardwareSensors(sensorCmd, selectedService = null) {
     clearTimeout(captureTimerRef.current);
     setSensorFailed(false);
     let sessionId = null;
@@ -365,7 +505,9 @@ async function handleWalkInSubmit() {
       const { data } = await supabase.from("kiosk_sessions").insert([
         {
           rfid_uid: student?.rfidTagUid || student?.studentId,
-          service_selected: flowType === "consultation" ? "Medical Consultation" : "Quick Health Screening",
+          service_selected: selectedService || (flowType === "consultation"
+            ? `${consultSubType === "Dental" ? "Dental" : "Medical"} Consultation`
+            : "Quick Health Screening"),
           sensor_required: sensorCmd,
           status: "pending_sensor"
         }
@@ -457,6 +599,8 @@ async function handleWalkInSubmit() {
         serviceType: "Quick Health Screening",
         source: "kiosk",
         temperatureC: finalReadings.temperatureC,
+        bloodPressure: finalReadings.bloodPressure,
+        bloodPressureClassification: finalReadings.bloodPressureClassification,
         heightCm: finalReadings.heightCm,
         weightKg: finalReadings.weightKg,
       });
@@ -507,6 +651,96 @@ async function handleWalkInSubmit() {
   />
 )}
 
+{step === "clearanceEntry" && (
+  <ClearanceEntryScreen
+    onWalkIn={() => setStep("clearanceIntake")}
+    onBookAppointment={() => {
+      setClearanceAppointmentPurpose(null);
+      setStep("clearanceAppointmentPurpose");
+    }}
+    onBack={() => {
+      setFlowType(null);
+      setStep("service");
+    }}
+    isOnline={isOnline}
+  />
+)}
+
+{step === "clearanceAppointmentPurpose" && (
+  <ClearanceIntakeScreen
+    isAppointment
+    onSubmit={({ purpose }) => {
+      setClearanceAppointmentPurpose(purpose);
+      setStep("clearanceAppointmentBooking");
+    }}
+    onBack={() => setStep("clearanceEntry")}
+    isOnline={isOnline}
+  />
+)}
+
+{step === "clearanceIntake" && (
+  <ClearanceIntakeScreen
+    onSubmit={handleClearanceSubmit}
+    onBack={() => setStep("clearanceEntry")}
+    isOnline={isOnline}
+  />
+)}
+
+      {step === "clearanceResult" && (
+  <ClearanceResultScreen
+    queueNumber={clearanceQueueNumber}
+    onDone={resetSession}
+    isOnline={isOnline}
+  />
+)}
+
+{step === "appointmentBooking" && (
+  <AppointmentBookingScreen
+    consultSubType={consultSubType}
+    serviceType={consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation"}
+    onProceed={handleAppointmentProceed}
+    onBack={() => setStep("consultationEntry")}
+    isOnline={isOnline}
+  />
+)}
+
+{step === "clearanceAppointmentBooking" && (
+  <AppointmentBookingScreen
+    serviceLabel="MEDICAL CLEARANCE"
+    serviceType="Medical Clearance"
+    purpose={clearanceAppointmentPurpose}
+    onProceed={handleAppointmentProceed}
+    onBack={() => setStep("clearanceAppointmentPurpose")}
+    isOnline={isOnline}
+  />
+)}
+
+{step === "appointmentConfirmed" && appointmentSelection && !clearanceAppointmentPurpose && (
+  <AppointmentConfirmedScreen
+    consultSubType={consultSubType}
+    dateLabel={appointmentSelection.date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    })}
+    timeLabel={appointmentSelection.time}
+    onDone={resetSession}
+    isOnline={isOnline}
+  />
+)}
+
+{step === "appointmentConfirmed" && appointmentSelection && clearanceAppointmentPurpose && (
+  <AppointmentConfirmedScreen
+    serviceLabel="MEDICAL CLEARANCE"
+    purposeLabel={clearanceAppointmentPurpose}
+    dateLabel={appointmentSelection.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+    timeLabel={appointmentSelection.time}
+    onDone={resetSession}
+    isOnline={isOnline}
+  />
+)}
+
 {step === "walkInIntake" && (
   <WalkInIntakeScreen
     consultSubType={consultSubType}
@@ -535,8 +769,33 @@ async function handleWalkInSubmit() {
         <OtherServicesTypeScreen onSelect={handleOtherServiceTypeSelect} onBack={() => setStep("service")} isOnline={isOnline} />
       )}
 
+      {step === "medicineIntake" && (
+        <PrescriptionIntakeScreen
+          selectedSymptoms={medicineSymptoms}
+          safetyAnswers={medicineSafetyAnswers}
+          temperatureC={readings.temperatureC}
+          onToggleSymptom={toggleMedicineSymptom}
+          onAnswerSafety={(question, answer) => setMedicineSafetyAnswers((current) => ({ ...current, [question]: answer }))}
+          onContinue={handleMedicineSubmit}
+          onBack={handleLeaveWalkIn}
+          isOnline={isOnline}
+        />
+      )}
+
+      {step === "medicineResult" && (
+        <WalkInResultScreen
+          serviceLabel="PRESCRIPTION & MEDICINE"
+          overrideTriggered={overrideTriggered}
+          queueCode={resultQueueNumber}
+          temperatureC={walkInTemp}
+          temperatureClassification={classifyTemp(walkInTemp)}
+          onTimeout={resetSession}
+          isOnline={isOnline}
+        />
+      )}
+
       {step === "requestText" && (
-        <RequestTextScreen onSubmit={handleRequestTextSubmit} onBack={() => setStep("otherServicesType")} isOnline={isOnline} />
+        <RequestTextScreen onSubmit={handleRequestTextSubmit} onBack={() => setStep("service")} isOnline={isOnline} />
       )}
 
       {step === "checkedIn" && (
@@ -559,35 +818,50 @@ async function handleWalkInSubmit() {
       )}
 
       {step === "capturing" && (
-        <CapturingScreen
-          mode={captureMode}
-          readings={readings}
-          manualFields={manualFields}
-          sensorFailed={sensorFailed}
-          onManualEdit={() => {
-            clearTimeout(captureTimerRef.current);
-            setSensorFailed(false);
-            setStep("vitalsEntry");
-          }}
-          onHome={resetSession}
-          onCancel={resetSession}
-          isOnline={isOnline}
-        />
+        flowType === "screening" ? (
+          <ScreeningReadingsScreen
+            mode={captureMode}
+            readings={readings}
+            sensorFailed={sensorFailed}
+            onBack={handleCancelScreening}
+            isOnline={isOnline}
+          />
+        ) : (
+          <CapturingScreen
+            mode={captureMode}
+            readings={readings}
+            manualFields={manualFields}
+            sensorFailed={sensorFailed}
+            onManualEdit={() => {
+              clearTimeout(captureTimerRef.current);
+              setSensorFailed(false);
+              setStep("vitalsEntry");
+            }}
+            onHome={resetSession}
+            onCancel={resetSession}
+            isOnline={isOnline}
+          />
+        )
       )}
 
       {step === "result" && (
-        <ResultScreen
-          readings={readings}
-          overrideTriggered={overrideTriggered}
-          queueNumber={resultQueueNumber}
-          onAdjust={() => {
-            submittingRef.current = false;
-            setStep("vitalsEntry");
-          }}
-          onDone={resetSession}
-          isOnline={isOnline}
-        />
+        flowType === "screening" ? (
+          <ScreeningReadingsScreen mode={captureMode} readings={readings} isResult onDone={resetSession} isOnline={isOnline} />
+        ) : (
+          <ResultScreen
+            readings={readings}
+            overrideTriggered={overrideTriggered}
+            queueNumber={resultQueueNumber}
+            onAdjust={() => {
+              submittingRef.current = false;
+              setStep("vitalsEntry");
+            }}
+            onDone={resetSession}
+            isOnline={isOnline}
+          />
+        )
       )}
+
     </div>
   );
 }

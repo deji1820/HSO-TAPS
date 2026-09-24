@@ -10,6 +10,8 @@ const vitalsLogSchema = new mongoose.Schema(
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
     source: { type: String, enum: ["kiosk", "manual_staff_entry"], default: "kiosk" },
     temperatureC: Number,
+    bloodPressure: String,
+    bloodPressureClassification: String,
     heightCm: Number,
     weightKg: Number,
     bmi: Number,
