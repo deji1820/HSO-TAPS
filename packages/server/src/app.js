@@ -8,6 +8,7 @@ import kioskRoutes from "./routes/kiosk.routes.js";
 import queueRoutes from "./routes/queue.routes.js";
 import formsRoutes from "./routes/forms.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
+import appointmentRoutes from "./routes/appointment.routes.js";
 
 export function createApp() {
   const app = express();
@@ -27,6 +28,7 @@ export function createApp() {
   app.use("/api/students", studentsRoutes);
   app.use("/api/kiosk", kioskRoutes);
   app.use("/api/queue", queueRoutes);
+  app.use("/api/appointments", appointmentRoutes);
   app.use("/api/forms", formsRoutes);
   app.use("/api/analytics", analyticsRoutes);
 

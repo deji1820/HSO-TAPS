@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getQueue, updateQueueStatus } from "../services/api.js";
 import { socket } from "../services/socket.js";
 import ActiveSessionModal from "../components/ActiveSessionModal.jsx";
+import { filterQueueEntries } from "../utils/queueFilters.js";
 import "../styles/pages/Dashboard.css";
 
 const PRIORITY_BADGE = {
@@ -9,6 +10,15 @@ const PRIORITY_BADGE = {
   "Standard Priority": "badge-standard",
   "Routine Check": "badge-routine",
 };
+
+const SERVICE_TYPES = [
+  "Medical Consultation",
+  "Dental Consultation",
+  "Medical Clearance",
+  "Prescription/OTC Pickup",
+  "General Inquiry",
+  "Quick Health Screening",
+];
 
 function formatTime(dateLike) {
   if (!dateLike) return "—";
@@ -19,6 +29,7 @@ export default function DashboardPage() {
   const [queue, setQueue] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [priorityFilter, setPriorityFilter] = useState("All");
+  const [serviceFilter, setServiceFilter] = useState("All");
   const [completedToday, setCompletedToday] = useState(0);
   const [sessionEntry, setSessionEntry] = useState(null);
 
@@ -29,7 +40,12 @@ export default function DashboardPage() {
     });
 
     socket.connect();
-    socket.on("queue:new", (entry) => setQueue((q) => [...q, entry]));
+    socket.on("queue:new", (entry) => {
+      setQueue((current) => current.some((item) => item._id === entry._id) ? current : [...current, entry]);
+      setSelectedId((current) => current || entry._id);
+      // Socket events carry the new queue row; reload to hydrate its student reference.
+      getQueue().then(setQueue).catch((error) => console.warn("Could not refresh the live queue:", error));
+    });
     socket.on("queue:update", (updated) => {
       if (updated.status === "completed" || updated.status === "cancelled") {
         setQueue((q) => q.filter((e) => e._id !== updated._id));
@@ -49,8 +65,8 @@ export default function DashboardPage() {
   const highPriorityCount = queue.filter((q) => q.priorityLevel === "High Priority").length;
 
   const visibleQueue = useMemo(
-    () => (priorityFilter === "All" ? queue : queue.filter((e) => e.priorityLevel === priorityFilter)),
-    [queue, priorityFilter]
+    () => filterQueueEntries(queue, { serviceFilter, priorityFilter }),
+    [queue, priorityFilter, serviceFilter]
   );
 
   const selected = queue.find((e) => e._id === selectedId) || null;
@@ -101,16 +117,18 @@ export default function DashboardPage() {
         <div className="card">
           <div className="queue-list-header">
             <h2>Live Dynamic Queue List</h2>
-            <select
-              className="text-input filter-select"
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-            >
-              <option value="All">Filter by: All</option>
-              <option value="High Priority">High Priority</option>
-              <option value="Standard Priority">Standard Priority</option>
-              <option value="Routine Check">Routine Check</option>
-            </select>
+            <div className="queue-filters">
+              <select className="text-input filter-select" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} aria-label="Filter by service">
+                <option value="All">All services</option>
+                {SERVICE_TYPES.map((service) => <option value={service} key={service}>{service}</option>)}
+              </select>
+              <select className="text-input filter-select" value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} aria-label="Filter by priority">
+                <option value="All">All priorities</option>
+                <option value="High Priority">High Priority</option>
+                <option value="Standard Priority">Standard Priority</option>
+                <option value="Routine Check">Routine Check</option>
+              </select>
+            </div>
           </div>
 
           {visibleQueue.length === 0 ? (
@@ -131,6 +149,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="queue-name">{entry.student?.firstName} {entry.student?.lastName}</div>
                       <div className="queue-meta">Student ID: {entry.student?.studentId}</div>
+                      <div className="queue-service">{entry.serviceType || "Service unavailable"}</div>
                     </div>
                     <div className="queue-reason-time">
                       <div className="queue-meta">Reason: {entry.reason}</div>
@@ -156,6 +175,7 @@ export default function DashboardPage() {
               <div className="snapshot-field"><span>Name:</span> {selected.student?.firstName} {selected.student?.lastName}</div>
               <div className="snapshot-field"><span>Student ID:</span> {selected.student?.studentId}</div>
               <div className="snapshot-field"><span>Program:</span> {selected.student?.program || "—"}</div>
+              <div className="snapshot-field"><span>Service:</span> {selected.serviceType || "—"}</div>
 
               {selected.requestDetails && (
                 <div className="snapshot-field"><span>Details:</span> "{selected.requestDetails}"</div>

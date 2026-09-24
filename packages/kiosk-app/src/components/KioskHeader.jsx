@@ -21,7 +21,9 @@ export default function KioskHeader({ isOnline = true }) {
   return (
     <header className="kiosk-header">
       <div className="kiosk-header-brand">
-        <div className="kiosk-header-crest">NU</div>
+        <span className="kiosk-header-crest-frame">
+          <img className="kiosk-header-crest" src="/nu-fairview-crest.png" alt="NU Fairview crest" />
+        </span>
         <div>
           <div className="kiosk-header-title">NU FAIRVIEW</div>
           <div className="kiosk-header-subtitle">Health Services Office</div>

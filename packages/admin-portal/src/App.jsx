@@ -7,6 +7,7 @@ import EMRPage from "./pages/EMRPage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import FormsPage from "./pages/FormsPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
+import AppointmentsPage from "./pages/AppointmentsPage.jsx";
 
 function ProtectedRoute({ user, children }) {
   if (!user) return <Navigate to="/login" replace />;
@@ -41,6 +42,14 @@ export default function App() {
         element={
           <ProtectedRoute user={user}>
             <EMRPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/appointments"
+        element={
+          <ProtectedRoute user={user}>
+            <AppointmentsPage />
           </ProtectedRoute>
         }
       />

@@ -1,0 +1,97 @@
+import { useEffect, useState } from "react";
+import KioskHeader from "../components/KioskHeader.jsx";
+import "../styles/screens/Screening.css";
+
+const MODE_LABELS = {
+  complete: "COMPLETE SCREENING",
+  temperature: "TEMPERATURE SCREENING ONLY",
+  bloodPressure: "BLOOD PRESSURE SCREENING ONLY",
+  bmi: "BMI SCREENING ONLY",
+};
+
+function bmiValue(heightCm, weightKg) {
+  if (heightCm == null || weightKg == null || Number(heightCm) <= 0) return null;
+  const meters = Number(heightCm) > 3 ? Number(heightCm) / 100 : Number(heightCm);
+  return (Number(weightKg) / (meters * meters)).toFixed(2);
+}
+
+function Reading({ label, children }) {
+  return <div className="qhs-reading"><strong>{label}</strong><span>{children}</span></div>;
+}
+
+export default function ScreeningReadingsScreen({ mode, readings = {}, isResult = false, sensorFailed = false, onDone, onBack, isOnline }) {
+  const [remaining, setRemaining] = useState(30);
+  useEffect(() => {
+    if (!isResult) return undefined;
+    setRemaining(30);
+    const timer = setInterval(() => setRemaining((current) => Math.max(0, current - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [isResult]);
+  useEffect(() => {
+    if (isResult && remaining === 0) onDone?.();
+  }, [isResult, remaining, onDone]);
+
+  const temp = readings.temperatureC != null
+    ? `${Number(readings.temperatureC).toFixed(1)}°C  ${Number(readings.temperatureC) >= 37.8 ? "Fever" : Number(readings.temperatureC) < 35.5 ? "Hypothermia" : "Normal"}`
+    : "<<temperature in degrees celcius>>  <<classification>>";
+  const meters = readings.heightCm != null ? `${(Number(readings.heightCm) > 3 ? Number(readings.heightCm) / 100 : Number(readings.heightCm)).toFixed(2)} m` : "<<height in meters>>";
+  const weight = readings.weightKg != null ? `${Number(readings.weightKg).toFixed(2)} kg` : "<<weight in kg>>";
+  const bloodPressure = readings.bloodPressure != null
+    ? `${readings.bloodPressure} mmHg${readings.bloodPressureClassification ? `  ${readings.bloodPressureClassification}` : ""}`
+    : "<<systolic/diastolic pressure in mmHg>>  <<classification>>";
+  const bmi = bmiValue(readings.heightCm, readings.weightKg);
+  const isComplete = mode === "complete";
+  const instruction = mode === "temperature"
+    ? "Place your right wrist in front of the sensor on the right side of the kiosk. Hold steady until reading completes."
+    : mode === "bloodPressure"
+      ? "Insert your left arm into the cuff on the left side of the kiosk. Hold steady until measurement completes."
+      : mode === "bmi"
+        ? "Step 1 — Height: Step directly under the height sensor and stand straight and steady.\nStep 2 — Weight: Step onto the weighing scale platform and remain still until reading stabilizes."
+        : "<<instructions for each sensor; automatically changes after one sensor finishes a reading until all the sensors has their own readings>>";
+
+  return (
+    <div className="kiosk-shell qhs-reading-screen">
+      <KioskHeader isOnline={isOnline} />
+      <main className="qhs-reading-content">
+        <div className="qhs-banner">Take a photo of your health screening summary for your personal record before leaving the kiosk.</div>
+        <div className="qhs-reading-heading">
+          <p>SERVICE: QUICK HEALTH SCREENING &gt; {MODE_LABELS[mode]}</p>
+          <h1>Follow the prompts to measure your vitals</h1>
+        </div>
+        <section className="qhs-reading-panel">
+          <h2>{isComplete ? "VITAL SIGNS AND PHYSICAL METRICS READINGS" : mode === "temperature" ? "TEMPERATURE READING" : mode === "bloodPressure" ? "BLOOD PRESSURE READINGS" : "BMI READING"}</h2>
+          <p className="qhs-instruction">{instruction}</p>
+
+          {isComplete ? (
+            <>
+              <Reading label="Temperature:">{temp}</Reading>
+              <Reading label="Blood Pressure:">{bloodPressure}</Reading>
+              <Reading label="Height:">{meters}</Reading>
+              <Reading label="Weight:">{weight}</Reading>
+              <Reading label="BMI:">{bmi ? `${bmi}  ${Number(bmi) < 18.5 ? "Underweight" : Number(bmi) < 25 ? "Normal" : Number(bmi) < 30 ? "Overweight" : "Obese"}` : "<<numerical body mass index>>  <<classification>>"}</Reading>
+              <div className="qhs-summary"><strong>Screening Summary</strong><span>&lt;&lt;System-generated note&gt;&gt;</span></div>
+            </>
+          ) : mode === "temperature" ? (
+            <Reading label="Temperature:">{temp}</Reading>
+          ) : mode === "bloodPressure" ? (
+            <Reading label="Blood Pressure:">{bloodPressure}</Reading>
+          ) : (
+            <>
+              <Reading label="Height:">{meters}</Reading>
+              <Reading label="Weight:">{weight}</Reading>
+              <Reading label="BMI:">{bmi ? `${bmi}  ${Number(bmi) < 18.5 ? "Underweight" : Number(bmi) < 25 ? "Normal" : Number(bmi) < 30 ? "Overweight" : "Obese"}` : "<<numerical body mass index>>  <<classification>>"}</Reading>
+            </>
+          )}
+          {sensorFailed && !isResult && <p className="qhs-sensor-error">Sensor readings are unavailable. Please ask clinic staff for assistance.</p>}
+        </section>
+        {isResult ? (
+          <>
+            <button className="qhs-done" onClick={onDone}>Done <span aria-hidden="true">✓</span></button>
+            <p className="qhs-autoclose">Auto-closes in {remaining}s...</p>
+          </>
+        ) : sensorFailed ? <button className="qhs-done qhs-back" onClick={onBack}>&lt;&lt; Back</button> : null}
+        <a className="qhs-faq" href="#faq" onClick={(event) => event.preventDefault()}>Frequently Asked Questions (FAQ’s)</a>
+      </main>
+    </div>
+  );
+}

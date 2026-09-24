@@ -14,6 +14,7 @@ api.interceptors.request.use((config) => {
 
 export const login = (email, password) => api.post("/auth/login", { email, password }).then((r) => r.data);
 export const getQueue = () => api.get("/queue").then((r) => r.data);
+export const getAppointments = () => api.get("/appointments").then((r) => r.data);
 export const updateQueueStatus = (id, status) => api.patch(`/queue/${id}/status`, { status }).then((r) => r.data);
 export const completeSession = (payload) => api.post("/consultations", payload).then((r) => r.data);
 export const getStudents = (q) => api.get("/students", { params: { q } }).then((r) => r.data);

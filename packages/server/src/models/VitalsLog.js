@@ -10,6 +10,8 @@ const vitalsLogSchema = new mongoose.Schema(
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
     source: { type: String, enum: ["kiosk", "manual_staff_entry"], default: "kiosk" },
     temperatureC: Number,
+    bloodPressure: String,
+    bloodPressureClassification: String,
     heightCm: Number,
     weightKg: Number,
     bmi: Number,
@@ -18,6 +20,7 @@ const vitalsLogSchema = new mongoose.Schema(
     pulseRate: Number,
     spo2: Number,
     isFeverFlagged: { type: Boolean, default: false }, // temp >= threshold, see docs/ARCHITECTURE.md
+    temperatureStatus: { type: String, enum: ["Hypothermia", "Normal", "Fever"] },
     capturedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

@@ -22,7 +22,9 @@
   margin-bottom: 14px;
 }
 .queue-list-header h2 { margin: 0; font-size: 1.05rem; }
+.queue-filters { display: flex; gap: 8px; }
 .filter-select { width: auto; }
+.queue-service { margin-top: 3px; color: var(--nu-blue); font-size: .8rem; font-weight: 700; }
 
 .queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; max-height: 480px; overflow-y: auto; }
 
@@ -43,6 +45,12 @@
 .queue-name { font-weight: 700; color: var(--text-primary); }
 .queue-meta { font-size: 0.82rem; color: var(--text-secondary); }
 .queue-reason-time { text-align: right; }
+
+@media (max-width: 760px) {
+  .queue-list-header { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .queue-filters { width: 100%; flex-wrap: wrap; }
+  .queue-filters .filter-select { flex: 1 1 180px; }
+}
 
 .patient-snapshot { position: sticky; top: 84px; }
 .snapshot-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }

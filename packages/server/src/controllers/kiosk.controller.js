@@ -3,7 +3,17 @@ import VitalsLog from "../models/VitalsLog.js";
 import QueueEntry from "../models/QueueEntry.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 
-const FEVER_THRESHOLD_C = 37.5; // see docs/ARCHITECTURE.md for the decision-support rule
+// Per HSO-TAP_SYSTEM_NOTES: Hypothermia < 35.5, Normal 35.5-37.5, Fever >= 37.8
+// (37.6-37.7 is undefined in the notes; treated as Normal here)
+const HYPOTHERMIA_BELOW_C = 35.5;
+const FEVER_AT_OR_ABOVE_C = 37.8;
+
+function classifyTemperature(t) {
+  if (typeof t !== "number") return undefined;
+  if (t < HYPOTHERMIA_BELOW_C) return "Hypothermia";
+  if (t >= FEVER_AT_OR_ABOVE_C) return "Fever";
+  return "Normal";
+}
 
 function classifyBmi(bmi) {
   if (bmi == null) return undefined;
@@ -21,7 +31,7 @@ function classifyBmi(bmi) {
  */
 export async function submitIntake(req, res) {
   const io = req.app.get("io");
-  const { studentId, serviceType, reason, requestDetails, temperatureC, heightCm, weightKg, source } = req.body;
+  const { studentId, serviceType, reason, requestDetails, temperatureC, bloodPressure, bloodPressureClassification, heightCm, weightKg, source } = req.body;
 
   const student = await Student.findOne({
     $or: [{ studentId }, { rfidTagUid: studentId?.toUpperCase() }],
@@ -34,12 +44,17 @@ export async function submitIntake(req, res) {
     bmi = +(weightKg / (heightM * heightM)).toFixed(1);
   }
 
-  const isFeverFlagged = typeof temperatureC === "number" && temperatureC >= FEVER_THRESHOLD_C;
+  const temperatureStatus = classifyTemperature(temperatureC);
+  const isFeverFlagged = temperatureStatus === "Fever";
+  const isTempAlert = temperatureStatus === "Fever" || temperatureStatus === "Hypothermia";
 
   const vitals = await VitalsLog.create({
     student: student._id,
     source: source || "kiosk",
     temperatureC,
+    temperatureStatus,
+    bloodPressure,
+    bloodPressureClassification,
     heightCm,
     weightKg,
     bmi,
@@ -48,16 +63,16 @@ export async function submitIntake(req, res) {
   });
 
   const isSelfService = serviceType === "Quick Health Screening";
-  const needsQueueEntry = !isSelfService || isFeverFlagged; // the override rule
+  const needsQueueEntry = !isSelfService || isTempAlert; // the override rule
 
   let queueEntry = null;
   if (needsQueueEntry) {
     queueEntry = await QueueEntry.create({
       student: student._id,
       queueNumber: await nextQueueNumber(serviceType),
-      priorityLevel: isFeverFlagged ? "High Priority" : isSelfService ? "Routine Check" : "Standard Priority",
+      priorityLevel: isTempAlert ? "High Priority" : isSelfService ? "Routine Check" : "Standard Priority",
       serviceType,
-      reason: isFeverFlagged ? "High Temperature" : reason,
+      reason: isTempAlert ? (isFeverFlagged ? "High Temperature" : "Low Temperature") : reason,
       requestDetails,
       linkedVitals: vitals._id,
     });
@@ -67,9 +82,9 @@ export async function submitIntake(req, res) {
   res.status(201).json({
     vitals,
     queueEntry,
-    overrideTriggered: isSelfService && isFeverFlagged,
+    overrideTriggered: isSelfService && isTempAlert,
     message:
-      isSelfService && isFeverFlagged
+      isSelfService && isTempAlert
         ? "Abnormal temperature detected — please proceed inside the clinic immediately."
         : undefined,
   });

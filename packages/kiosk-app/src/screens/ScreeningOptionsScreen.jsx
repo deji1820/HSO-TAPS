@@ -1,35 +1,32 @@
 import KioskHeader from "../components/KioskHeader.jsx";
 import "../styles/screens/ServiceGrid.css";
+import "../styles/screens/Screening.css";
 
-// Matches PDF: "What would you like to check?" (Service: Quick Health Screening)
 const OPTIONS = [
-  { mode: "complete", label: "Complete Check", desc: "Body Temperature, Height, Weight & BMI Calculation", icon: "🩺" },
-  { mode: "temperature", label: "Body Temperature", desc: "Quick thermal scan using the sensor", icon: "🌡️" },
-  { mode: "physical", label: "Physical Metrics", desc: "Height, Weight & BMI Calculation", icon: "📏" },
+  { mode: "complete", label: "Complete Screening", desc: "Self-Service Body Temperature, Blood Pressure, Height, Weight & BMI Calculation.", icon: "🩺" },
+  { mode: "temperature", label: "Temperature Screening Only", desc: "Height and Weight Intake. BMI Calculation.", icon: "🌡️" },
+  { mode: "bloodPressure", label: "Blood Pressure Screening Only", desc: "Blood Pressure Intake.", icon: "🩸" },
+  { mode: "bmi", label: "BMI Screening Only", desc: "For OTC medicines and prescription requests.", icon: "📏" },
 ];
 
 export default function ScreeningOptionsScreen({ onSelect, onBack, isOnline }) {
   return (
-    <div className="kiosk-shell">
+    <div className="kiosk-shell qhs-options-screen">
       <KioskHeader isOnline={isOnline} />
-
-      <div className="kiosk-content service-grid-content">
-        <p className="kiosk-eyebrow">Service: Quick Health Screening</p>
+      <div className="kiosk-content service-grid-content qhs-options">
+        <p className="kiosk-eyebrow">SERVICE: QUICK HEALTH SCREENING</p>
         <h1>What would you like to check?</h1>
-
         <div className="card-grid">
-          {OPTIONS.map((o) => (
-            <button key={o.mode} className="service-card" onClick={() => onSelect(o.mode)}>
-              <div className="service-card-icon">{o.icon}</div>
-              <h3>{o.label}</h3>
-              <p>{o.desc}</p>
+          {OPTIONS.map((option) => (
+            <button key={option.mode} className="service-card" onClick={() => onSelect(option.mode)}>
+              <div className="service-card-icon" aria-hidden="true">{option.icon}</div>
+              <h3>{option.label}</h3>
+              <p>{option.desc}</p>
             </button>
           ))}
         </div>
-
-        <button className="service-grid-back-btn" onClick={onBack}>
-          ← Back to service selection
-        </button>
+        <button className="service-grid-back-btn" onClick={onBack}>&lt;&lt; Back</button>
+        <a className="qhs-faq" href="#faq" onClick={(event) => event.preventDefault()}>Frequently Asked Questions (FAQ’s)</a>
       </div>
     </div>
   );

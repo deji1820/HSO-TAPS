@@ -1,0 +1,99 @@
+﻿.identity-verification {
+  min-height: 100vh;
+  background: #f0f1f3;
+  color: #34418e;
+}
+
+.identity-verification .kiosk-header {
+  height: 45px;
+  min-height: 45px;
+  padding: 0 4%;
+  border-bottom-width: 4px;
+}
+.identity-verification .kiosk-header-brand { gap: 9px; }
+.identity-verification .kiosk-header-title { font-size: .72rem; }
+.identity-verification .kiosk-header-subtitle { font-size: .58rem; line-height: 1; }
+.identity-verification .kiosk-header-status { gap: 7px; font-size: .58rem; }
+.identity-verification .kiosk-header-divider { height: 12px; }
+.identity-verification .kiosk-header-dot { width: 5px; height: 5px; box-shadow: none; }
+
+.identity-content {
+  position: relative;
+  width: min(770px, calc(100% - 48px));
+  min-height: calc(100vh - 45px);
+  margin: 0 auto;
+  padding-top: 56px;
+  text-align: left;
+}
+.identity-heading {
+  padding: 0 37px 10px;
+  border-bottom: 1px solid #d9d9d9;
+}
+.identity-eyebrow {
+  margin: 0 0 6px;
+  color: #34418e;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.identity-heading h1 {
+  margin: 0;
+  color: #0756b5;
+  font-size: 31px;
+  line-height: 1.2;
+  font-weight: 750;
+}
+.identity-card {
+  margin-top: 27px;
+  padding: 25px 37px 30px;
+  min-height: 183px;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  background: #f7f7f7;
+}
+.identity-card h2 {
+  margin: 0 0 5px;
+  color: #34418e;
+  font-size: 22px;
+  line-height: 1.3;
+}
+.identity-student-id { margin: 0; font-size: 16px; font-weight: 700; }
+.identity-divider { margin: 11px -5px 9px; border-top: 1px solid #dedede; }
+.identity-details { margin: 0; font-size: 13px; }
+.identity-details div { display: flex; justify-content: space-between; padding: 3px 0; }
+.identity-details dt, .identity-details dd { margin: 0; }
+.identity-actions { display: flex; gap: 13px; margin-top: 28px; }
+.identity-actions button {
+  min-width: 104px;
+  height: 24px;
+  padding: 0 14px;
+  border: 1px solid #1d2638;
+  border-radius: 0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.identity-back { background: #0756b5; }
+.identity-proceed { background: #00ae55; }
+.identity-actions button:active { transform: translateY(1px); }
+.identity-faq {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #34418e;
+  font-size: 12px;
+  font-style: italic;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .identity-content { width: calc(100% - 32px); padding-top: 36px; }
+  .identity-heading { padding-right: 8px; padding-left: 8px; }
+  .identity-heading h1 { font-size: 26px; }
+  .identity-card { padding: 22px 18px; }
+  .identity-card h2 { font-size: 18px; }
+  .identity-faq { bottom: 30px; }
+}
