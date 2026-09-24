@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import WelcomeScreen from "./screens/WelcomeScreen.jsx";
 import ManualEntryScreen from "./screens/ManualEntryScreen.jsx";
-import ConfirmScreen from "./screens/ConfirmScreen.jsx";
+import IdentityVerificationScreen from "./screens/IdentityVerificationScreen.jsx";
 import ServiceSelectScreen from "./screens/ServiceSelectScreen.jsx";
 import ConsultationTypeScreen from "./screens/ConsultationTypeScreen.jsx";
 import OtherServicesTypeScreen from "./screens/OtherServicesTypeScreen.jsx";
@@ -16,6 +16,9 @@ import { connectDeviceBridge } from "./services/deviceBridge.js";
 import { supabase } from "./services/supabase.js";
 import { lookupStudent, submitIntake } from "./services/api.js";
 import { startHealthMonitor } from "./services/healthCheck.js";
+import ConsultationEntryScreen from "./screens/ConsultationEntryScreen.jsx";
+import WalkInIntakeScreen, { COMPLAINTS, classifyTemp } from "./screens/WalkInIntakeScreen.jsx";
+import WalkInResultScreen from "./screens/WalkInResultScreen.jsx";
 
 const IDLE_TIMEOUT_MS = 30_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
@@ -38,12 +41,13 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(true);
   const [sensorFailed, setSensorFailed] = useState(false);
 
-  // Which multi-step flow is currently in progress — determines what
+  // Which multi-step flow is currently in progress Ã¢â‚¬â€ determines what
   // finishCapture() submits and where it routes afterwards.
   const [flowType, setFlowType] = useState(null);
   const [consultSubType, setConsultSubType] = useState(null); // "Medical" | "Dental"
   const [otherServiceSubType, setOtherServiceSubType] = useState(null); // "Prescription/OTC" | "General Inquiry"
   const [checkInInfo, setCheckInInfo] = useState(null); // shown on CheckedInScreen
+  const [walkInComplaints, setWalkInComplaints] = useState([]); // array of complaint keys
 
   const bridgeRef = useRef(null);
   const idleTimer = useRef(null);
@@ -163,6 +167,7 @@ export default function App() {
     setOtherServiceSubType(null);
     setCheckInInfo(null);
     setStep("welcome");
+    setWalkInComplaints([]);
 
     if (sessionIdToUpdate) {
       try {
@@ -224,25 +229,108 @@ export default function App() {
     resetSession();
   }
 
-  function handleServiceSelect(label) {
-    if (label === "Quick Health Screening") {
-      setFlowType("screening");
-      setStep("screeningOptions");
-    } else if (label === "Medical Consultation") {
-      setStep("consultationType");
-    } else if (label === "Medical Clearance") {
-      setStep("otherServicesType");
-    } else {
-      submitIntake({ studentId: student.studentId, serviceType: label, source: "kiosk" }).finally(resetSession);
-    }
+  function handleServiceSelect(value) {
+  if (value === "Quick Health Screening") {
+    setFlowType("screening");
+    setStep("screeningOptions");
+  } else if (value === "Medical Consultation") {
+    handleConsultTypeSelect("Medical");          // skips the old Medical/Dental picker
+  } else if (value === "Dental Consultation") {
+    handleConsultTypeSelect("Dental");
+  } else if (value === "Prescription/OTC Pickup") {
+    handleOtherServiceTypeSelect("Prescription/OTC"); // goes to requestText
+  } else {
+    // "Medical Clearance": placeholder until we build its own screen
+    submitIntake({ studentId: student.studentId, serviceType: value, source: "kiosk" }).finally(resetSession);
   }
+}
 
   function handleConsultTypeSelect(subType) {
-    setFlowType("consultation");
-    setConsultSubType(subType);
-    setCaptureMode("temperature");
-    setStep("vitalsEntry");
+  setFlowType("consultation");
+  setConsultSubType(subType);
+  setStep("consultationEntry");
+}
+
+function handleBookAppointment() {
+  // TODO: appointment booking isn't built yet
+  alert("Appointment booking isn't available yet. Please choose Walk-in Consultation.");
+}
+
+async function handleWalkIn() {
+  submittingRef.current = false;
+  setReadings({});
+  setManualFields([]);
+  setWalkInComplaints([]);
+  setCaptureMode("temperature");
+  setStep("walkInIntake");
+  await triggerHardwareSensors("temperature");
+}
+
+function handleToggleComplaint(key) {
+  setWalkInComplaints((prev) =>
+    prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+  );
+}
+
+async function handleLeaveWalkIn() {
+  clearTimeout(captureTimerRef.current);
+  setSensorFailed(false);
+  const sessionId = currentSessionIdRef.current;
+  currentSessionIdRef.current = null;
+  submittingRef.current = false;
+  setReadings({});
+  setWalkInComplaints([]);
+  setCaptureMode(null);
+  setFlowType(null);
+  setConsultSubType(null);
+  setStep("service");
+
+  if (sessionId) {
+    try {
+      await supabase
+        .from("kiosk_sessions")
+        .update({ status: "cancelled" })
+        .eq("id", sessionId)
+        .in("status", ["pending_sensor", "tap_logged"]);
+    } catch (err) {
+      console.warn("[Supabase] Failed to cancel session in handleLeaveWalkIn:", err);
+    }
   }
+}
+
+async function handleWalkInSubmit() {
+  if (submittingRef.current) return;
+  const temperatureC = readings.temperatureC != null ? Number(readings.temperatureC) : null;
+  if (temperatureC == null || walkInComplaints.length === 0) return;
+
+  submittingRef.current = true;
+  clearTimeout(captureTimerRef.current);
+
+  const serviceType = consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation";
+  const complaintText = walkInComplaints
+    .map((k) => COMPLAINTS.find((c) => c.key === k)?.label ?? k)
+    .join(", ");
+  const reason = complaintText.length > 60 ? `${complaintText.slice(0, 57)}...` : complaintText;
+
+  try {
+    const result = await submitIntake({
+      studentId: student?.studentId || student?.rfidTagUid,
+      serviceType,
+      source: "kiosk",
+      temperatureC,
+      reason,
+      requestDetails: `Walk-in ${consultSubType} consultation. Chief complaint: ${complaintText}`,
+    });
+    currentSessionIdRef.current = null;
+    setOverrideTriggered(classifyTemp(temperatureC) !== "Normal");
+    setResultQueueNumber(result?.queueEntry?.queueNumber ?? null);
+    setStep("walkInResult");
+  } catch (err) {
+    console.warn("[handleWalkInSubmit] intake submission failed:", err);
+    submittingRef.current = false;
+    alert("We couldn't check you in. Please try again or see the clinic staff.");
+  }
+}
 
   function handleOtherServiceTypeSelect(subType) {
     setOtherServiceSubType(subType);
@@ -381,6 +469,8 @@ export default function App() {
     }
   }
 
+  const walkInTemp = readings.temperatureC != null ? Number(readings.temperatureC) : null;
+
   return (
     <div onClick={isOnline ? resetIdleTimer : undefined}>
       {step === "offline" && <OfflineScreen onRetry={() => resetSession()} />}
@@ -392,16 +482,54 @@ export default function App() {
       )}
 
       {step === "confirm" && (
-        <ConfirmScreen student={student} onConfirm={handleConfirmYes} onNotMe={handleConfirmNo} isOnline={isOnline} />
+        <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} isOnline={isOnline} />
       )}
 
       {step === "service" && (
-        <ServiceSelectScreen onSelect={handleServiceSelect} onCancel={resetSession} isOnline={isOnline} />
+        <ServiceSelectScreen onSelect={handleServiceSelect} onBack={() => setStep("confirm")} isOnline={isOnline} />
       )}
 
       {step === "consultationType" && (
         <ConsultationTypeScreen onSelect={handleConsultTypeSelect} onBack={() => setStep("service")} isOnline={isOnline} />
       )}
+
+      {step === "consultationEntry" && (
+  <ConsultationEntryScreen
+    consultSubType={consultSubType}
+    onWalkIn={handleWalkIn}
+    onBookAppointment={handleBookAppointment}
+    onBack={() => {
+      setFlowType(null);
+      setConsultSubType(null);
+      setStep("service");
+    }}
+    isOnline={isOnline}
+  />
+)}
+
+{step === "walkInIntake" && (
+  <WalkInIntakeScreen
+    consultSubType={consultSubType}
+    selectedComplaints={walkInComplaints}
+    onToggleComplaint={handleToggleComplaint}
+    temperatureC={walkInTemp}
+    onContinue={handleWalkInSubmit}
+    onBack={handleLeaveWalkIn}
+    isOnline={isOnline}
+  />
+)}
+
+{step === "walkInResult" && (
+  <WalkInResultScreen
+    consultSubType={consultSubType}
+    overrideTriggered={overrideTriggered}
+    queueCode={resultQueueNumber}
+    temperatureC={walkInTemp}
+    temperatureClassification={classifyTemp(walkInTemp)}
+    onTimeout={resetSession}
+    isOnline={isOnline}
+  />
+)}
 
       {step === "otherServicesType" && (
         <OtherServicesTypeScreen onSelect={handleOtherServiceTypeSelect} onBack={() => setStep("service")} isOnline={isOnline} />

@@ -1,0 +1,244 @@
+.wic-eyebrow {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--nu-blue);
+  margin-bottom: 8px;
+}
+
+.wic-heading {
+  text-align: center;
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--nu-blue);
+  margin: 0 0 6px;
+}
+
+.wic-heading.wic-heading--danger {
+  color: var(--danger);
+}
+
+.wic-subtext {
+  text-align: center;
+  font-size: 18px;
+  color: var(--text-secondary);
+  margin: 0 0 32px;
+}
+
+/* ---- Entry screen: walk-in vs appointment cards ---- */
+.wic-choice-row {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  max-width: 780px;
+  margin: 0 auto 40px;
+}
+
+.wic-choice-card {
+  flex: 1;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wic-choice-card:hover,
+.wic-choice-card:focus-visible {
+  border-color: var(--nu-blue);
+  outline: none;
+}
+
+.wic-choice-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  background: var(--nu-blue-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  margin-bottom: 14px;
+}
+
+.wic-choice-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--nu-blue);
+  margin: 0 0 6px;
+}
+
+.wic-choice-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ---- Intake screen: chief complaint + vitals ---- */
+.wic-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  max-width: 720px;
+  margin: 0 auto 20px;
+  padding: 20px 28px 26px;
+}
+
+.wic-panel-title {
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--nu-blue);
+  margin: 0 0 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wic-panel-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin: 10px 0 14px;
+}
+
+.wic-panel-hint--danger {
+  color: var(--danger);
+}
+
+.wic-complaint-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px 16px;
+}
+
+.wic-complaint-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.wic-complaint-item input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--nu-blue);
+}
+
+.wic-vitals-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  row-gap: 8px;
+  font-size: 15px;
+  margin-top: 4px;
+}
+
+.wic-vitals-label {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.wic-vitals-value {
+  color: var(--text-primary);
+}
+
+.wic-vitals-value--pending {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.wic-vitals-value--danger {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* ---- Result screen ---- */
+.wic-result-box {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  max-width: 640px;
+  margin: 0 auto 20px;
+  padding: 22px 28px;
+  text-align: center;
+}
+
+.wic-result-box-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--nu-blue);
+  margin: 0 0 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wic-queue-code {
+  font-size: 30px;
+  font-weight: 800;
+  font-style: italic;
+  color: var(--nu-gold);
+  margin: 10px 0 4px;
+}
+
+.wic-vitals-summary {
+  text-align: left;
+  max-width: 420px;
+  margin: 10px auto 0;
+}
+
+.wic-warning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--danger);
+  margin: 4px 0 8px;
+}
+
+.wic-warning-detail {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 4px;
+}
+
+.wic-reminder {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--danger);
+  margin: 14px 0 0;
+}
+
+.wic-reminder-body {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 2px 0 0;
+  font-weight: 400;
+}
+
+/* ---- Shared bottom controls ---- */
+.wic-back-btn {
+  display: block;
+  margin: 24px auto 16px;
+  min-width: 320px;
+  padding: 14px 20px;
+  background: var(--border);
+  border: none;
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.wic-faq-link {
+  display: block;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--nu-blue);
+  text-decoration: underline;
+  cursor: pointer;
+}

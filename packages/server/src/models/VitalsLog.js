@@ -18,6 +18,7 @@ const vitalsLogSchema = new mongoose.Schema(
     pulseRate: Number,
     spo2: Number,
     isFeverFlagged: { type: Boolean, default: false }, // temp >= threshold, see docs/ARCHITECTURE.md
+    temperatureStatus: { type: String, enum: ["Hypothermia", "Normal", "Fever"] },
     capturedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

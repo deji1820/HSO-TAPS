@@ -1,0 +1,356 @@
+/* ---- Shared page text ---- */
+.apt-page .apt-eyebrow {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--nu-blue-dark);
+  margin: 0 0 6px;
+}
+
+.apt-page .apt-heading {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--nu-blue);
+  margin: 0 0 6px;
+}
+
+.apt-page .apt-heading--success {
+  color: var(--success);
+}
+
+.apt-page .apt-subtext {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin: 0 0 28px;
+}
+
+/* ---- Booking screen ---- */
+.apt-booking-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr 240px;
+  gap: 20px;
+  width: 100%;
+  max-width: 1000px;
+  align-items: start;
+  text-align: left;
+}
+
+.apt-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+}
+
+.apt-card-title {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--nu-blue-dark);
+  margin: 0 0 10px;
+}
+
+.apt-card-title--spaced {
+  margin-top: 26px;
+}
+
+/* Calendar */
+.apt-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.apt-cal-month {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--nu-blue-dark);
+}
+
+.apt-cal-nav {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--nu-blue-dark);
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.apt-cal-nav:disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.apt-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+
+.apt-cal-weekday {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--nu-blue-dark);
+  padding-bottom: 6px;
+}
+
+.apt-day {
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 14px;
+  color: var(--nu-blue-dark);
+  cursor: pointer;
+}
+
+.apt-day:hover:not(:disabled) {
+  background: var(--nu-blue-light);
+}
+
+.apt-day:disabled {
+  color: var(--text-muted);
+  opacity: 0.55;
+  cursor: default;
+}
+
+.apt-day--selected,
+.apt-day--selected:hover:not(:disabled) {
+  background: var(--nu-blue);
+  color: #fff;
+}
+
+/* Time slots */
+.apt-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 16px;
+}
+
+.apt-slot {
+  padding: 9px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+  color: var(--nu-blue-dark);
+  cursor: pointer;
+}
+
+.apt-slot:hover:not(:disabled) {
+  border-color: var(--nu-blue);
+}
+
+.apt-slot:disabled {
+  color: var(--text-muted);
+  background: #f6f7fa;
+  cursor: not-allowed;
+}
+
+.apt-slot--selected,
+.apt-slot--selected:hover:not(:disabled) {
+  background: var(--nu-blue);
+  border-color: var(--nu-blue);
+  color: #fff;
+}
+
+/* QR */
+.apt-qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: #111;
+}
+
+.apt-qr-card .apt-card-title {
+  color: var(--nu-blue-dark);
+}
+
+.apt-qr-card svg,
+.apt-qr-img {
+  align-self: center;
+  margin-top: 8px;
+}
+
+.apt-qr-img {
+  width: 150px;
+  height: 150px;
+}
+
+/* ---- Buttons ---- */
+.apt-actions {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin: 28px 0 16px;
+}
+
+.apt-btn {
+  min-width: 290px;
+  padding: 14px 20px;
+  border: none;
+  border-radius: var(--radius);
+  background: #e2e2e2;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--nu-blue-dark);
+  cursor: pointer;
+}
+
+.apt-btn:hover:not(:disabled) {
+  background: #d6d6d6;
+}
+
+.apt-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.apt-btn--primary:not(:disabled) {
+  background: var(--nu-blue);
+  color: #fff;
+}
+
+.apt-btn--primary:hover:not(:disabled) {
+  background: var(--nu-blue-dark);
+}
+
+.apt-btn--single,
+.apt-btn--end {
+  display: block;
+  margin: 40px auto 16px;
+}
+
+.apt-faq {
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--nu-blue-dark);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---- Details cards (confirmed / found / summary) ---- */
+.apt-details-card {
+  width: 100%;
+  max-width: 440px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 28px 22px;
+  margin: 0 auto 20px;
+  text-align: left;
+}
+
+.apt-details-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--nu-blue-dark);
+  margin: 0 0 12px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid var(--nu-blue-dark);
+}
+
+.apt-details-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.apt-details-label {
+  font-weight: 700;
+  color: var(--nu-blue-dark);
+}
+
+.apt-details-value {
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.apt-hint {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--danger);
+  margin: 0 0 14px;
+}
+
+/* ---- Vitals rows ---- */
+.apt-vitals {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  row-gap: 8px;
+  font-size: 14px;
+}
+
+.apt-vitals-label {
+  font-weight: 700;
+  color: var(--nu-blue-dark);
+}
+
+.apt-vitals-value {
+  text-align: right;
+  color: var(--text-primary);
+}
+
+.apt-vital--danger {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.apt-vital--caution {
+  color: var(--nu-gold-dark);
+  font-weight: 700;
+}
+
+.apt-pending {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* ---- Reminders (confirmed screen) ---- */
+.apt-reminders {
+  width: 100%;
+  max-width: 440px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--nu-blue-dark);
+}
+
+.apt-reminders p {
+  margin: 0 0 3px;
+}
+
+.apt-reminders .apt-reminders-title {
+  font-weight: 800;
+  color: var(--danger);
+}
+
+/* ---- Proceed notice (summary screen) ---- */
+.apt-proceed {
+  width: 100%;
+  max-width: 440px;
+  text-align: left;
+}
+
+.apt-proceed-title {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--nu-blue-dark);
+  margin: 0 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid var(--nu-blue-dark);
+}
+
+.apt-proceed-body {
+  font-size: 12px;
+  color: var(--nu-blue-dark);
+  margin: 0;
+}

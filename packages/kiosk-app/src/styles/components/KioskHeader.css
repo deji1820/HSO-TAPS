@@ -1,6 +1,7 @@
 .kiosk-header {
-  height: var(--header-h);
-  background: var(--nu-blue);
+  height: 72px;
+  background: #34408e;
+  border-bottom: 4px solid var(--nu-gold);
   display: flex;
   align-items: center;
   justify-content: space-between;
