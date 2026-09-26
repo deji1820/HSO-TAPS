@@ -49,6 +49,7 @@ export default function App() {
   const [resultQueueNumber, setResultQueueNumber] = useState(null);
   const [isOnline, setIsOnline] = useState(true);
   const [sensorFailed, setSensorFailed] = useState(false);
+  const [bpNoReading, setBpNoReading] = useState(false); // true when no bp_logged row was found in Supabase
 
   // Which multi-step flow is currently in progress Ã¢â‚¬â€ determines what
   // finishCapture() submits and where it routes afterwards.
@@ -179,6 +180,7 @@ export default function App() {
   async function resetSession(statusReason = "cancelled") {
     clearTimeout(captureTimerRef.current);
     setSensorFailed(false);
+    setBpNoReading(false);
     const sessionIdToUpdate = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
     submittingRef.current = false;
@@ -461,17 +463,85 @@ async function handleWalkInSubmit() {
     setStep("checkedIn");
   }
 
-  function handleScreeningOptionSelect(mode) {
+  /**
+   * Fetches the latest unread BP row from Supabase (status = 'bp_logged'),
+   * marks it as 'bp_consumed', and patches the readings state.
+   * Returns true if a reading was found and injected, false otherwise.
+   */
+  async function fetchLatestBpReading() {
+    try {
+      const { data, error } = await supabase
+        .from("kiosk_sessions")
+        .select("id, systolic_mmhg, diastolic_mmhg, pulse_bpm")
+        .eq("status", "bp_logged")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error || !data) {
+        console.warn("[fetchLatestBpReading] No bp_logged row found:", error?.message);
+        return false;
+      }
+
+      const { id, systolic_mmhg, diastolic_mmhg, pulse_bpm } = data;
+
+      // Mark it consumed so it won't be picked up again
+      await supabase
+        .from("kiosk_sessions")
+        .update({ status: "bp_consumed" })
+        .eq("id", id);
+
+      const bp = `${systolic_mmhg}/${diastolic_mmhg}`;
+      setReadings((prev) => ({
+        ...prev,
+        bloodPressure: bp,
+        systolicMmhg: systolic_mmhg,
+        diastolicMmhg: diastolic_mmhg,
+        pulseBpm: pulse_bpm,
+      }));
+
+      console.log(`[fetchLatestBpReading] Injected BP: ${bp}, Pulse: ${pulse_bpm} bpm (session id: ${id})`);
+      return true;
+    } catch (err) {
+      console.warn("[fetchLatestBpReading] Unexpected error:", err);
+      return false;
+    }
+  }
+
+  async function handleScreeningOptionSelect(mode) {
     submittingRef.current = false;
     setReadings({});
     setManualFields([]);
+    setBpNoReading(false);
     setCaptureMode(mode);
     setFlowType("screening");
-    if (mode === "bloodPressure") {
+
+    const needsBp = mode === "bloodPressure" || mode === "complete";
+
+    if (needsBp) {
+      // Try to grab the latest BP reading from Supabase first
+      const bpFound = await fetchLatestBpReading();
+      if (!bpFound) {
+        // No BP row available — go straight to capturing with a failed sensor notice
+        setBpNoReading(true);
+        setSensorFailed(true);
+        setStep("capturing");
+        return;
+      }
+
+      if (mode === "bloodPressure") {
+        // BP-only: we already have what we need, go straight to result
+        setStep("capturing");
+        // REQUIRED_FIELDS["bloodPressure"] = ["bloodPressure"] — finishCapture watcher will fire
+        return;
+      }
+
+      // complete mode: BP injected, still need temp + physical from hardware
       setStep("capturing");
-      triggerHardwareSensors("bloodPressure", "Quick Health Screening");
+      triggerHardwareSensors("complete", "Quick Health Screening");
       return;
     }
+
     setStep("capturing");
     const sensorMode = mode === "bmi" ? "physical" : mode;
     triggerHardwareSensors(sensorMode, "Quick Health Screening");
@@ -480,6 +550,7 @@ async function handleWalkInSubmit() {
   async function handleCancelScreening() {
     clearTimeout(captureTimerRef.current);
     setSensorFailed(false);
+    setBpNoReading(false);
     const sessionId = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
     submittingRef.current = false;
@@ -822,7 +893,9 @@ async function handleWalkInSubmit() {
           <ScreeningReadingsScreen
             mode={captureMode}
             readings={readings}
+            pulseBpm={readings.pulseBpm}
             sensorFailed={sensorFailed}
+            bpNoReading={bpNoReading}
             onBack={handleCancelScreening}
             isOnline={isOnline}
           />
@@ -846,7 +919,14 @@ async function handleWalkInSubmit() {
 
       {step === "result" && (
         flowType === "screening" ? (
-          <ScreeningReadingsScreen mode={captureMode} readings={readings} isResult onDone={resetSession} isOnline={isOnline} />
+          <ScreeningReadingsScreen
+            mode={captureMode}
+            readings={readings}
+            pulseBpm={readings.pulseBpm}
+            isResult
+            onDone={resetSession}
+            isOnline={isOnline}
+          />
         ) : (
           <ResultScreen
             readings={readings}

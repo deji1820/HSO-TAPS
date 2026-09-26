@@ -19,7 +19,7 @@ function Reading({ label, children }) {
   return <div className="qhs-reading"><strong>{label}</strong><span>{children}</span></div>;
 }
 
-export default function ScreeningReadingsScreen({ mode, readings = {}, isResult = false, sensorFailed = false, onDone, onBack, isOnline }) {
+export default function ScreeningReadingsScreen({ mode, readings = {}, pulseBpm, bpNoReading = false, isResult = false, sensorFailed = false, onDone, onBack, isOnline }) {
   const [remaining, setRemaining] = useState(30);
   useEffect(() => {
     if (!isResult) return undefined;
@@ -36,9 +36,14 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, isResult 
     : "<<temperature in degrees celcius>>  <<classification>>";
   const meters = readings.heightCm != null ? `${(Number(readings.heightCm) > 3 ? Number(readings.heightCm) / 100 : Number(readings.heightCm)).toFixed(2)} m` : "<<height in meters>>";
   const weight = readings.weightKg != null ? `${Number(readings.weightKg).toFixed(2)} kg` : "<<weight in kg>>";
-  const bloodPressure = readings.bloodPressure != null
+  const systolic = readings.systolicMmhg ?? null;
+  const diastolic = readings.diastolicMmhg ?? null;
+  const pulse = pulseBpm ?? readings.pulseBpm ?? null;
+
+  const bloodPressureDisplay = readings.bloodPressure != null
     ? `${readings.bloodPressure} mmHg${readings.bloodPressureClassification ? `  ${readings.bloodPressureClassification}` : ""}`
-    : "<<systolic/diastolic pressure in mmHg>>  <<classification>>";
+    : null;
+
   const bmi = bmiValue(readings.heightCm, readings.weightKg);
   const isComplete = mode === "complete";
   const instruction = mode === "temperature"
@@ -65,7 +70,18 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, isResult 
           {isComplete ? (
             <>
               <Reading label="Temperature:">{temp}</Reading>
-              <Reading label="Blood Pressure:">{bloodPressure}</Reading>
+              {bpNoReading ? (
+                <Reading label="Blood Pressure:"><span style={{ color: "#f87171", fontStyle: "italic" }}>No BP reading available — please see clinic staff.</span></Reading>
+              ) : bloodPressureDisplay ? (
+                <>
+                  <Reading label="Systolic:">{systolic != null ? `${systolic} mmHg` : bloodPressureDisplay}</Reading>
+                  <Reading label="Diastolic:">{diastolic != null ? `${diastolic} mmHg` : "—"}</Reading>
+                  {pulse != null && <Reading label="Pulse Rate:">{pulse} bpm</Reading>}
+                  {readings.bloodPressureClassification && <Reading label="BP Classification:">{readings.bloodPressureClassification}</Reading>}
+                </>
+              ) : (
+                <Reading label="Blood Pressure:">{'<<systolic/diastolic pressure in mmHg>>  <<classification>>'}</Reading>
+              )}
               <Reading label="Height:">{meters}</Reading>
               <Reading label="Weight:">{weight}</Reading>
               <Reading label="BMI:">{bmi ? `${bmi}  ${Number(bmi) < 18.5 ? "Underweight" : Number(bmi) < 25 ? "Normal" : Number(bmi) < 30 ? "Overweight" : "Obese"}` : "<<numerical body mass index>>  <<classification>>"}</Reading>
@@ -74,7 +90,18 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, isResult 
           ) : mode === "temperature" ? (
             <Reading label="Temperature:">{temp}</Reading>
           ) : mode === "bloodPressure" ? (
-            <Reading label="Blood Pressure:">{bloodPressure}</Reading>
+            bpNoReading ? (
+              <Reading label="Blood Pressure:"><span style={{ color: "#f87171", fontStyle: "italic" }}>No BP reading available — please see clinic staff.</span></Reading>
+            ) : bloodPressureDisplay ? (
+              <>
+                <Reading label="Systolic:">{systolic != null ? `${systolic} mmHg` : bloodPressureDisplay}</Reading>
+                <Reading label="Diastolic:">{diastolic != null ? `${diastolic} mmHg` : "—"}</Reading>
+                {pulse != null && <Reading label="Pulse Rate:">{pulse} bpm</Reading>}
+                {readings.bloodPressureClassification && <Reading label="BP Classification:">{readings.bloodPressureClassification}</Reading>}
+              </>
+            ) : (
+              <Reading label="Blood Pressure:">{'<<systolic/diastolic pressure in mmHg>>  <<classification>>'}</Reading>
+            )
           ) : (
             <>
               <Reading label="Height:">{meters}</Reading>
