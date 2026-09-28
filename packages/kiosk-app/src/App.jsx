@@ -50,6 +50,7 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(true);
   const [sensorFailed, setSensorFailed] = useState(false);
   const [bpNoReading, setBpNoReading] = useState(false); // true when no bp_logged row was found in Supabase
+  const [bpWaiting, setBpWaiting] = useState(false); // true while actively polling Supabase for a BP reading
 
   // Which multi-step flow is currently in progress Ã¢â‚¬â€ determines what
   // finishCapture() submits and where it routes afterwards.
@@ -71,6 +72,7 @@ export default function App() {
   const stepRef = useRef(step);
   const submittingRef = useRef(false); // guards against double-submit
   const currentSessionIdRef = useRef(null);
+  const bpPollAbortRef = useRef(false); // set to true to cancel an in-progress BP polling loop
 
   useEffect(() => { stepRef.current = step; }, [step]);
 
@@ -179,8 +181,10 @@ export default function App() {
 
   async function resetSession(statusReason = "cancelled") {
     clearTimeout(captureTimerRef.current);
+    bpPollAbortRef.current = true;
     setSensorFailed(false);
     setBpNoReading(false);
+    setBpWaiting(false);
     const sessionIdToUpdate = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
     submittingRef.current = false;
@@ -464,48 +468,65 @@ async function handleWalkInSubmit() {
   }
 
   /**
-   * Fetches the latest unread BP row from Supabase (status = 'bp_logged'),
-   * marks it as 'bp_consumed', and patches the readings state.
-   * Returns true if a reading was found and injected, false otherwise.
+   * Polls Supabase every 2s for up to 15s waiting for a 'bp_logged' row.
+   * When found, marks it 'bp_consumed' and injects readings into state.
+   * Can be cancelled mid-poll by setting bpPollAbortRef.current = true.
+   * Returns true if a reading was found and injected, false if timed out or cancelled.
    */
   async function fetchLatestBpReading() {
-    try {
-      const { data, error } = await supabase
-        .from("kiosk_sessions")
-        .select("id, systolic_mmhg, diastolic_mmhg, pulse_bpm")
-        .eq("status", "bp_logged")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
+    const POLL_INTERVAL_MS = 2000;
+    const MAX_WAIT_MS = 15000;
+    const startTime = Date.now();
+    bpPollAbortRef.current = false;
 
-      if (error || !data) {
-        console.warn("[fetchLatestBpReading] No bp_logged row found:", error?.message);
+    while (Date.now() - startTime < MAX_WAIT_MS) {
+      if (bpPollAbortRef.current) {
+        console.log("[fetchLatestBpReading] Poll cancelled by navigation.");
         return false;
       }
 
-      const { id, systolic_mmhg, diastolic_mmhg, pulse_bpm } = data;
+      try {
+        const { data, error } = await supabase
+          .from("kiosk_sessions")
+          .select("id, systolic_mmhg, diastolic_mmhg, pulse_bpm")
+          .eq("status", "bp_logged")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
 
-      // Mark it consumed so it won't be picked up again
-      await supabase
-        .from("kiosk_sessions")
-        .update({ status: "bp_consumed" })
-        .eq("id", id);
+        if (!error && data) {
+          const { id, systolic_mmhg, diastolic_mmhg, pulse_bpm } = data;
 
-      const bp = `${systolic_mmhg}/${diastolic_mmhg}`;
-      setReadings((prev) => ({
-        ...prev,
-        bloodPressure: bp,
-        systolicMmhg: systolic_mmhg,
-        diastolicMmhg: diastolic_mmhg,
-        pulseBpm: pulse_bpm,
-      }));
+          // Mark it consumed so it won't be picked up again
+          await supabase
+            .from("kiosk_sessions")
+            .update({ status: "bp_consumed" })
+            .eq("id", id);
 
-      console.log(`[fetchLatestBpReading] Injected BP: ${bp}, Pulse: ${pulse_bpm} bpm (session id: ${id})`);
-      return true;
-    } catch (err) {
-      console.warn("[fetchLatestBpReading] Unexpected error:", err);
-      return false;
+          const bp = `${systolic_mmhg}/${diastolic_mmhg}`;
+          setReadings((prev) => ({
+            ...prev,
+            bloodPressure: bp,
+            systolicMmhg: systolic_mmhg,
+            diastolicMmhg: diastolic_mmhg,
+            pulseBpm: pulse_bpm,
+          }));
+
+          console.log(`[fetchLatestBpReading] Injected BP: ${bp}, Pulse: ${pulse_bpm} bpm (session id: ${id}) after ${Math.round((Date.now() - startTime) / 1000)}s`);
+          setBpWaiting(false);
+          return true;
+        }
+      } catch (err) {
+        console.warn("[fetchLatestBpReading] Poll error:", err);
+      }
+
+      // Wait 2s before next poll attempt
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
+
+    console.warn("[fetchLatestBpReading] Timed out after 15s — no bp_logged row found.");
+    setBpWaiting(false);
+    return false;
   }
 
   async function handleScreeningOptionSelect(mode) {
@@ -513,44 +534,49 @@ async function handleWalkInSubmit() {
     setReadings({});
     setManualFields([]);
     setBpNoReading(false);
+    setBpWaiting(false);
     setCaptureMode(mode);
     setFlowType("screening");
+    setStep("capturing");
 
     const needsBp = mode === "bloodPressure" || mode === "complete";
 
-    if (needsBp) {
-      // Try to grab the latest BP reading from Supabase first
-      const bpFound = await fetchLatestBpReading();
-      if (!bpFound) {
-        // No BP row available — go straight to capturing with a failed sensor notice
-        setBpNoReading(true);
-        setSensorFailed(true);
-        setStep("capturing");
-        return;
-      }
-
-      if (mode === "bloodPressure") {
-        // BP-only: we already have what we need, go straight to result
-        setStep("capturing");
-        // REQUIRED_FIELDS["bloodPressure"] = ["bloodPressure"] — finishCapture watcher will fire
-        return;
-      }
-
-      // complete mode: BP injected, still need temp + physical from hardware
-      setStep("capturing");
+    if (mode === "complete") {
+      // Start hardware sensors immediately (temp + height + weight)
       triggerHardwareSensors("complete", "Quick Health Screening");
+      // Poll for BP in parallel — it patches readings when found
+      setBpWaiting(true);
+      fetchLatestBpReading().then((found) => {
+        if (!found && !bpPollAbortRef.current) {
+          setBpNoReading(true);
+          // Don't set sensorFailed — hardware sensors are still running for other fields
+        }
+      });
       return;
     }
 
-    setStep("capturing");
+    if (mode === "bloodPressure") {
+      // Only waiting for BP — poll for up to 15s
+      setBpWaiting(true);
+      const found = await fetchLatestBpReading();
+      if (!found && !bpPollAbortRef.current) {
+        setBpNoReading(true);
+        setSensorFailed(true);
+      }
+      return;
+    }
+
+    // temperature or bmi — no BP involved
     const sensorMode = mode === "bmi" ? "physical" : mode;
     triggerHardwareSensors(sensorMode, "Quick Health Screening");
   }
 
   async function handleCancelScreening() {
     clearTimeout(captureTimerRef.current);
+    bpPollAbortRef.current = true;
     setSensorFailed(false);
     setBpNoReading(false);
+    setBpWaiting(false);
     const sessionId = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
     submittingRef.current = false;
@@ -896,6 +922,7 @@ async function handleWalkInSubmit() {
             pulseBpm={readings.pulseBpm}
             sensorFailed={sensorFailed}
             bpNoReading={bpNoReading}
+            bpWaiting={bpWaiting}
             onBack={handleCancelScreening}
             isOnline={isOnline}
           />

@@ -19,7 +19,7 @@ function Reading({ label, children }) {
   return <div className="qhs-reading"><strong>{label}</strong><span>{children}</span></div>;
 }
 
-export default function ScreeningReadingsScreen({ mode, readings = {}, pulseBpm, bpNoReading = false, isResult = false, sensorFailed = false, onDone, onBack, isOnline }) {
+export default function ScreeningReadingsScreen({ mode, readings = {}, pulseBpm, bpNoReading = false, bpWaiting = false, isResult = false, sensorFailed = false, onDone, onBack, isOnline }) {
   const [remaining, setRemaining] = useState(30);
   useEffect(() => {
     if (!isResult) return undefined;
@@ -72,6 +72,8 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, pulseBpm,
               <Reading label="Temperature:">{temp}</Reading>
               {bpNoReading ? (
                 <Reading label="Blood Pressure:"><span style={{ color: "#f87171", fontStyle: "italic" }}>No BP reading available — please see clinic staff.</span></Reading>
+              ) : bpWaiting ? (
+                <Reading label="Blood Pressure:"><span style={{ opacity: 0.7, fontStyle: "italic" }}>⏳ Reading from device, please wait…</span></Reading>
               ) : bloodPressureDisplay ? (
                 <>
                   <Reading label="Systolic:">{systolic != null ? `${systolic} mmHg` : bloodPressureDisplay}</Reading>
@@ -92,6 +94,8 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, pulseBpm,
           ) : mode === "bloodPressure" ? (
             bpNoReading ? (
               <Reading label="Blood Pressure:"><span style={{ color: "#f87171", fontStyle: "italic" }}>No BP reading available — please see clinic staff.</span></Reading>
+            ) : bpWaiting ? (
+              <Reading label="Blood Pressure:"><span style={{ opacity: 0.7, fontStyle: "italic" }}>⏳ Reading from device, please wait…</span></Reading>
             ) : bloodPressureDisplay ? (
               <>
                 <Reading label="Systolic:">{systolic != null ? `${systolic} mmHg` : bloodPressureDisplay}</Reading>
