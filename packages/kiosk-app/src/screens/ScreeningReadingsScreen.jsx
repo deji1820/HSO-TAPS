@@ -15,6 +15,19 @@ function bmiValue(heightCm, weightKg) {
   return (Number(weightKg) / (meters * meters)).toFixed(2);
 }
 
+/** AHA / JNC 2017 blood pressure classification */
+function classifyBP(systolic, diastolic) {
+  const s = Number(systolic);
+  const d = Number(diastolic);
+  if (!s || !d || isNaN(s) || isNaN(d)) return null;
+  if (s < 90 || d < 60)   return "Low (Hypotension)";
+  if (s < 120 && d < 80)  return "Normal";
+  if (s < 130 && d < 80)  return "Elevated";
+  if (s < 140 || d < 90)  return "Stage 1 Hypertension";
+  if (s < 180 || d < 120) return "Stage 2 Hypertension";
+  return "Hypertensive Crisis";
+}
+
 function Reading({ label, children }) {
   return <div className="qhs-reading"><strong>{label}</strong><span>{children}</span></div>;
 }
@@ -40,8 +53,13 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, pulseBpm,
   const diastolic = readings.diastolicMmhg ?? null;
   const pulse = pulseBpm ?? readings.pulseBpm ?? null;
 
+  // Resolve classification: prefer what's stored, fall back to local computation
+  const bpClassLabel =
+    readings.bloodPressureClassification ||
+    (systolic != null && diastolic != null ? classifyBP(systolic, diastolic) : null);
+
   const bloodPressureDisplay = readings.bloodPressure != null
-    ? `${readings.bloodPressure} mmHg${readings.bloodPressureClassification ? `  ${readings.bloodPressureClassification}` : ""}`
+    ? `${readings.bloodPressure} mmHg${bpClassLabel ? `  ${bpClassLabel}` : ""}`
     : null;
 
   const bmi = bmiValue(readings.heightCm, readings.weightKg);
@@ -79,7 +97,7 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, pulseBpm,
                   <Reading label="Systolic:">{systolic != null ? `${systolic} mmHg` : bloodPressureDisplay}</Reading>
                   <Reading label="Diastolic:">{diastolic != null ? `${diastolic} mmHg` : "—"}</Reading>
                   {pulse != null && <Reading label="Pulse Rate:">{pulse} bpm</Reading>}
-                  {readings.bloodPressureClassification && <Reading label="BP Classification:">{readings.bloodPressureClassification}</Reading>}
+                  {bpClassLabel && <Reading label="BP Classification:">{bpClassLabel}</Reading>}
                 </>
               ) : (
                 <Reading label="Blood Pressure:">{'<<systolic/diastolic pressure in mmHg>>  <<classification>>'}</Reading>

@@ -28,6 +28,22 @@ import PrescriptionIntakeScreen from "./screens/PrescriptionIntakeScreen.jsx";
 import ScreeningReadingsScreen from "./screens/ScreeningReadingsScreen.jsx";
 
 const IDLE_TIMEOUT_MS = 30_000;
+
+/**
+ * Classifies blood pressure based on systolic / diastolic values.
+ * Follows AHA / JNC guidelines (2017).
+ */
+export function classifyBP(systolic, diastolic) {
+  const s = Number(systolic);
+  const d = Number(diastolic);
+  if (!s || !d || isNaN(s) || isNaN(d)) return null;
+  if (s < 90 || d < 60)              return "Low (Hypotension)";
+  if (s < 120 && d < 80)             return "Normal";
+  if (s < 130 && d < 80)             return "Elevated";
+  if (s < 140 || d < 90)             return "Stage 1 Hypertension";
+  if (s < 180 || d < 120)            return "Stage 2 Hypertension";
+  return "Hypertensive Crisis";
+}
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
 
 // Which readings each screening mode needs before we can move to the result screen
@@ -137,7 +153,10 @@ export default function App() {
           if (weight_kg != null) patch.weightKg = weight_kg;
           const pressure = blood_pressure ?? (systolic_mmhg != null && diastolic_mmhg != null ? `${systolic_mmhg}/${diastolic_mmhg}` : null);
           if (pressure != null) patch.bloodPressure = String(pressure);
-          if (bp_classification != null) patch.bloodPressureClassification = String(bp_classification);
+          // Prefer device-supplied classification; fall back to local computation
+          patch.bloodPressureClassification = bp_classification != null
+            ? String(bp_classification)
+            : (systolic_mmhg != null && diastolic_mmhg != null ? classifyBP(systolic_mmhg, diastolic_mmhg) : null);
 
           if (Object.keys(patch).length > 0) {
             clearTimeout(captureTimerRef.current);
@@ -247,7 +266,8 @@ export default function App() {
       weight_reading: { weightKg: evt.kg },
       blood_pressure_reading: {
         bloodPressure: evt.bloodPressure ?? evt.reading ?? (evt.systolic != null && evt.diastolic != null ? `${evt.systolic}/${evt.diastolic}` : undefined),
-        bloodPressureClassification: evt.classification,
+        // Prefer device-supplied classification; fall back to local computation
+        bloodPressureClassification: evt.classification ?? classifyBP(evt.systolic, evt.diastolic),
       },
     };
     const patch = fieldMap[evt.type];
@@ -504,12 +524,14 @@ async function handleWalkInSubmit() {
             .eq("id", id);
 
           const bp = `${systolic_mmhg}/${diastolic_mmhg}`;
+          const bpClassification = classifyBP(systolic_mmhg, diastolic_mmhg);
           setReadings((prev) => ({
             ...prev,
             bloodPressure: bp,
             systolicMmhg: systolic_mmhg,
             diastolicMmhg: diastolic_mmhg,
             pulseBpm: pulse_bpm,
+            bloodPressureClassification: bpClassification,
           }));
 
           console.log(`[fetchLatestBpReading] Injected BP: ${bp}, Pulse: ${pulse_bpm} bpm (session id: ${id}) after ${Math.round((Date.now() - startTime) / 1000)}s`);
