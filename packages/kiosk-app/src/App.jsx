@@ -26,6 +26,7 @@ import ClearanceIntakeScreen from "./screens/ClearanceIntakeScreen.jsx";
 import ClearanceResultScreen from "./screens/ClearanceResultScreen.jsx";
 import PrescriptionIntakeScreen from "./screens/PrescriptionIntakeScreen.jsx";
 import ScreeningReadingsScreen from "./screens/ScreeningReadingsScreen.jsx";
+import { classifyBP } from "./utils/bp.js";
 
 const IDLE_TIMEOUT_MS = 30_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
@@ -49,6 +50,8 @@ export default function App() {
   const [resultQueueNumber, setResultQueueNumber] = useState(null);
   const [isOnline, setIsOnline] = useState(true);
   const [sensorFailed, setSensorFailed] = useState(false);
+  const [bpNoReading, setBpNoReading] = useState(false); // true when no bp_logged row was found in Supabase
+  const [bpWaiting, setBpWaiting] = useState(false); // true while actively polling Supabase for a BP reading
 
   // Which multi-step flow is currently in progress Ã¢â‚¬â€ determines what
   // finishCapture() submits and where it routes afterwards.
@@ -70,6 +73,7 @@ export default function App() {
   const stepRef = useRef(step);
   const submittingRef = useRef(false); // guards against double-submit
   const currentSessionIdRef = useRef(null);
+  const bpPollAbortRef = useRef(false); // set to true to cancel an in-progress BP polling loop
 
   useEffect(() => { stepRef.current = step; }, [step]);
 
@@ -127,14 +131,28 @@ export default function App() {
         { event: "UPDATE", schema: "public", table: "kiosk_sessions" },
         (payload) => {
           console.log("[Supabase Realtime] Session updated:", payload.new);
-          const { height_m, temp_c, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, bp_classification } = payload.new;
+          const { height_m, temp_c, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, pulse_bpm, bp_classification } = payload.new;
           const patch = {};
           if (temp_c != null) patch.temperatureC = temp_c;
           if (height_m != null) patch.heightCm = height_m * 100;
           if (weight_kg != null) patch.weightKg = weight_kg;
           const pressure = blood_pressure ?? (systolic_mmhg != null && diastolic_mmhg != null ? `${systolic_mmhg}/${diastolic_mmhg}` : null);
           if (pressure != null) patch.bloodPressure = String(pressure);
-          if (bp_classification != null) patch.bloodPressureClassification = String(bp_classification);
+          if (systolic_mmhg != null) patch.systolicMmhg = systolic_mmhg;
+          if (diastolic_mmhg != null) patch.diastolicMmhg = diastolic_mmhg;
+          if (pulse_bpm != null) patch.pulseBpm = pulse_bpm;
+          if (bp_classification != null || (systolic_mmhg != null && diastolic_mmhg != null)) {
+            // Prefer device-supplied classification; fall back to local computation.
+            patch.bloodPressureClassification = bp_classification != null
+              ? String(bp_classification)
+              : classifyBP(systolic_mmhg, diastolic_mmhg);
+          }
+
+          if (pressure != null) {
+            bpPollAbortRef.current = true;
+            setBpWaiting(false);
+            setBpNoReading(false);
+          }
 
           if (Object.keys(patch).length > 0) {
             clearTimeout(captureTimerRef.current);
@@ -167,9 +185,10 @@ export default function App() {
     if (step !== "capturing" || submittingRef.current) return;
     const required = REQUIRED_FIELDS[captureMode] || [];
     const isComplete = required.length > 0 && required.every((field) => readings[field] != null);
+    if (isComplete && bpWaiting) return;
     if (isComplete) finishCapture(readings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readings, step, captureMode]);
+  }, [readings, step, captureMode, bpWaiting]);
 
   function resetIdleTimer() {
     clearTimeout(idleTimer.current);
@@ -178,7 +197,10 @@ export default function App() {
 
   async function resetSession(statusReason = "cancelled") {
     clearTimeout(captureTimerRef.current);
+    bpPollAbortRef.current = true;
     setSensorFailed(false);
+    setBpNoReading(false);
+    setBpWaiting(false);
     const sessionIdToUpdate = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
     submittingRef.current = false;
@@ -240,12 +262,24 @@ export default function App() {
       height_reading: { heightCm: evt.cm },
       weight_reading: { weightKg: evt.kg },
       blood_pressure_reading: {
-        bloodPressure: evt.bloodPressure ?? evt.reading ?? (evt.systolic != null && evt.diastolic != null ? `${evt.systolic}/${evt.diastolic}` : undefined),
-        bloodPressureClassification: evt.classification,
+          bloodPressure: evt.bloodPressure ?? evt.reading ?? (evt.systolic != null && evt.diastolic != null ? `${evt.systolic}/${evt.diastolic}` : undefined),
+        systolicMmhg: evt.systolic,
+        diastolicMmhg: evt.diastolic,
+        pulseBpm: evt.pulseBpm ?? evt.pulseRate,
+        // Prefer device-supplied classification; fall back to local computation.
+        bloodPressureClassification: evt.classification ?? classifyBP(evt.systolic, evt.diastolic),
       },
     };
     const patch = fieldMap[evt.type];
     if (!patch || Object.values(patch).every((value) => value == null)) return;
+
+    if (evt.type === "blood_pressure_reading" && patch.bloodPressure != null) {
+      clearTimeout(captureTimerRef.current);
+      bpPollAbortRef.current = true;
+      setBpWaiting(false);
+      setBpNoReading(false);
+      setSensorFailed(false);
+    }
 
     setReadings((prev) => ({ ...prev, ...patch }));
   }
@@ -461,25 +495,122 @@ async function handleWalkInSubmit() {
     setStep("checkedIn");
   }
 
-  function handleScreeningOptionSelect(mode) {
+  /**
+   * Polls Supabase every 2s for up to 15s waiting for a 'bp_logged' row.
+   * When found, marks it 'bp_consumed' and injects readings into state.
+   * Can be cancelled mid-poll by setting bpPollAbortRef.current = true.
+   * Returns true if a reading was found and injected, false if timed out or cancelled.
+   */
+  async function fetchLatestBpReading() {
+    const POLL_INTERVAL_MS = 2000;
+    const MAX_WAIT_MS = 15000;
+    const startTime = Date.now();
+    bpPollAbortRef.current = false;
+
+    while (Date.now() - startTime < MAX_WAIT_MS) {
+      if (bpPollAbortRef.current) {
+        console.log("[fetchLatestBpReading] Poll cancelled by navigation.");
+        return false;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("kiosk_sessions")
+          .select("id, systolic_mmhg, diastolic_mmhg, pulse_bpm")
+          .eq("status", "bp_logged")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!error && data) {
+          const { id, systolic_mmhg, diastolic_mmhg, pulse_bpm } = data;
+          clearTimeout(captureTimerRef.current);
+
+          // Mark it consumed so it won't be picked up again
+          await supabase
+            .from("kiosk_sessions")
+            .update({ status: "bp_consumed" })
+            .eq("id", id);
+
+          const bp = `${systolic_mmhg}/${diastolic_mmhg}`;
+          const bpClassification = classifyBP(systolic_mmhg, diastolic_mmhg);
+          setReadings((prev) => ({
+            ...prev,
+            bloodPressure: bp,
+            systolicMmhg: systolic_mmhg,
+            diastolicMmhg: diastolic_mmhg,
+            pulseBpm: pulse_bpm,
+            bloodPressureClassification: bpClassification,
+          }));
+
+          console.log(`[fetchLatestBpReading] Injected BP: ${bp}, Pulse: ${pulse_bpm} bpm (session id: ${id}) after ${Math.round((Date.now() - startTime) / 1000)}s`);
+          setBpWaiting(false);
+          setBpNoReading(false);
+          return true;
+        }
+      } catch (err) {
+        console.warn("[fetchLatestBpReading] Poll error:", err);
+      }
+
+      // Wait 2s before next poll attempt
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+
+    console.warn("[fetchLatestBpReading] Timed out after 15s — no bp_logged row found.");
+    setBpWaiting(false);
+    return false;
+  }
+
+  async function handleScreeningOptionSelect(mode) {
     submittingRef.current = false;
     setReadings({});
     setManualFields([]);
+    bpPollAbortRef.current = true;
+    setBpNoReading(false);
+    setBpWaiting(false);
     setCaptureMode(mode);
     setFlowType("screening");
-    if (mode === "bloodPressure") {
-      setStep("capturing");
-      triggerHardwareSensors("bloodPressure", "Quick Health Screening");
+    setStep("capturing");
+
+    const needsBp = mode === "bloodPressure" || mode === "complete";
+
+    if (mode === "complete") {
+      // Start hardware sensors immediately (temp + height + weight)
+      triggerHardwareSensors("complete", "Quick Health Screening");
+      // Poll for BP in parallel — it patches readings when found
+      setBpWaiting(true);
+      fetchLatestBpReading().then((found) => {
+        if (!found && !bpPollAbortRef.current) {
+          setBpNoReading(true);
+          // Don't set sensorFailed — hardware sensors are still running for other fields
+        }
+      });
       return;
     }
-    setStep("capturing");
+
+    if (mode === "bloodPressure") {
+      // Ask the existing sensor session to capture BP and poll for its logged result.
+      triggerHardwareSensors("bloodPressure", "Quick Health Screening");
+      setBpWaiting(true);
+      const found = await fetchLatestBpReading();
+      if (!found && !bpPollAbortRef.current) {
+        setBpNoReading(true);
+        setSensorFailed(true);
+      }
+      return;
+    }
+
+    // temperature or bmi — no BP involved
     const sensorMode = mode === "bmi" ? "physical" : mode;
     triggerHardwareSensors(sensorMode, "Quick Health Screening");
   }
 
   async function handleCancelScreening() {
     clearTimeout(captureTimerRef.current);
+    bpPollAbortRef.current = true;
     setSensorFailed(false);
+    setBpNoReading(false);
+    setBpWaiting(false);
     const sessionId = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
     submittingRef.current = false;
@@ -601,6 +732,7 @@ async function handleWalkInSubmit() {
         temperatureC: finalReadings.temperatureC,
         bloodPressure: finalReadings.bloodPressure,
         bloodPressureClassification: finalReadings.bloodPressureClassification,
+        pulseRate: finalReadings.pulseBpm,
         heightCm: finalReadings.heightCm,
         weightKg: finalReadings.weightKg,
       });
@@ -823,6 +955,9 @@ async function handleWalkInSubmit() {
             mode={captureMode}
             readings={readings}
             sensorFailed={sensorFailed}
+            pulseBpm={readings.pulseBpm}
+            bpNoReading={bpNoReading}
+            bpWaiting={bpWaiting}
             onBack={handleCancelScreening}
             isOnline={isOnline}
           />
@@ -846,7 +981,16 @@ async function handleWalkInSubmit() {
 
       {step === "result" && (
         flowType === "screening" ? (
-          <ScreeningReadingsScreen mode={captureMode} readings={readings} isResult onDone={resetSession} isOnline={isOnline} />
+          <ScreeningReadingsScreen
+            mode={captureMode}
+            readings={readings}
+            pulseBpm={readings.pulseBpm}
+            bpNoReading={bpNoReading}
+            bpWaiting={bpWaiting}
+            isResult
+            onDone={resetSession}
+            isOnline={isOnline}
+          />
         ) : (
           <ResultScreen
             readings={readings}

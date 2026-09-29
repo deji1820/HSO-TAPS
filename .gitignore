@@ -11,3 +11,4 @@ coverage/
 EXPORTS/
 /tests/
 packages/tests/screenshots/
+/docs

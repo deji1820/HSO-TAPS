@@ -1,6 +1,6 @@
-// Classification labels follow HSO-TAP_SYSTEM_NOTES.
-const DANGER = new Set(["Fever", "Hypothermia", "Low (Hypotension)", "Stage 2 Hypertension"]);
-const CAUTION = new Set(["Stage 1 Hypertension"]);
+// Classification labels follow HSO-TAP_SYSTEM_NOTES (AHA/JNC 2017 for BP).
+const DANGER = new Set(["Fever", "Hypothermia", "Low (Hypotension)", "Stage 2 Hypertension", "Hypertensive Crisis"]);
+const CAUTION = new Set(["Stage 1 Hypertension", "Elevated"]);
 
 function tone(label) {
   if (DANGER.has(label)) return " apt-vital--danger";

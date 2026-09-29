@@ -43,6 +43,8 @@
 .qhs-autoclose { margin: 7px 0 0 max(0px, calc((100% - 770px) / 2)); color: var(--text-secondary); font-size: 12px; font-style: italic; }
 .qhs-faq { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); color: var(--nu-blue-dark); font-size: 12px; font-weight: 600; text-decoration: underline; white-space: nowrap; }
 .qhs-sensor-error { margin: 14px 9px 0; color: var(--danger); font-size: 13px; }
+.qhs-bp-error { color: var(--danger); font-weight: 600; }
+.qhs-bp-waiting { color: var(--text-secondary); font-style: italic; }
 
 @media (max-width: 900px) {
   .qhs-options .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

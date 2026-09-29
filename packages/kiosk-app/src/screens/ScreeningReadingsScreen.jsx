@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
+import { classifyBP } from "../utils/bp.js";
 import "../styles/screens/Screening.css";
 
 const MODE_LABELS = {
@@ -19,7 +20,48 @@ function Reading({ label, children }) {
   return <div className="qhs-reading"><strong>{label}</strong><span>{children}</span></div>;
 }
 
-export default function ScreeningReadingsScreen({ mode, readings = {}, isResult = false, sensorFailed = false, onDone, onBack, isOnline }) {
+function BloodPressureRows({ readings, pulseBpm, bpNoReading, bpWaiting }) {
+  const parts = String(readings.bloodPressure ?? "").split("/");
+  const systolic = readings.systolicMmhg ?? (parts.length === 2 ? Number(parts[0]) : null);
+  const diastolic = readings.diastolicMmhg ?? (parts.length === 2 ? Number(parts[1]) : null);
+  const pulse = pulseBpm ?? readings.pulseBpm ?? null;
+  const classification = readings.bloodPressureClassification ||
+    (systolic != null && diastolic != null ? classifyBP(systolic, diastolic) : null);
+  const hasPressure = readings.bloodPressure != null || (systolic != null && diastolic != null);
+
+  if (bpNoReading) {
+    return <Reading label="Blood Pressure:"><span className="qhs-bp-error">No BP reading available — please see clinic staff.</span></Reading>;
+  }
+  if (bpWaiting) {
+    return <Reading label="Blood Pressure:"><span className="qhs-bp-waiting">Reading from device, please wait…</span></Reading>;
+  }
+  if (!hasPressure) {
+    return <Reading label="Blood Pressure:">{"<<systolic/diastolic pressure in mmHg>>  <<classification>>"}</Reading>;
+  }
+
+  return (
+    <>
+      {systolic != null && <Reading label="Systolic:">{systolic} mmHg</Reading>}
+      {diastolic != null && <Reading label="Diastolic:">{diastolic} mmHg</Reading>}
+      {systolic == null && diastolic == null && <Reading label="Blood Pressure:">{readings.bloodPressure} mmHg</Reading>}
+      {pulse != null && <Reading label="Pulse Rate:">{pulse} bpm</Reading>}
+      {classification && <Reading label="BP Classification:">{classification}</Reading>}
+    </>
+  );
+}
+
+export default function ScreeningReadingsScreen({
+  mode,
+  readings = {},
+  pulseBpm,
+  bpNoReading = false,
+  bpWaiting = false,
+  isResult = false,
+  sensorFailed = false,
+  onDone,
+  onBack,
+  isOnline,
+}) {
   const [remaining, setRemaining] = useState(30);
   useEffect(() => {
     if (!isResult) return undefined;
@@ -36,9 +78,6 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, isResult 
     : "<<temperature in degrees celcius>>  <<classification>>";
   const meters = readings.heightCm != null ? `${(Number(readings.heightCm) > 3 ? Number(readings.heightCm) / 100 : Number(readings.heightCm)).toFixed(2)} m` : "<<height in meters>>";
   const weight = readings.weightKg != null ? `${Number(readings.weightKg).toFixed(2)} kg` : "<<weight in kg>>";
-  const bloodPressure = readings.bloodPressure != null
-    ? `${readings.bloodPressure} mmHg${readings.bloodPressureClassification ? `  ${readings.bloodPressureClassification}` : ""}`
-    : "<<systolic/diastolic pressure in mmHg>>  <<classification>>";
   const bmi = bmiValue(readings.heightCm, readings.weightKg);
   const isComplete = mode === "complete";
   const instruction = mode === "temperature"
@@ -65,7 +104,7 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, isResult 
           {isComplete ? (
             <>
               <Reading label="Temperature:">{temp}</Reading>
-              <Reading label="Blood Pressure:">{bloodPressure}</Reading>
+              <BloodPressureRows readings={readings} pulseBpm={pulseBpm} bpNoReading={bpNoReading} bpWaiting={bpWaiting} />
               <Reading label="Height:">{meters}</Reading>
               <Reading label="Weight:">{weight}</Reading>
               <Reading label="BMI:">{bmi ? `${bmi}  ${Number(bmi) < 18.5 ? "Underweight" : Number(bmi) < 25 ? "Normal" : Number(bmi) < 30 ? "Overweight" : "Obese"}` : "<<numerical body mass index>>  <<classification>>"}</Reading>
@@ -74,7 +113,7 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, isResult 
           ) : mode === "temperature" ? (
             <Reading label="Temperature:">{temp}</Reading>
           ) : mode === "bloodPressure" ? (
-            <Reading label="Blood Pressure:">{bloodPressure}</Reading>
+            <BloodPressureRows readings={readings} pulseBpm={pulseBpm} bpNoReading={bpNoReading} bpWaiting={bpWaiting} />
           ) : (
             <>
               <Reading label="Height:">{meters}</Reading>
@@ -82,7 +121,7 @@ export default function ScreeningReadingsScreen({ mode, readings = {}, isResult 
               <Reading label="BMI:">{bmi ? `${bmi}  ${Number(bmi) < 18.5 ? "Underweight" : Number(bmi) < 25 ? "Normal" : Number(bmi) < 30 ? "Overweight" : "Obese"}` : "<<numerical body mass index>>  <<classification>>"}</Reading>
             </>
           )}
-          {sensorFailed && !isResult && <p className="qhs-sensor-error">Sensor readings are unavailable. Please ask clinic staff for assistance.</p>}
+          {sensorFailed && !isResult && !bpWaiting && !bpNoReading && <p className="qhs-sensor-error">Sensor readings are unavailable. Please ask clinic staff for assistance.</p>}
         </section>
         {isResult ? (
           <>
