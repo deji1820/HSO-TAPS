@@ -10,7 +10,7 @@
   --nu-gold: #f6c744;        /* active nav item, accents */
   --nu-gold-dark: #d9a913;
 
-  --bg-page: #eef0f3;
+  --bg-page: #ffffff;
   --bg-card: #ffffff;
   --border: #dfe3ea;
 
@@ -28,14 +28,16 @@
   --radius: 8px;
   --radius-sm: 6px;
   --shadow-card: 0 1px 3px rgba(16, 30, 60, 0.08);
-  --sidebar-w: 250px;
-  --topbar-h: 64px;
+  --sidebar-w: 192px;
+  --topbar-h: 44px;
 }
 
 * { box-sizing: border-box; }
+html { font-size: 17px; }
 
 body {
   margin: 0;
+  font-size: 17px;
   font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg-page);
   color: var(--text-primary);
@@ -49,6 +51,8 @@ a { color: inherit; }
 .app-shell { display: flex; min-height: 100vh; }
 .app-main { flex: 1; margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-height: 100vh; }
 .app-content { padding: 24px 28px; flex: 1; }
+.portal-footer { height: 16px; min-height: 16px; display: flex; align-items: center; justify-content: space-between; padding: 0 4px; border-top: 1px solid #d9d9d9; background: #fff; color: #7c7c7c; font-size: 8px; }
+.portal-footer a { color: inherit; text-decoration: none; }
 
 /* ---------- Page header ---------- */
 .page-header { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }

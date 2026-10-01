@@ -64,6 +64,7 @@ export default function AdminPage() {
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
+  const unrecognizedHeaders = headers.filter((header) => !EXPECTED_COLUMNS.includes(header));
 
   function processFile(file) {
     if (!file) return;
@@ -158,6 +159,13 @@ export default function AdminPage() {
       {rows.length > 0 && (
         <>
           <h2 className="section-title">Data Preview &amp; Mapping Validation</h2>
+          {unrecognizedHeaders.length > 0 && (
+            <div className="field-warning" role="alert">
+              <strong>Unrecognized CSV field name{unrecognizedHeaders.length > 1 ? "s" : ""}:</strong>{" "}
+              {unrecognizedHeaders.map((header) => <code key={header}>{header || "(blank header)"}</code>)}
+              <span> These column{unrecognizedHeaders.length > 1 ? "s" : ""} will be ignored. Rename them to a supported field before uploading if they contain data you need to import.</span>
+            </div>
+          )}
           <div className="table-wrap" style={{ marginBottom: 20 }}>
             <table className="data-table">
               <thead>
@@ -226,8 +234,9 @@ export default function AdminPage() {
       {error && <p className="error-text" style={{ marginTop: 16 }}>{error}</p>}
 
       {result && (
-        <div className="card upload-result">
+        <div className="card upload-result" role="status" aria-live="polite">
           <h2>Upload Complete</h2>
+          <p className="upload-confirmation">The CSV upload has finished successfully.</p>
           <div className="upload-result-stats">
             <div><span className="badge badge-routine">{result.inserted}</span> Inserted</div>
             <div><span className="badge badge-standard">{result.updated}</span> Updated</div>

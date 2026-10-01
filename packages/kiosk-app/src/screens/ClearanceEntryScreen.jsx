@@ -1,7 +1,7 @@
 import KioskHeader from "../components/KioskHeader.jsx";
 import "../styles/screens/MedicalClearance.css";
 
-export default function ClearanceEntryScreen({ onWalkIn, onBookAppointment, onBack, isOnline }) {
+export default function ClearanceEntryScreen({ onWalkIn, onBookAppointment, onBack, onFaq, isOnline }) {
   return (
     <div className="kiosk-shell clearance-screen clearance-entry">
       <KioskHeader isOnline={isOnline} />
@@ -24,7 +24,7 @@ export default function ClearanceEntryScreen({ onWalkIn, onBookAppointment, onBa
           </button>
         </div>
         <button className="clearance-back" onClick={onBack}>&lt;&lt; Back</button>
-        <a className="clearance-faq" href="#faq" onClick={(event) => event.preventDefault()}>
+        <a className="clearance-faq" href="#faq" onClick={(event) => { event.preventDefault(); onFaq?.(); }}>
           Frequently Asked Questions (FAQ’s)
         </a>
       </main>

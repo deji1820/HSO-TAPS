@@ -1,0 +1,46 @@
+.inventory-page { max-width: 1440px; margin: 0 auto; }
+.inventory-heading { align-items: flex-start; }
+.inventory-heading svg { flex: 0 0 auto; margin-top: 2px; }
+.inventory-heading h1 { margin-bottom: 3px; }
+.inventory-heading .page-subtitle,
+.inventory-section-heading .page-subtitle,
+.inventory-list-heading .page-subtitle { margin-bottom: 0; }
+.inventory-stats { margin-top: 18px; }
+.inventory-stats .stat-card:nth-child(2) .stat-value { color: var(--danger); }
+.inventory-stats .stat-card:nth-child(3) .stat-value { color: var(--warning); }
+.inventory-form-card { margin-bottom: 26px; }
+.inventory-section-heading,
+.inventory-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.inventory-section-heading h2,
+.inventory-list-heading h2 { font-size: 1.05rem; margin-bottom: 2px; }
+.inventory-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 16px; }
+.inventory-form .field-label { margin-bottom: 0; }
+.inventory-form .text-input { display: block; margin-top: 6px; }
+.inventory-notes-field { grid-column: 1 / 3; }
+.inventory-form-actions { display: flex; justify-content: flex-end; align-items: flex-end; }
+.inventory-notice { margin: 12px 0 0; color: var(--success); font-size: 0.88rem; }
+.inventory-list-section { margin-top: 22px; }
+.inventory-tools { display: flex; align-items: center; gap: 9px; }
+.inventory-tools input { min-width: 210px; }
+.inventory-tools select { min-width: 150px; }
+.inventory-table-wrap { overflow-x: auto; }
+.inventory-table-wrap table { min-width: 930px; }
+.inventory-secondary { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 0.78rem; }
+.inventory-row-actions { display: flex; gap: 6px; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .inventory-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-list-heading { align-items: flex-start; flex-direction: column; }
+  .inventory-tools { width: 100%; flex-wrap: wrap; }
+  .inventory-tools input { flex: 1 1 220px; }
+}
+
+@media (max-width: 580px) {
+  .inventory-form { grid-template-columns: 1fr; }
+  .inventory-notes-field { grid-column: auto; }
+  .inventory-form-actions { justify-content: stretch; }
+  .inventory-form-actions .btn { width: 100%; justify-content: center; }
+  .inventory-tools > * { flex: 1 1 100%; }
+  .inventory-tools input,
+  .inventory-tools select { min-width: 0; }
+}

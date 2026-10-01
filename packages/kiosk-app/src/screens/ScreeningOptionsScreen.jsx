@@ -9,7 +9,7 @@ const OPTIONS = [
   { mode: "bmi", label: "BMI Screening Only", desc: "For OTC medicines and prescription requests.", icon: "📏" },
 ];
 
-export default function ScreeningOptionsScreen({ onSelect, onBack, isOnline }) {
+export default function ScreeningOptionsScreen({ onSelect, onBack, onFaq, isOnline }) {
   return (
     <div className="kiosk-shell qhs-options-screen">
       <KioskHeader isOnline={isOnline} />
@@ -26,7 +26,7 @@ export default function ScreeningOptionsScreen({ onSelect, onBack, isOnline }) {
           ))}
         </div>
         <button className="service-grid-back-btn" onClick={onBack}>&lt;&lt; Back</button>
-        <a className="qhs-faq" href="#faq" onClick={(event) => event.preventDefault()}>Frequently Asked Questions (FAQ’s)</a>
+        <a className="qhs-faq" href="#faq" onClick={(event) => { event.preventDefault(); onFaq?.(); }}>Frequently Asked Questions (FAQ’s)</a>
       </div>
     </div>
   );

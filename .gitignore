@@ -3,6 +3,7 @@ dist/
 build/
 .env
 .env.local
+firmware/kiosk_main/secrets.h
 *.log
 .DS_Store
 .vscode/

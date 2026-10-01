@@ -32,10 +32,15 @@ export async function getFullEmr(req, res) {
     Student.findById(req.params.id),
     VitalsLog.find({ student: req.params.id }).sort({ capturedAt: -1 }),
     ConsultationRecord.find({ student: req.params.id }).sort({ visitDate: -1 }),
-    ExternalDocument.find({ student: req.params.id }).sort({ submittedAt: -1 }),
+    ExternalDocument.find({ student: req.params.id }).select("-fileData").sort({ submittedAt: -1 }),
   ]);
   if (!student) return res.status(404).json({ message: "Student not found" });
-  res.json({ student, vitals, consultations, documents });
+  const safeDocuments = documents.map((document) => {
+    const result = document.toObject();
+    if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
+    return result;
+  });
+  res.json({ student, vitals, consultations, documents: safeDocuments });
 }
 
 // POST /api/students/bulk-upload  (Admin > Upload Master Data, after CSV/XLSX is parsed client- or server-side)

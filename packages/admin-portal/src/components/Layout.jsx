@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import "../styles/components/Layout.css";
+import { isClinicalProvider, normalizeRole } from "../utils/roles.js";
 
 /* Small inline icon set — no external icon library needed */
 const icons = {
@@ -24,6 +25,12 @@ const icons = {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" strokeLinejoin="round" />
       <path d="M14 3v5h5" strokeLinejoin="round" />
+    </svg>
+  ),
+  box: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m12 3 9 5-9 5-9-5 9-5Z" strokeLinejoin="round" />
+      <path d="M3 8v9l9 5 9-5V8M12 13v9" strokeLinejoin="round" />
     </svg>
   ),
   list: (
@@ -56,17 +63,24 @@ const icons = {
   ),
 };
 
-const NAV_ITEMS = [
-  { to: "/", label: "Dashboard", icon: icons.home, end: true },
-  { to: "/appointments", label: "Appointments", icon: icons.list },
-  { to: "/emr", label: "Electronic Medical Records", icon: icons.folder },
-  { to: "/analytics", label: "Data Analytics", icon: icons.chart },
-  { to: "/forms", label: "Forms", icon: icons.doc },
-  { to: "/admin", label: "Admin", icon: icons.list, adminOnly: true },
-];
-
 export default function Layout({ user, onLogout, children }) {
+  const role = normalizeRole(user?.role);
+  const superadmin = role === "superadmin";
+  const supervisor = role === "supervisor";
+  const provider = isClinicalProvider(role);
+  const navItems = superadmin
+    ? [{ to: "/admin", label: "Admin", icon: icons.list }]
+    : [
+        { to: provider ? "/dashboard" : "/dashboard", label: provider ? "Patient Queue" : "Dashboard", icon: icons.home },
+        { to: "/emr", label: "Electronic Medical Records", icon: icons.folder },
+        { to: "/appointments", label: "Booking Appointments", icon: icons.list },
+        { to: "/medical-documents", label: "Medical Documents", icon: icons.doc },
+        ...(["nurse", "supervisor"].includes(role) ? [{ to: "/inventory", label: "Medicine Inventory", icon: icons.box }] : []),
+        ...(supervisor ? [{ to: "/analytics", label: "Data Analytics", icon: icons.chart }] : []),
+        ...(!provider ? [{ to: "/admin", label: "Admin", icon: icons.list, adminOnly: true }] : []),
+      ];
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -80,26 +94,32 @@ export default function Layout({ user, onLogout, children }) {
   }, []);
 
   return (
-    <div className="app-shell">
+    <div className={"app-shell app-shell--control-center" + (sidebarCollapsed ? " sidebar-collapsed" : "")}>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="sidebar-crest">NU</div>
-          <div>
-            <div className="sidebar-title">NU FAIRVIEW</div>
-            <div className="sidebar-subtitle">Health Services Office</div>
-          </div>
+          <button
+            className="app-launcher"
+            type="button"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          >
+            {Array.from({ length: 9 }, (_, index) => <span key={index} />)}
+          </button>
+          <NavLink to="/" className="sidebar-control-link">
+            {icons.home}<span>Control Center</span>
+          </NavLink>
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "admin").map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => "sidebar-link" + (isActive ? " active" : "")}
-            >
-              <span className="sidebar-icon">{item.icon}</span>
-              {item.label}
+          {navItems.filter((item) => !item.adminOnly || superadmin).map((item) => item.disabled ? (
+            <div key={item.label} className="sidebar-link sidebar-link-disabled" aria-disabled="true">
+              <span className="sidebar-icon">{item.icon}</span>{item.label}
+            </div>
+          ) : (
+            <NavLink key={item.to} to={item.to} className={({ isActive }) => "sidebar-link" + (isActive ? " active" : "")}>
+              <span className="sidebar-icon">{item.icon}</span>{item.label}
             </NavLink>
           ))}
         </nav>
@@ -107,10 +127,7 @@ export default function Layout({ user, onLogout, children }) {
 
       <div className="app-main">
         <header className="topbar">
-          <div className="topbar-search">
-            {icons.search}
-            <input type="text" placeholder="Search Student ID/Name..." />
-          </div>
+          <div className="topbar-spacer" />
 
           <div className="topbar-actions">
             <button className="icon-btn" aria-label="Notifications">{icons.bell}</button>
@@ -124,10 +141,8 @@ export default function Layout({ user, onLogout, children }) {
               >
                 <div className="avatar">{icons.user}</div>
                 <div className="topbar-user-text">
-                  <div className="topbar-user-name">{user?.name || "Admin"}</div>
-                  <div className="topbar-user-email">{user?.email || "admin.hso.nufv.edu.ph"}</div>
+                  <div className="topbar-user-name">Hi, {user?.name || "Admin"}</div>
                 </div>
-                <span className={"topbar-user-chevron" + (menuOpen ? " open" : "")}>{icons.chevron}</span>
               </button>
 
               {menuOpen && (
@@ -157,6 +172,10 @@ export default function Layout({ user, onLogout, children }) {
         </header>
 
         <main className="app-content">{children}</main>
+        <footer className="portal-footer">
+          <span>National University {"\u00a9"} 2018 - 2026</span>
+          <a href="#privacy" onClick={(event) => event.preventDefault()}>Privacy Policy</a>
+        </footer>
       </div>
     </div>
   );

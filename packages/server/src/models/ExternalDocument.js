@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
 /**
  * Files/records synced in from Microsoft Forms (Health Status Declaration,
@@ -11,6 +11,10 @@ const externalDocumentSchema = new mongoose.Schema(
     documentTitle: String, // "Health Status Declaration"
     formSource: { type: String, default: "MS Forms" },
     fileUrl: String, // link to the stored file (e.g. SharePoint / S3 / GridFS)
+    category: String,
+    name: String,
+    contentType: String,
+    fileData: Buffer,
     status: { type: String, enum: ["Pending", "Verified", "Rejected"], default: "Pending" },
     submittedAt: Date,
   },
@@ -18,3 +22,5 @@ const externalDocumentSchema = new mongoose.Schema(
 );
 
 export default mongoose.model("ExternalDocument", externalDocumentSchema);
+
+

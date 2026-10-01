@@ -10,7 +10,7 @@ export const CLEARANCE_PURPOSES = [
   { id: "other", label: "Other medical clearance", document: "Request letter from the requesting office" },
 ];
 
-export default function ClearanceIntakeScreen({ onSubmit, onBack, isOnline, isAppointment = false }) {
+export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnline, isAppointment = false }) {
   const [purposeId, setPurposeId] = useState("");
   const [checkedDocuments, setCheckedDocuments] = useState([]);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -104,7 +104,7 @@ export default function ClearanceIntakeScreen({ onSubmit, onBack, isOnline, isAp
             {loading ? "Please wait..." : "Proceed >>"}
           </button>
         </div>
-        <a className="clearance-faq" href="#faq" onClick={(event) => event.preventDefault()}>
+        <a className="clearance-faq" href="#faq" onClick={(event) => { event.preventDefault(); onFaq?.(); }}>
           Frequently Asked Questions (FAQ’s)
         </a>
       </main>

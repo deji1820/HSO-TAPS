@@ -58,6 +58,7 @@ export default function ScreeningReadingsScreen({
   bpWaiting = false,
   isResult = false,
   sensorFailed = false,
+  onManual,
   onDone,
   onBack,
   isOnline,
@@ -80,13 +81,25 @@ export default function ScreeningReadingsScreen({
   const weight = readings.weightKg != null ? `${Number(readings.weightKg).toFixed(2)} kg` : "<<weight in kg>>";
   const bmi = bmiValue(readings.heightCm, readings.weightKg);
   const isComplete = mode === "complete";
-  const instruction = mode === "temperature"
-    ? "Place your right wrist in front of the sensor on the right side of the kiosk. Hold steady until reading completes."
-    : mode === "bloodPressure"
-      ? "Insert your left arm into the cuff on the left side of the kiosk. Hold steady until measurement completes."
-      : mode === "bmi"
-        ? "Step 1 — Height: Step directly under the height sensor and stand straight and steady.\nStep 2 — Weight: Step onto the weighing scale platform and remain still until reading stabilizes."
-        : "<<instructions for each sensor; automatically changes after one sensor finishes a reading until all the sensors has their own readings>>";
+  const steps = mode === "complete"
+    ? [
+        { key: "temperatureC", title: "Step 1 — Temperature", text: "Place your right wrist in front of the sensor on the right side of the kiosk. Hold steady until the reading completes." },
+        { key: "heightCm", title: "Step 2 — Height", text: "Stand directly under the height sensor and stand straight and steady." },
+        { key: "weightKg", title: "Step 3 — Weight", text: "Step onto the weighing scale platform and remain still until the reading stabilizes." },
+        { key: "bloodPressure", title: "Step 4 — Blood Pressure / BPM", text: "Insert your left arm into the cuff on the left side of the kiosk. Hold steady until the measurement completes." },
+      ]
+    : mode === "bmi"
+      ? [
+          { key: "heightCm", title: "Step 1 — Height", text: "Stand directly under the height sensor and stand straight and steady." },
+          { key: "weightKg", title: "Step 2 — Weight", text: "Step onto the weighing scale platform and remain still until the reading stabilizes." },
+        ]
+      : mode === "temperature"
+        ? [{ key: "temperatureC", title: "Temperature", text: "Place your right wrist in front of the sensor on the right side of the kiosk. Hold steady until the reading completes." }]
+        : [{ key: "bloodPressure", title: "Blood Pressure / BPM", text: "Insert your left arm into the cuff on the left side of the kiosk. Hold steady until the measurement completes." }];
+  const currentStep = steps.find(({ key }) => {
+    if (key === "bloodPressure") return !readings.bloodPressure && readings.systolicMmhg == null && !bpNoReading;
+    return readings[key] == null;
+  }) || steps[steps.length - 1];
 
   return (
     <div className="kiosk-shell qhs-reading-screen">
@@ -98,8 +111,8 @@ export default function ScreeningReadingsScreen({
           <h1>Follow the prompts to measure your vitals</h1>
         </div>
         <section className="qhs-reading-panel">
-          <h2>{isComplete ? "VITAL SIGNS AND PHYSICAL METRICS READINGS" : mode === "temperature" ? "TEMPERATURE READING" : mode === "bloodPressure" ? "BLOOD PRESSURE READINGS" : "BMI READING"}</h2>
-          <p className="qhs-instruction">{instruction}</p>
+          <h2>{isComplete ? "VITAL SIGNS AND PHYSICAL METRICS READINGS" : currentStep.title.toUpperCase()}</h2>
+          {!isResult && <p className="qhs-instruction">{currentStep.text}</p>}
 
           {isComplete ? (
             <>
@@ -128,8 +141,13 @@ export default function ScreeningReadingsScreen({
             <button className="qhs-done" onClick={onDone}>Done <span aria-hidden="true">✓</span></button>
             <p className="qhs-autoclose">Auto-closes in {remaining}s...</p>
           </>
-        ) : sensorFailed ? <button className="qhs-done qhs-back" onClick={onBack}>&lt;&lt; Back</button> : null}
-        <a className="qhs-faq" href="#faq" onClick={(event) => event.preventDefault()}>Frequently Asked Questions (FAQ’s)</a>
+        ) : sensorFailed ? (
+          <div className="qhs-capture-actions">
+            {mode !== "bloodPressure" && onManual && <button className="qhs-done" onClick={onManual}>Enter Readings Manually</button>}
+            <button className="qhs-done qhs-back" onClick={onBack}>&lt;&lt; Back</button>
+          </div>
+        ) : null}
+        <a className="qhs-faq" href="#faq" onClick={(event) => { event.preventDefault(); window.dispatchEvent(new CustomEvent("kiosk:faq")); }}>Frequently Asked Questions (FAQ’s)</a>
       </main>
     </div>
   );

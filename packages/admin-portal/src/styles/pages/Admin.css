@@ -44,6 +44,25 @@
 .import-actions { display: flex; justify-content: flex-end; }
 
 .upload-result { margin-top: 22px; }
+.upload-confirmation { margin: 4px 0 10px; color: var(--text-secondary); }
+.field-warning {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #e6c766;
+  border-radius: var(--radius-sm);
+  background: #fff9df;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.field-warning code {
+  display: inline-block;
+  margin: 2px 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #f2e8bd;
+  font-size: 0.88em;
+}
 .upload-result-stats { display: flex; gap: 22px; margin: 10px 0; font-size: 0.9rem; align-items: center; }
 .upload-result-stats > div { display: flex; align-items: center; gap: 8px; }
 .upload-error-list { margin: 8px 0 0; padding-left: 18px; font-size: 0.85rem; color: var(--text-secondary); }

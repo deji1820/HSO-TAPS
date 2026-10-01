@@ -8,6 +8,7 @@ import OtherServicesTypeScreen from "./screens/OtherServicesTypeScreen.jsx";
 import RequestTextScreen from "./screens/RequestTextScreen.jsx";
 import CheckedInScreen from "./screens/CheckedInScreen.jsx";
 import ScreeningOptionsScreen from "./screens/ScreeningOptionsScreen.jsx";
+import KioskFaqScreen from "./screens/KioskFaqScreen.jsx";
 import VitalsEntryScreen from "./screens/VitalsEntryScreen.jsx";
 import CapturingScreen from "./screens/CapturingScreen.jsx";
 import ResultScreen from "./screens/ResultScreen.jsx";
@@ -29,6 +30,8 @@ import ScreeningReadingsScreen from "./screens/ScreeningReadingsScreen.jsx";
 import { classifyBP } from "./utils/bp.js";
 
 const IDLE_TIMEOUT_MS = 30_000;
+// Leave time for non-BP sensors and BLE connection before the cuff's 120s wait ends.
+const BP_READING_TIMEOUT_MS = 180_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
 
 // Which readings each screening mode needs before we can move to the result screen
@@ -42,6 +45,13 @@ const REQUIRED_FIELDS = {
 
 export default function App() {
   const [step, setStep] = useState("welcome");
+  const [faqReturnStep, setFaqReturnStep] = useState("service");
+  const openFaq = () => { setFaqReturnStep(step); setStep("faq"); };
+  useEffect(() => {
+    const handler = () => openFaq();
+    window.addEventListener("kiosk:faq", handler);
+    return () => window.removeEventListener("kiosk:faq", handler);
+  }, [step]);
   const [student, setStudent] = useState(null);
   const [captureMode, setCaptureMode] = useState(null); // "complete" | "temperature" | "physical"
   const [readings, setReadings] = useState({});
@@ -73,9 +83,16 @@ export default function App() {
   const stepRef = useRef(step);
   const submittingRef = useRef(false); // guards against double-submit
   const currentSessionIdRef = useRef(null);
-  const bpPollAbortRef = useRef(false); // set to true to cancel an in-progress BP polling loop
+  const bpTimeoutRef = useRef(null);
 
   useEffect(() => { stepRef.current = step; }, [step]);
+
+  useEffect(() => {
+    if (step === "capturing") {
+      clearTimeout(idleTimer.current);
+      idleTimer.current = null;
+    }
+  }, [step]);
 
   useEffect(() => {
     bridgeRef.current = connectDeviceBridge((event) => deviceEventHandlerRef.current?.(event));
@@ -86,6 +103,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!supabase) {
+      console.error("[Supabase] Missing VITE_SUPABASE_ANON_KEY; ESP32 Realtime intake is unavailable.");
+      return undefined;
+    }
     // Supabase Real-time listener for wireless ESP32 RFID taps and sensor triggers
     const channel = supabase
       .channel("hsotap_kiosk_sync")
@@ -106,23 +127,11 @@ export default function App() {
                 setStep("confirm");
                 return;
               }
-            } catch (e) {
-              console.warn("[Supabase] Student lookup via API failed, using registered student fallback for:", rfid);
+            } catch (error) {
+              console.warn("[Supabase] RFID student lookup failed:", error);
             }
-
-            // Client-side fallback mapping for demo/offline resilience
-            const fallbackStudents = {
-              "579D1D3F": { studentId: "2023-330049", firstName: "Djanaisah M.", lastName: "Benito", sex: "Female", age: 21, schoolYear: "2026-2027", guardianContact: "09171234567", program: "BS Information Technology", yearLevel: "3rd Year", rfidTagUid: "579D1D3F" },
-              "EADF614C": { studentId: "2023-132138", firstName: "Sean Gerome F.", lastName: "Recto", sex: "Male", age: 21, schoolYear: "2026-2027", guardianContact: "09171234567", program: "BS Information Technology", yearLevel: "3rd Year", rfidTagUid: "EADF614C" },
-              "873A325A": { studentId: "2023-330059", firstName: "Wilpingston M.", lastName: "Lagunay", sex: "Male", age: 21, schoolYear: "2026-2027", guardianContact: "09171234567", program: "BS Information Technology", yearLevel: "3rd Year", rfidTagUid: "873A325A" },
-              "87F8113F": { studentId: "2023-330069", firstName: "Carlos Angello J.", lastName: "Bernardo", sex: "Male", age: 21, schoolYear: "2026-2027", guardianContact: "09171234567", program: "BS Information Technology", yearLevel: "3rd Year", rfidTagUid: "87F8113F" },
-              "6757805A": { studentId: "2023-230083", firstName: "Delfin Joseph D.", lastName: "Feleo", sex: "Male", age: 21, schoolYear: "2026-2027", guardianContact: "09171234567", program: "BS Information Technology", yearLevel: "3rd Year", rfidTagUid: "6757805A" },
-              "B3432B38": { studentId: "2024-100123", firstName: "Maria", lastName: "Santos", sex: "Female", age: 20, schoolYear: "2026-2027", guardianContact: "09179998888", program: "BS Information Technology", yearLevel: "2nd Year", rfidTagUid: "B3432B38" },
-              "17F7C664": { studentId: "2024-888999", firstName: "Juan", lastName: "Dela Cruz", sex: "Male", age: 21, schoolYear: "2026-2027", guardianContact: "09175554444", program: "BS Information Technology", yearLevel: "3rd Year", rfidTagUid: "17F7C664" },
-            };
-            const studentData = fallbackStudents[rfid] || { studentId: "2024-100999", firstName: "Student", lastName: rfid, program: "BS Information Technology", yearLevel: "1st Year", rfidTagUid: rfid };
-            setStudent(studentData);
-            setStep("confirm");
+            window.alert(`Card ${rfid} could not be verified. Please use manual entry or contact clinic staff.`);
+            await resetSession("cancelled");
           }
         }
       )
@@ -131,6 +140,8 @@ export default function App() {
         { event: "UPDATE", schema: "public", table: "kiosk_sessions" },
         (payload) => {
           console.log("[Supabase Realtime] Session updated:", payload.new);
+          if (!currentSessionIdRef.current || String(payload.new?.id) !== String(currentSessionIdRef.current)) return;
+          if (stepRef.current !== "capturing") return;
           const { height_m, temp_c, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, pulse_bpm, bp_classification } = payload.new;
           const patch = {};
           if (temp_c != null) patch.temperatureC = temp_c;
@@ -149,7 +160,8 @@ export default function App() {
           }
 
           if (pressure != null) {
-            bpPollAbortRef.current = true;
+            clearTimeout(bpTimeoutRef.current);
+            bpTimeoutRef.current = null;
             setBpWaiting(false);
             setBpNoReading(false);
           }
@@ -185,19 +197,31 @@ export default function App() {
     if (step !== "capturing" || submittingRef.current) return;
     const required = REQUIRED_FIELDS[captureMode] || [];
     const isComplete = required.length > 0 && required.every((field) => readings[field] != null);
-    if (isComplete && bpWaiting) return;
+    const hasBpReading = readings.bloodPressure != null ||
+      (readings.systolicMmhg != null && readings.diastolicMmhg != null);
+    const bpRequiredForScreening = flowType === "screening" &&
+      (captureMode === "complete" || captureMode === "bloodPressure");
+    if (isComplete && (bpWaiting || (bpRequiredForScreening && !hasBpReading))) return;
     if (isComplete) finishCapture(readings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readings, step, captureMode, bpWaiting]);
+  }, [readings, step, captureMode, bpWaiting, flowType]);
 
   function resetIdleTimer() {
+    if (stepRef.current === "capturing") {
+      clearTimeout(idleTimer.current);
+      idleTimer.current = null;
+      return;
+    }
     clearTimeout(idleTimer.current);
     idleTimer.current = setTimeout(() => resetSession("timeout"), IDLE_TIMEOUT_MS);
   }
 
   async function resetSession(statusReason = "cancelled") {
+    clearTimeout(idleTimer.current);
+    idleTimer.current = null;
     clearTimeout(captureTimerRef.current);
-    bpPollAbortRef.current = true;
+    clearTimeout(bpTimeoutRef.current);
+    bpTimeoutRef.current = null;
     setSensorFailed(false);
     setBpNoReading(false);
     setBpWaiting(false);
@@ -222,7 +246,7 @@ export default function App() {
     setMedicineSymptoms([]);
     setMedicineSafetyAnswers({});
 
-    if (sessionIdToUpdate) {
+    if (sessionIdToUpdate && supabase) {
       try {
         await supabase
           .from("kiosk_sessions")
@@ -233,6 +257,7 @@ export default function App() {
         console.warn("[Supabase] Failed to mark session status in resetSession:", err);
       }
     }
+
   }
 
   async function handleDeviceEvent(evt) {
@@ -250,7 +275,8 @@ export default function App() {
         }
       } catch (err) {
         console.error("[kiosk-app] lookup error:", err);
-        alert(`Card not recognized (looked up "${evt.uid}"). Please try Manual Entry, or seed a matching student.`);
+        alert(`Card ${evt.uid} could not be verified. Please use manual entry or contact clinic staff.`);
+        await resetSession("cancelled");
       }
       return;
     }
@@ -275,7 +301,8 @@ export default function App() {
 
     if (evt.type === "blood_pressure_reading" && patch.bloodPressure != null) {
       clearTimeout(captureTimerRef.current);
-      bpPollAbortRef.current = true;
+      clearTimeout(bpTimeoutRef.current);
+      bpTimeoutRef.current = null;
       setBpWaiting(false);
       setBpNoReading(false);
       setSensorFailed(false);
@@ -495,77 +522,12 @@ async function handleWalkInSubmit() {
     setStep("checkedIn");
   }
 
-  /**
-   * Polls Supabase every 2s for up to 15s waiting for a 'bp_logged' row.
-   * When found, marks it 'bp_consumed' and injects readings into state.
-   * Can be cancelled mid-poll by setting bpPollAbortRef.current = true.
-   * Returns true if a reading was found and injected, false if timed out or cancelled.
-   */
-  async function fetchLatestBpReading() {
-    const POLL_INTERVAL_MS = 2000;
-    const MAX_WAIT_MS = 15000;
-    const startTime = Date.now();
-    bpPollAbortRef.current = false;
-
-    while (Date.now() - startTime < MAX_WAIT_MS) {
-      if (bpPollAbortRef.current) {
-        console.log("[fetchLatestBpReading] Poll cancelled by navigation.");
-        return false;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from("kiosk_sessions")
-          .select("id, systolic_mmhg, diastolic_mmhg, pulse_bpm")
-          .eq("status", "bp_logged")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
-
-        if (!error && data) {
-          const { id, systolic_mmhg, diastolic_mmhg, pulse_bpm } = data;
-          clearTimeout(captureTimerRef.current);
-
-          // Mark it consumed so it won't be picked up again
-          await supabase
-            .from("kiosk_sessions")
-            .update({ status: "bp_consumed" })
-            .eq("id", id);
-
-          const bp = `${systolic_mmhg}/${diastolic_mmhg}`;
-          const bpClassification = classifyBP(systolic_mmhg, diastolic_mmhg);
-          setReadings((prev) => ({
-            ...prev,
-            bloodPressure: bp,
-            systolicMmhg: systolic_mmhg,
-            diastolicMmhg: diastolic_mmhg,
-            pulseBpm: pulse_bpm,
-            bloodPressureClassification: bpClassification,
-          }));
-
-          console.log(`[fetchLatestBpReading] Injected BP: ${bp}, Pulse: ${pulse_bpm} bpm (session id: ${id}) after ${Math.round((Date.now() - startTime) / 1000)}s`);
-          setBpWaiting(false);
-          setBpNoReading(false);
-          return true;
-        }
-      } catch (err) {
-        console.warn("[fetchLatestBpReading] Poll error:", err);
-      }
-
-      // Wait 2s before next poll attempt
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    }
-
-    console.warn("[fetchLatestBpReading] Timed out after 15s — no bp_logged row found.");
-    setBpWaiting(false);
-    return false;
-  }
-
   async function handleScreeningOptionSelect(mode) {
     submittingRef.current = false;
+    currentSessionIdRef.current = null;
     setReadings({});
     setManualFields([]);
-    bpPollAbortRef.current = true;
+    clearTimeout(bpTimeoutRef.current);
     setBpNoReading(false);
     setBpWaiting(false);
     setCaptureMode(mode);
@@ -573,41 +535,22 @@ async function handleWalkInSubmit() {
     setStep("capturing");
 
     const needsBp = mode === "bloodPressure" || mode === "complete";
-
-    if (mode === "complete") {
-      // Start hardware sensors immediately (temp + height + weight)
-      triggerHardwareSensors("complete", "Quick Health Screening");
-      // Poll for BP in parallel — it patches readings when found
+    if (needsBp) {
       setBpWaiting(true);
-      fetchLatestBpReading().then((found) => {
-        if (!found && !bpPollAbortRef.current) {
-          setBpNoReading(true);
-          // Don't set sensorFailed — hardware sensors are still running for other fields
-        }
-      });
-      return;
-    }
-
-    if (mode === "bloodPressure") {
-      // Ask the existing sensor session to capture BP and poll for its logged result.
-      triggerHardwareSensors("bloodPressure", "Quick Health Screening");
-      setBpWaiting(true);
-      const found = await fetchLatestBpReading();
-      if (!found && !bpPollAbortRef.current) {
+      bpTimeoutRef.current = setTimeout(() => {
+        setBpWaiting(false);
         setBpNoReading(true);
         setSensorFailed(true);
-      }
-      return;
+      }, BP_READING_TIMEOUT_MS);
     }
-
-    // temperature or bmi — no BP involved
     const sensorMode = mode === "bmi" ? "physical" : mode;
-    triggerHardwareSensors(sensorMode, "Quick Health Screening");
+    await triggerHardwareSensors(sensorMode, "Quick Health Screening");
   }
 
   async function handleCancelScreening() {
     clearTimeout(captureTimerRef.current);
-    bpPollAbortRef.current = true;
+    clearTimeout(bpTimeoutRef.current);
+    bpTimeoutRef.current = null;
     setSensorFailed(false);
     setBpNoReading(false);
     setBpWaiting(false);
@@ -618,7 +561,7 @@ async function handleWalkInSubmit() {
     setCaptureMode(null);
     setFlowType(null);
     setStep("screeningOptions");
-    if (sessionId) {
+    if (sessionId && supabase) {
       try {
         await supabase.from("kiosk_sessions").update({ status: "cancelled" }).eq("id", sessionId).in("status", ["pending_sensor", "tap_logged"]);
       } catch (error) {
@@ -627,36 +570,57 @@ async function handleWalkInSubmit() {
     }
   }
 
+  async function handleManualScreeningEntry() {
+    clearTimeout(captureTimerRef.current);
+    clearTimeout(bpTimeoutRef.current);
+    bpTimeoutRef.current = null;
+    const sessionId = currentSessionIdRef.current;
+    currentSessionIdRef.current = null;
+    if (sessionId && supabase) {
+      try { await supabase.from("kiosk_sessions").update({ status: "cancelled" }).eq("id", sessionId).in("status", ["pending_sensor", "tap_logged"]); }
+      catch (error) { console.warn("[handleManualScreeningEntry] Failed to cancel sensor request:", error); }
+    }
+    setBpWaiting(false);
+    setBpNoReading(captureMode === "complete");
+    setSensorFailed(false);
+    setStep("vitalsEntry");
+  }
+
   async function triggerHardwareSensors(sensorCmd, selectedService = null) {
     clearTimeout(captureTimerRef.current);
     setSensorFailed(false);
-    let sessionId = null;
+    currentSessionIdRef.current = null;
 
-    try {
-      const { data } = await supabase.from("kiosk_sessions").insert([
-        {
+    if (isMock) {
+      window.setTimeout(() => {
+        if (sensorCmd === "complete" || sensorCmd === "temperature") bridgeRef.current?.simulateTemperature?.();
+        if (sensorCmd === "complete" || sensorCmd === "physical") bridgeRef.current?.simulateHeightWeight?.();
+        if (sensorCmd === "complete" || sensorCmd === "bloodPressure") bridgeRef.current?.simulateBloodPressure?.();
+      }, 350);
+    } else if (supabase) {
+      try {
+        const { data, error } = await supabase.from("kiosk_sessions").insert([{
           rfid_uid: student?.rfidTagUid || student?.studentId,
           service_selected: selectedService || (flowType === "consultation"
             ? `${consultSubType === "Dental" ? "Dental" : "Medical"} Consultation`
             : "Quick Health Screening"),
           sensor_required: sensorCmd,
-          status: "pending_sensor"
-        }
-      ]).select();
-
-      if (data && data[0]?.id) {
-        sessionId = data[0].id;
-        currentSessionIdRef.current = sessionId;
+          status: "pending_sensor",
+        }]).select("id").single();
+        if (error) throw error;
+        if (data?.id) currentSessionIdRef.current = data.id;
+      } catch (err) {
+        console.warn("[triggerHardwareSensors] Supabase sensor request failed:", err);
       }
-    } catch (err) {
-      console.warn("[triggerHardwareSensors] Supabase session insertion error:", err);
     }
 
-    // Production Hardware Timeout: If physical sensors do not report data within 6s, show failed window
+    const timeoutMs = sensorCmd === "complete" || sensorCmd === "bloodPressure"
+      ? BP_READING_TIMEOUT_MS
+      : sensorCmd === "physical" ? 14_000 : 12_000;
     captureTimerRef.current = setTimeout(() => {
       console.warn("[triggerHardwareSensors] No sensor data received from hardware within timeout.");
       setSensorFailed(true);
-    }, 6000);
+    }, timeoutMs);
   }
 
   async function handleVitalsProceed(enteredReadings) {
@@ -690,6 +654,14 @@ async function handleWalkInSubmit() {
     }
 
     setStep("capturing");
+    if (sensorCmd === "complete" && !bpNoReading) {
+      clearTimeout(bpTimeoutRef.current);
+      setBpWaiting(true);
+      bpTimeoutRef.current = setTimeout(() => {
+        setBpWaiting(false);
+        setBpNoReading(true);
+      }, BP_READING_TIMEOUT_MS);
+    }
     await triggerHardwareSensors(sensorCmd);
   }
 
@@ -699,13 +671,28 @@ async function handleWalkInSubmit() {
     setManualFields([]);
     const sensorCmd = mode === "complete" ? "complete" : mode === "temperature" ? "temperature" : "physical";
     setStep("capturing");
+    if (sensorCmd === "complete") {
+      clearTimeout(bpTimeoutRef.current);
+      setBpNoReading(false);
+      setBpWaiting(true);
+      bpTimeoutRef.current = setTimeout(() => {
+        setBpWaiting(false);
+        setBpNoReading(true);
+      }, BP_READING_TIMEOUT_MS);
+    }
     await triggerHardwareSensors(sensorCmd);
   }
 
   async function finishCapture(finalReadings) {
     submittingRef.current = true;
     currentSessionIdRef.current = null;
-    const targetStudentId = student?.studentId || student?.rfidTagUid || "2024-100123";
+    const targetStudentId = student?.studentId || student?.rfidTagUid;
+    if (!targetStudentId) {
+      submittingRef.current = false;
+      alert("Please verify the student before saving these readings.");
+      await resetSession("cancelled");
+      return;
+    }
 
     try {
       if (flowType === "consultation") {
@@ -715,6 +702,11 @@ async function handleWalkInSubmit() {
           serviceType,
           source: "kiosk",
           temperatureC: finalReadings.temperatureC,
+          bloodPressure: finalReadings.bloodPressure,
+          bloodPressureClassification: finalReadings.bloodPressureClassification,
+          pulseRate: finalReadings.pulseBpm,
+          heightCm: finalReadings.heightCm,
+          weightKg: finalReadings.weightKg,
         });
         setCheckInInfo({
           serviceType,
@@ -741,7 +733,9 @@ async function handleWalkInSubmit() {
       setStep("result");
     } catch (err) {
       console.warn("[finishCapture] API intake submission fallback:", err);
-      setStep("result");
+      submittingRef.current = false;
+      alert("The readings could not be saved to the clinic server. Please repeat the screening or contact clinic staff.");
+      await resetSession("cancelled");
     }
   }
 
@@ -758,11 +752,11 @@ async function handleWalkInSubmit() {
       )}
 
       {step === "confirm" && (
-        <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} isOnline={isOnline} />
+        <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} onFaq={openFaq} isOnline={isOnline} />
       )}
 
       {step === "service" && (
-        <ServiceSelectScreen onSelect={handleServiceSelect} onBack={() => setStep("confirm")} isOnline={isOnline} />
+        <ServiceSelectScreen onSelect={handleServiceSelect} onBack={() => setStep("confirm")} onFaq={openFaq} isOnline={isOnline} />
       )}
 
       {step === "consultationType" && (
@@ -779,6 +773,7 @@ async function handleWalkInSubmit() {
       setConsultSubType(null);
       setStep("service");
     }}
+    onFaq={openFaq}
     isOnline={isOnline}
   />
 )}
@@ -794,6 +789,7 @@ async function handleWalkInSubmit() {
       setFlowType(null);
       setStep("service");
     }}
+    onFaq={openFaq}
     isOnline={isOnline}
   />
 )}
@@ -806,6 +802,7 @@ async function handleWalkInSubmit() {
       setStep("clearanceAppointmentBooking");
     }}
     onBack={() => setStep("clearanceEntry")}
+    onFaq={openFaq}
     isOnline={isOnline}
   />
 )}
@@ -814,6 +811,7 @@ async function handleWalkInSubmit() {
   <ClearanceIntakeScreen
     onSubmit={handleClearanceSubmit}
     onBack={() => setStep("clearanceEntry")}
+    onFaq={openFaq}
     isOnline={isOnline}
   />
 )}
@@ -822,6 +820,7 @@ async function handleWalkInSubmit() {
   <ClearanceResultScreen
     queueNumber={clearanceQueueNumber}
     onDone={resetSession}
+    onFaq={openFaq}
     isOnline={isOnline}
   />
 )}
@@ -831,6 +830,7 @@ async function handleWalkInSubmit() {
     consultSubType={consultSubType}
     serviceType={consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation"}
     onProceed={handleAppointmentProceed}
+    onFaq={openFaq}
     onBack={() => setStep("consultationEntry")}
     isOnline={isOnline}
   />
@@ -842,6 +842,7 @@ async function handleWalkInSubmit() {
     serviceType="Medical Clearance"
     purpose={clearanceAppointmentPurpose}
     onProceed={handleAppointmentProceed}
+    onFaq={openFaq}
     onBack={() => setStep("clearanceAppointmentPurpose")}
     isOnline={isOnline}
   />
@@ -858,6 +859,7 @@ async function handleWalkInSubmit() {
     })}
     timeLabel={appointmentSelection.time}
     onDone={resetSession}
+    onFaq={openFaq}
     isOnline={isOnline}
   />
 )}
@@ -869,6 +871,7 @@ async function handleWalkInSubmit() {
     dateLabel={appointmentSelection.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
     timeLabel={appointmentSelection.time}
     onDone={resetSession}
+    onFaq={openFaq}
     isOnline={isOnline}
   />
 )}
@@ -880,6 +883,7 @@ async function handleWalkInSubmit() {
     onToggleComplaint={handleToggleComplaint}
     temperatureC={walkInTemp}
     onContinue={handleWalkInSubmit}
+    onFaq={openFaq}
     onBack={handleLeaveWalkIn}
     isOnline={isOnline}
   />
@@ -893,6 +897,7 @@ async function handleWalkInSubmit() {
     temperatureC={walkInTemp}
     temperatureClassification={classifyTemp(walkInTemp)}
     onTimeout={resetSession}
+    onFaq={openFaq}
     isOnline={isOnline}
   />
 )}
@@ -909,6 +914,7 @@ async function handleWalkInSubmit() {
           onToggleSymptom={toggleMedicineSymptom}
           onAnswerSafety={(question, answer) => setMedicineSafetyAnswers((current) => ({ ...current, [question]: answer }))}
           onContinue={handleMedicineSubmit}
+          onFaq={openFaq}
           onBack={handleLeaveWalkIn}
           isOnline={isOnline}
         />
@@ -922,6 +928,7 @@ async function handleWalkInSubmit() {
           temperatureC={walkInTemp}
           temperatureClassification={classifyTemp(walkInTemp)}
           onTimeout={resetSession}
+          onFaq={openFaq}
           isOnline={isOnline}
         />
       )}
@@ -935,7 +942,7 @@ async function handleWalkInSubmit() {
       )}
 
       {step === "screeningOptions" && (
-        <ScreeningOptionsScreen onSelect={handleScreeningOptionSelect} onBack={() => setStep("service")} isOnline={isOnline} />
+        <ScreeningOptionsScreen onSelect={handleScreeningOptionSelect} onBack={() => setStep("service")} onFaq={openFaq} isOnline={isOnline} />
       )}
 
       {step === "vitalsEntry" && (
@@ -958,6 +965,7 @@ async function handleWalkInSubmit() {
             pulseBpm={readings.pulseBpm}
             bpNoReading={bpNoReading}
             bpWaiting={bpWaiting}
+            onManual={handleManualScreeningEntry}
             onBack={handleCancelScreening}
             isOnline={isOnline}
           />
@@ -1005,6 +1013,7 @@ async function handleWalkInSubmit() {
           />
         )
       )}
+      {step === "faq" && <KioskFaqScreen onBack={() => setStep(faqReturnStep)} isOnline={isOnline} />}
 
     </div>
   );

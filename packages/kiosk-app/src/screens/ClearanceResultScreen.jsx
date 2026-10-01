@@ -2,7 +2,7 @@ import KioskHeader from "../components/KioskHeader.jsx";
 import useCountdown from "../hooks/useCountdown.js";
 import "../styles/screens/MedicalClearance.css";
 
-export default function ClearanceResultScreen({ queueNumber, onDone, isOnline }) {
+export default function ClearanceResultScreen({ queueNumber, onDone, onFaq, isOnline }) {
   const remaining = useCountdown(30, onDone);
 
   return (
@@ -20,7 +20,7 @@ export default function ClearanceResultScreen({ queueNumber, onDone, isOnline })
         </section>
         <button className="clearance-done" onClick={onDone}>Done <span>✓</span></button>
         <p className="clearance-autoclose">Auto-closes in {remaining}s...</p>
-        <a className="clearance-faq" href="#faq" onClick={(event) => event.preventDefault()}>
+        <a className="clearance-faq" href="#faq" onClick={(event) => { event.preventDefault(); onFaq?.(); }}>
           Frequently Asked Questions (FAQ’s)
         </a>
       </main>

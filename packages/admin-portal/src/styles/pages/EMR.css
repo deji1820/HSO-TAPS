@@ -1,24 +1,97 @@
-.emr-search {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 18px;
+.emr-search-form {
+  position: relative;
+  max-width: 800px;
+  margin: 18px auto 24px;
+  padding: 0 10px;
 }
-.emr-search .text-input { flex: 1; }
+.emr-field-label {
+  display: block;
+  margin: 9px 0 3px;
+  color: #454545;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.emr-search-form .text-input {
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid #d0d0d0;
+  border-radius: 0;
+  background: #fff;
+  font-size: 0.78rem;
+}
+.emr-search-form .text-input::placeholder { color: #c3c3c3; font-style: italic; }
+.emr-search-form .text-input[readonly] { background: #fff; color: #555; }
+.emr-patient-suggestions {
+  position: absolute;
+  z-index: 4;
+  top: 54px;
+  left: 10px;
+  right: 10px;
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+.emr-patient-suggestions button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.emr-patient-suggestions button:hover { background: var(--nu-blue-light); }
+.emr-patient-suggestions small { color: var(--text-muted); }
+.emr-search-actions { display: flex; gap: 14px; margin-top: 28px; }
+.emr-search-actions .btn { min-height: 28px; padding: 4px 12px; border-radius: 0; font-size: 0.75rem; }
 
-.emr-results-wrap { margin-bottom: 22px; }
+.emr-search-results { max-width: 800px; margin: 0 auto 22px; padding: 0 10px; }
+.emr-search-result {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  background: #fff;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.emr-search-result:first-child { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.emr-search-result:last-child { border-bottom: 1px solid var(--border); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.emr-search-result:only-child { border-radius: var(--radius-sm); }
+.emr-search-result:hover { background: var(--nu-blue-light); }
+.emr-search-result-name { color: var(--text-primary); font-weight: 700; }
+.emr-search-result-action { margin-left: auto; color: var(--nu-blue); font-weight: 600; white-space: nowrap; }
 
 /* ---------- Detail card shell ---------- */
 .emr-detail-card {
-  background: var(--bg-card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-  margin-top: 4px;
+  background: transparent;
+  margin: 0;
 }
 
+.emr-full-heading { padding: 0 0 12px; }
+.emr-full-heading h1 { margin: 0; color: var(--nu-blue-dark); font-size: 1.05rem; }
+.emr-full-heading p { margin: 2px 0 0; color: var(--nu-blue-dark); font-size: 0.72rem; font-weight: 600; }
+
+.emr-patient-summary { max-width: 770px; margin: 12px auto 28px; font-size: 0.78rem; color: #444; }
+.emr-summary-name { font-size: 0.88rem; font-weight: 700; margin-bottom: 4px; }
+.emr-summary-row { display: grid; grid-template-columns: 1fr 1fr; min-height: 18px; }
+.emr-summary-row span:first-child { font-weight: 600; }
+.emr-patient-summary .btn { margin-top: 16px; }
+.emr-divider { border: 0; border-top: 1px solid #d8d8d8; margin: 0 auto 20px; max-width: 770px; }
+
 .emr-detail-bar {
-  background: var(--nu-blue);
-  color: #fff;
+  background: transparent;
+  color: var(--text-primary);
   font-weight: 700;
   font-style: italic;
   padding: 14px 20px;
@@ -27,9 +100,100 @@
   justify-content: space-between;
 }
 
-.emr-detail-card .patient-info-block { margin: 16px 20px 0; }
-.emr-detail-card .emr-segmented-tabs { margin: 16px 20px 0; }
-.emr-tab-content { padding: 16px 20px 20px; }
+.emr-detail-card .patient-info-block { margin: 16px 0 0; }
+.emr-detail-card .emr-segmented-tabs {
+  max-width: 770px;
+  margin: 0 auto 16px;
+  border: 0;
+  border-bottom: 1px solid #d8d8d8;
+  border-radius: 0;
+  overflow-x: auto;
+}
+.emr-detail-card .workstation-tab {
+  flex: 1 0 auto;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: #2671bd;
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.emr-detail-card .workstation-tab.active {
+  color: #555;
+  background: #fff;
+  border: 1px solid #d8d8d8;
+  border-bottom-color: #fff;
+  margin-bottom: -1px;
+}
+.emr-tab-content { max-width: 770px; margin: 0 auto; padding: 0; }
+.emr-tab-content .patient-info-block { padding: 14px 16px; background: #fff; border: 1px solid #e5e5e5; box-shadow: none; }
+.emr-tab-content .patient-info-block h2 { margin: 0 0 12px; color: var(--nu-blue-dark); }
+.emr-profile-meta { max-width: 770px; margin: 0 auto 10px; color: #666; font-size: 0.72rem; text-align: right; }
+.emr-profile-sections { display: flex; flex-direction: column; gap: 16px; }
+.emr-profile-section { border: 1px solid #d7d7d7; padding: 12px 16px 16px; background: #fff; }
+.emr-profile-section h3 { margin: -20px 0 14px; padding: 0 8px; width: max-content; max-width: 100%; background: #fff; color: #4b4b4b; font-size: 0.9rem; }
+.emr-physical-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.emr-profile-fields { display: flex; flex-direction: column; gap: 5px; }
+.emr-profile-field { display: grid; grid-template-columns: 94px minmax(0, 1fr); align-items: center; gap: 6px; font-size: 0.7rem; color: #4f4f4f; }
+.emr-profile-field > span { font-weight: 600; }
+.emr-profile-field > div { min-height: 21px; padding: 3px 6px; border: 1px solid #d6d6d6; color: #555; background: #fff; white-space: pre-wrap; overflow-wrap: anywhere; }
+.emr-profile-aside { display: flex; flex-direction: column; gap: 13px; padding-top: 1px; }
+.emr-kiosk-intake { display: flex; gap: 10px; justify-content: flex-end; margin: 0 0 8px; color: #555; font-size: 0.68rem; }
+.emr-kiosk-intake span { color: #777; }
+.emr-profile-aside .emr-profile-field { grid-template-columns: 112px minmax(0, 1fr); }
+.emr-lab-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
+.emr-result-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
+.emr-history-title { margin-top: 24px; }
+.emr-profile-previous { display: flex; flex-direction: column; gap: 8px; }
+.emr-profile-previous details { border: 1px solid #d7d7d7; background: #fff; }
+.emr-profile-previous summary { padding: 9px 12px; color: var(--nu-blue-dark); font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.emr-profile-previous .emr-profile-sections { padding: 12px; border-top: 1px solid #ddd; }
+.emr-profile-empty-history { margin: 0; padding: 10px 0; color: #777; font-size: 0.78rem; }
+.emr-family-history { width: 100%; }
+.emr-family-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 7px; margin-bottom: 18px; border-bottom: 1px solid #d7d7d7; }
+.emr-family-heading h2 { display: flex; align-items: center; gap: 8px; margin: 0; color: #333; font-size: 0.82rem; font-weight: 500; }
+.emr-family-heading h2 span { color: #111; font-size: 1.1rem; }
+.emr-edit-history { min-height: 26px; padding: 3px 12px; border: 1px solid #c99b00; border-radius: 0; background: #edbd17; color: #222; font-size: 0.72rem; }
+.emr-family-table { width: calc(100% - 8px); margin: 0 4px; border-collapse: collapse; table-layout: fixed; color: #333; font-size: 0.68rem; }
+.emr-family-table th, .emr-family-table td { border: 1px solid #cfcfcf; padding: 3px 7px; }
+.emr-family-table th { height: 26px; background: #347fb6; color: #fff; text-align: center; font-weight: 600; }
+.emr-family-table th:first-child { width: 52%; text-align: left; }
+.emr-family-table th:nth-child(2), .emr-family-table th:nth-child(3) { width: 9%; }
+.emr-family-table th:last-child { width: 30%; }
+.emr-family-choice { text-align: center; }
+.emr-family-choice input { width: 13px; height: 13px; margin: 0; vertical-align: middle; accent-color: var(--nu-blue); }
+.emr-family-remarks { width: 100%; min-height: 17px; padding: 1px 4px; border: 1px solid #888; border-radius: 0; background: #fff; color: #333; font: inherit; }
+.emr-family-remarks[readonly] { color: #555; }
+.emr-family-other { min-height: 26px; resize: vertical; vertical-align: middle; }
+.emr-medical-history { width: 100%; }
+.emr-medical-history-tables { display: flex; flex-direction: column; gap: 7px; padding: 0 8px; }
+.emr-medical-history-table { width: 100%; border-collapse: collapse; table-layout: fixed; color: #333; font-size: 0.68rem; }
+.emr-medical-history-table th, .emr-medical-history-table td { height: 19px; padding: 2px 7px; border: 1px solid #cfcfcf; }
+.emr-medical-history-table thead th { height: 23px; background: #347fb6; color: #fff; text-align: center; }
+.emr-medical-history-table th:first-child { width: 57%; }
+.emr-medical-history-table th:nth-child(2), .emr-medical-history-table th:nth-child(3) { width: 21.5%; }
+.emr-medical-history-table tbody tr:nth-child(3n + 1) { background: #fafafa; }
+.emr-medical-history-table:nth-child(2) { outline: 2px solid #a24dff; outline-offset: 0; }
+.emr-medical-history-notes { display: flex; flex-direction: column; gap: 5px; padding: 4px 8px 0; color: #333; font-size: 0.68rem; }
+.emr-medical-history-notes label { display: flex; flex-direction: column; gap: 2px; }
+.emr-history-note-input { min-height: 21px; width: 100%; padding: 2px 5px; border: 1px solid #888; border-radius: 0; background: #fff; color: #333; font: inherit; }
+.emr-history-note-input[readonly] { color: #555; }
+.emr-health-declaration > .section-title { margin-top: 0; }
+.emr-health-submission { margin: 0 0 12px; border: 1px solid #d2d2d2; background: #fff; }
+.emr-health-submission > header { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid #ddd; background: #f7f7f7; color: #555; font-size: 0.76rem; }
+.emr-health-submission > header strong { color: var(--nu-blue-dark); }
+.emr-health-submission dl { margin: 0; padding: 4px 12px; }
+.emr-health-submission dl > div { display: grid; grid-template-columns: minmax(180px, 38%) 1fr; gap: 12px; padding: 7px 0; border-bottom: 1px solid #eee; font-size: 0.78rem; }
+.emr-health-submission dl > div:last-child { border-bottom: 0; }
+.emr-health-submission dt { color: #555; font-weight: 600; }
+.emr-health-submission dd { margin: 0; color: #333; white-space: pre-wrap; overflow-wrap: anywhere; }
+.emr-health-submission > p { margin: 0; padding: 12px; color: #777; font-size: 0.78rem; }
+@media (max-width: 760px) {
+  .emr-physical-layout, .emr-lab-fields, .emr-result-fields { grid-template-columns: 1fr; }
+  .emr-profile-field { grid-template-columns: 120px minmax(0, 1fr); }
+  .emr-kiosk-intake { justify-content: flex-start; flex-wrap: wrap; }
+}
 
 /* ---------- Consultation History accordion ---------- */
 .consultation-list { display: flex; flex-direction: column; gap: 0; padding: 4px; }

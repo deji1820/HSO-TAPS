@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
 /**
  * SOAP-format clinical note + medication/relief + general inquiry tabs,
@@ -43,9 +43,12 @@ const consultationRecordSchema = new mongoose.Schema(
     natureOfInquiry: String,
     inquiryResponse: String,
 
+    vitalsSnapshot: { type: mongoose.Schema.Types.Mixed, default: {} },
     visitDate: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );
 
 export default mongoose.model("ConsultationRecord", consultationRecordSchema);
+
+
