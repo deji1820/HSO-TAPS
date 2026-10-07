@@ -4,7 +4,8 @@ import ManualEntryScreen from "./screens/ManualEntryScreen.jsx";
 import IdentityVerificationScreen from "./screens/IdentityVerificationScreen.jsx";
 import ServiceSelectScreen from "./screens/ServiceSelectScreen.jsx";
 import QrChoiceScreen from "./screens/QrChoiceScreen.jsx";
-import MobileServiceSelectionScreen from "./screens/MobileServiceSelectionScreen.jsx";
+import MobileVitalsEntryScreen from "./screens/MobileVitalsEntryScreen.jsx";
+import "./styles/mobile-flow.css";
 import ConsultationTypeScreen from "./screens/ConsultationTypeScreen.jsx";
 import OtherServicesTypeScreen from "./screens/OtherServicesTypeScreen.jsx";
 import RequestTextScreen from "./screens/RequestTextScreen.jsx";
@@ -45,6 +46,11 @@ const REQUIRED_FIELDS = {
 };
 
 export default function App() {
+  const mobileSessionToken = new URLSearchParams(window.location.search).get("mobileServiceSession");
+  const [mobileSessionStatus, setMobileSessionStatus] = useState(mobileSessionToken ? "loading" : "idle");
+  const [mobileSessionError, setMobileSessionError] = useState("");
+  const [mobileFlowComplete, setMobileFlowComplete] = useState(false);
+  const mobileMode = Boolean(mobileSessionToken && mobileSessionStatus === "ready");
   const [step, setStep] = useState("welcome");
   const [faqReturnStep, setFaqReturnStep] = useState("service");
   const openFaq = () => { setFaqReturnStep(step); setStep("faq"); };
@@ -88,8 +94,55 @@ export default function App() {
   const stepRef = useRef(step);
   const submittingRef = useRef(false); // guards against double-submit
   const currentSessionIdRef = useRef(null);
-  const serviceSelectHandlerRef = useRef(null);
   const bpTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (!mobileSessionToken) return undefined;
+    if (!supabase) {
+      setMobileSessionError("Mobile check-in is unavailable. Please return to the kiosk or ask clinic staff for help.");
+      setMobileSessionStatus("error");
+      return undefined;
+    }
+
+    let active = true;
+    async function loadMobileSession() {
+      try {
+        const { data, error } = await supabase.from("kiosk_sessions")
+          .select("id, rfid_uid, status")
+          .eq("id", mobileSessionToken)
+          .in("status", ["awaiting_service_selection", "mobile_flow_started"])
+          .maybeSingle();
+        if (error) throw error;
+        if (!data?.rfid_uid) throw new Error("This mobile check-in link has expired. Please scan the kiosk QR code again.");
+
+        const found = await lookupStudent(data.rfid_uid);
+        if (!found) throw new Error("We couldn't verify the student for this session. Please ask clinic staff for help.");
+
+        if (data.status === "awaiting_service_selection") {
+          const { data: updated, error: updateError } = await supabase.from("kiosk_sessions")
+            .update({ status: "mobile_flow_started" })
+            .eq("id", data.id)
+            .eq("status", "awaiting_service_selection")
+            .select("id")
+            .maybeSingle();
+          if (updateError) throw updateError;
+          if (!updated) throw new Error("This mobile check-in link is already in use. Please scan the kiosk QR again.");
+        }
+
+        if (!active) return;
+        currentSessionIdRef.current = data.id;
+        setStudent(found);
+        setStep("service");
+        setMobileSessionStatus("ready");
+      } catch (error) {
+        if (!active) return;
+        setMobileSessionError(error?.message || "We couldn't start mobile check-in. Please return to the kiosk.");
+        setMobileSessionStatus("error");
+      }
+    }
+    loadMobileSession();
+    return () => { active = false; };
+  }, [mobileSessionToken]);
 
   useEffect(() => { stepRef.current = step; }, [step]);
 
@@ -148,13 +201,16 @@ export default function App() {
         (payload) => {
           console.log("[Supabase Realtime] Session updated:", payload.new);
           if (!currentSessionIdRef.current || String(payload.new?.id) !== String(currentSessionIdRef.current)) return;
-          if (payload.new?.status === "mobile_service_selected" && stepRef.current === "serviceAccess") {
-            const serviceType = payload.new.service_selected;
-            const allowedServices = ["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription/OTC Pickup", "General Inquiry", "Quick Health Screening"];
-            if (allowedServices.includes(serviceType)) {
-              serviceSelectHandlerRef.current?.(serviceType);
-              void supabase.from("kiosk_sessions").update({ status: "completed" }).eq("id", payload.new.id).eq("status", "mobile_service_selected");
-            }
+          if (payload.new?.status === "mobile_flow_started" && stepRef.current === "serviceAccess") {
+            setStep("mobileWaiting");
+            return;
+          }
+          if (payload.new?.status === "awaiting_service_selection" && stepRef.current === "mobileWaiting") {
+            setStep("serviceAccess");
+            return;
+          }
+          if (payload.new?.status === "completed" && stepRef.current === "mobileWaiting") {
+            void resetSession("completed");
             return;
           }
           if (stepRef.current !== "capturing") return;
@@ -199,9 +255,9 @@ export default function App() {
   useEffect(() => {
     const stop = startHealthMonitor((online) => {
       setIsOnline(online);
-      if (!online) {
+      if (!online && !mobileSessionToken) {
         setStep("offline");
-      } else {
+      } else if (online) {
         setStep((curr) => (curr === "offline" ? "welcome" : curr));
       }
     });
@@ -267,7 +323,7 @@ export default function App() {
           .from("kiosk_sessions")
           .update({ status: statusReason })
           .eq("id", sessionIdToUpdate)
-          .in("status", ["pending_sensor", "tap_logged", "awaiting_service_selection", "mobile_service_selected"]);
+          .in("status", ["pending_sensor", "tap_logged", "awaiting_service_selection", "mobile_flow_started"]);
       } catch (err) {
         console.warn("[Supabase] Failed to mark session status in resetSession:", err);
       }
@@ -401,7 +457,7 @@ function handleServiceSelect(value) {
     setMedicineSymptoms([]);
     setMedicineSafetyAnswers({});
     setStep("medicineIntake");
-    triggerHardwareSensors("temperature", "Prescription/OTC Pickup");
+    if (!mobileMode) triggerHardwareSensors("temperature", "Prescription/OTC Pickup");
   } else if (value === "General Inquiry") {
     setOtherServiceSubType("General Inquiry");
     setStep("requestText");
@@ -415,6 +471,10 @@ function handleServiceSelect(value) {
 }
 
 function handleKioskServiceSelect(value) {
+  if (mobileMode) {
+    handleServiceSelect(value);
+    return;
+  }
   const sessionId = currentSessionIdRef.current;
   if (sessionId && supabase) {
     void supabase.from("kiosk_sessions").update({ status: "cancelled" })
@@ -425,8 +485,6 @@ function handleKioskServiceSelect(value) {
   setServiceSessionReady(false);
   handleServiceSelect(value);
 }
-serviceSelectHandlerRef.current = handleServiceSelect;
-
 function toggleMedicineSymptom(symptom) {
   setMedicineSymptoms((current) => current.includes(symptom)
     ? current.filter((item) => item !== symptom)
@@ -434,9 +492,9 @@ function toggleMedicineSymptom(symptom) {
 }
 
 async function handleMedicineSubmit() {
-  if (submittingRef.current || readings.temperatureC == null || medicineSymptoms.length === 0 || Object.keys(medicineSafetyAnswers).length < 3) return;
+  if (submittingRef.current || (!mobileMode && readings.temperatureC == null) || medicineSymptoms.length === 0 || Object.keys(medicineSafetyAnswers).length < 3) return;
   submittingRef.current = true;
-  const temperatureC = Number(readings.temperatureC);
+  const temperatureC = readings.temperatureC == null ? null : Number(readings.temperatureC);
   const temperatureClass = classifyTemp(temperatureC);
   const reasonText = medicineSymptoms
     .map((symptom) => symptom === "Others" ? `Others: ${medicineOtherText.trim()}` : symptom)
@@ -450,9 +508,9 @@ async function handleMedicineSubmit() {
       temperatureC,
       requestDetails: JSON.stringify({ symptoms: medicineSymptoms, safetyAnswers: medicineSafetyAnswers }),
     });
-    currentSessionIdRef.current = null;
+    if (!mobileMode) currentSessionIdRef.current = null;
     setResultQueueNumber(result?.queueEntry?.queueNumber ?? null);
-    setOverrideTriggered(temperatureClass !== "Normal");
+    setOverrideTriggered(temperatureClass != null && temperatureClass !== "Normal");
     setStep("medicineResult");
   } catch (error) {
     console.warn("[handleMedicineSubmit] intake submission failed:", error);
@@ -506,7 +564,7 @@ async function handleWalkIn() {
   setWalkInComplaints([]);
   setCaptureMode("temperature");
   setStep("walkInIntake");
-  await triggerHardwareSensors("temperature");
+  if (!mobileMode) await triggerHardwareSensors("temperature");
 }
 
 function handleToggleComplaint(key) {
@@ -518,8 +576,8 @@ function handleToggleComplaint(key) {
 async function handleLeaveWalkIn() {
   clearTimeout(captureTimerRef.current);
   setSensorFailed(false);
-  const sessionId = currentSessionIdRef.current;
-  currentSessionIdRef.current = null;
+  const sessionId = mobileMode ? null : currentSessionIdRef.current;
+  if (!mobileMode) currentSessionIdRef.current = null;
   submittingRef.current = false;
   setReadings({});
   setWalkInComplaints([]);
@@ -546,7 +604,7 @@ async function handleLeaveWalkIn() {
 async function handleWalkInSubmit() {
   if (submittingRef.current) return;
   const temperatureC = readings.temperatureC != null ? Number(readings.temperatureC) : null;
-  if (temperatureC == null || walkInComplaints.length === 0) return;
+  if ((!mobileMode && temperatureC == null) || walkInComplaints.length === 0) return;
 
   submittingRef.current = true;
   clearTimeout(captureTimerRef.current);
@@ -566,8 +624,8 @@ async function handleWalkInSubmit() {
       reason,
       requestDetails: `Walk-in ${consultSubType} consultation. Chief complaint: ${complaintText}`,
     });
-    currentSessionIdRef.current = null;
-    setOverrideTriggered(classifyTemp(temperatureC) !== "Normal");
+    if (!mobileMode) currentSessionIdRef.current = null;
+    setOverrideTriggered(temperatureC != null && classifyTemp(temperatureC) !== "Normal");
     setResultQueueNumber(result?.queueEntry?.queueNumber ?? null);
     setStep("walkInResult");
   } catch (err) {
@@ -596,9 +654,77 @@ async function handleWalkInSubmit() {
     setStep("checkedIn");
   }
 
-  async function handleScreeningOptionSelect(mode) {
+async function handleContinueAtKiosk() {
+  const sessionId = currentSessionIdRef.current;
+  if (sessionId && supabase) {
+    void supabase.from("kiosk_sessions").update({ status: "cancelled" })
+      .eq("id", sessionId).eq("status", "awaiting_service_selection");
+  }
+  currentSessionIdRef.current = null;
+  setServiceSessionId(null);
+  setServiceSessionReady(false);
+  setStep("service");
+}
+
+async function handleMobileCancel() {
+  const sessionId = currentSessionIdRef.current;
+  if (sessionId && supabase) {
+    try {
+      await supabase.from("kiosk_sessions").update({ status: "awaiting_service_selection" })
+        .eq("id", sessionId).eq("status", "mobile_flow_started");
+    } catch (error) {
+      console.warn("[handleMobileCancel] Could not release the mobile session:", error);
+    }
+  }
+  setMobileSessionStatus("cancelled");
+}
+
+async function handleMobileDone() {
+  const sessionId = currentSessionIdRef.current;
+  if (sessionId && supabase) {
+    try {
+      await supabase.from("kiosk_sessions").update({ status: "completed" })
+        .eq("id", sessionId).eq("status", "mobile_flow_started");
+    } catch (error) {
+      console.warn("[handleMobileDone] Could not close the mobile session:", error);
+    }
+  }
+  await resetSession("completed");
+  setMobileFlowComplete(true);
+}
+
+async function handleMobileVitalsSubmit(values) {
+  const finalReadings = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Number(value)]));
+  if (finalReadings.systolicMmhg != null && finalReadings.diastolicMmhg != null) {
+    finalReadings.bloodPressure = `${finalReadings.systolicMmhg}/${finalReadings.diastolicMmhg}`;
+    finalReadings.bloodPressureClassification = classifyBP(finalReadings.systolicMmhg, finalReadings.diastolicMmhg);
+  }
+  setReadings(finalReadings);
+  setManualFields(Object.keys(finalReadings));
+  await finishCapture(finalReadings);
+}
+
+function handleReturnToKiosk() {
+  const sessionId = currentSessionIdRef.current;
+  if (sessionId && supabase) {
+    void supabase.from("kiosk_sessions").update({ status: "awaiting_service_selection" })
+      .eq("id", sessionId).eq("status", "mobile_flow_started");
+  }
+  setStep("service");
+}
+
+async function handleScreeningOptionSelect(mode) {
+    if (mobileMode) {
+      submittingRef.current = false;
+      setReadings({});
+      setManualFields([]);
+      setCaptureMode(mode);
+      setFlowType("screening");
+      setStep("mobileVitalsEntry");
+      return;
+    }
     submittingRef.current = false;
-    currentSessionIdRef.current = null;
+    if (!mobileMode) currentSessionIdRef.current = null;
     setReadings({});
     setManualFields([]);
     clearTimeout(bpTimeoutRef.current);
@@ -656,7 +782,7 @@ async function handleWalkInSubmit() {
     clearTimeout(bpTimeoutRef.current);
     bpTimeoutRef.current = null;
     const sessionId = currentSessionIdRef.current;
-    currentSessionIdRef.current = null;
+    if (!mobileMode) currentSessionIdRef.current = null;
     if (sessionId && supabase) {
       try { await supabase.from("kiosk_sessions").update({ status: "cancelled" }).eq("id", sessionId).in("status", ["pending_sensor", "tap_logged"]); }
       catch (error) { console.warn("[handleManualScreeningEntry] Failed to cancel sensor request:", error); }
@@ -766,10 +892,11 @@ async function handleWalkInSubmit() {
 
   async function finishCapture(finalReadings) {
     submittingRef.current = true;
-    currentSessionIdRef.current = null;
+    if (!mobileMode) currentSessionIdRef.current = null;
     const targetStudentId = student?.studentId || student?.rfidTagUid;
     if (!targetStudentId) {
       submittingRef.current = false;
+      if (mobileMode) throw new Error("Student verification is missing. Go back and restart check-in.");
       alert("Please verify the student before saving these readings.");
       await resetSession("cancelled");
       return;
@@ -815,17 +942,24 @@ async function handleWalkInSubmit() {
     } catch (err) {
       console.warn("[finishCapture] API intake submission fallback:", err);
       submittingRef.current = false;
+      if (mobileMode) throw new Error("The readings could not be saved. Please try again or contact clinic staff.");
       alert("The readings could not be saved to the clinic server. Please repeat the screening or contact clinic staff.");
       await resetSession("cancelled");
     }
   }
 
   const walkInTemp = readings.temperatureC != null ? Number(readings.temperatureC) : null;
-  const mobileServiceSessionId = new URLSearchParams(window.location.search).get("mobileServiceSession");
+  const onFlowDone = mobileMode ? handleMobileDone : resetSession;
 
   return (
-    <div onClick={isOnline ? resetIdleTimer : undefined}>
-      {mobileServiceSessionId ? <MobileServiceSelectionScreen sessionId={mobileServiceSessionId} /> : <>
+    <div className={mobileSessionToken ? "mobile-checkin-app" : undefined} onClick={isOnline ? resetIdleTimer : undefined}>
+      {mobileSessionToken && mobileSessionStatus === "loading" && <main className="mobile-session-status"><h1>Starting mobile check-in</h1><p>Verifying your student record…</p></main>}
+      {mobileSessionToken && mobileSessionStatus === "error" && <main className="mobile-session-status"><h1>Unable to start check-in</h1><p>{mobileSessionError}</p><button onClick={() => window.location.assign(window.location.pathname)}>Return to kiosk</button></main>}
+      {mobileSessionToken && mobileSessionStatus === "cancelled" && <main className="mobile-session-status"><h1>Check-in cancelled</h1><p>Your kiosk session is ready again. Scan the QR code to restart or continue at the kiosk.</p><button onClick={() => window.location.assign(window.location.pathname)}>Done</button></main>}
+      {mobileSessionToken && mobileFlowComplete && <main className="mobile-session-status"><h1>Check-in complete</h1><p>Your request has been submitted. You may close this page.</p><button onClick={() => window.location.assign(window.location.pathname)}>Done</button></main>}
+      {(!mobileSessionToken || (mobileMode && !mobileFlowComplete)) && <>
+      {mobileMode && <div className="mobile-checkin-toolbar"><strong>Mobile check-in</strong><button onClick={handleMobileCancel}>Cancel check-in</button></div>}
+      {step === "mobileWaiting" && <main className="mobile-session-status"><h1>Continue check-in on your phone</h1><p>Your student record is verified. Continue the service selection and check-in on your phone.</p><button onClick={handleReturnToKiosk}>Continue at kiosk instead</button></main>}
       {step === "offline" && <OfflineScreen onRetry={() => window.dispatchEvent(new Event("online"))} />}
 
       {step === "welcome" && <WelcomeScreen onManualEntry={() => setStep("manual")} />}
@@ -839,13 +973,15 @@ async function handleWalkInSubmit() {
       )}
 
       {step === "service" && (
-        <ServiceSelectScreen onSelect={handleKioskServiceSelect} onBack={() => setStep("confirm")} onFaq={openFaq} isOnline={isOnline} />
+        <ServiceSelectScreen onSelect={handleKioskServiceSelect} onBack={() => setStep("confirm")} onFaq={openFaq} isOnline={isOnline} mobileMode={mobileMode} />
       )}
+
+      {step === "mobileVitalsEntry" && <MobileVitalsEntryScreen mode={captureMode} onSubmit={handleMobileVitalsSubmit} onBack={() => setStep("screeningOptions")} isOnline={isOnline} />}
 
       {step === "serviceAccess" && <QrChoiceScreen
         url={serviceSessionId && serviceSessionReady ? `${window.location.origin}${window.location.pathname}?mobileServiceSession=${encodeURIComponent(serviceSessionId)}` : null}
         preparing={!!supabase && !serviceSessionReady}
-        onContinue={() => setStep("service")}
+        onContinue={handleContinueAtKiosk}
         onBack={() => setStep("confirm")}
         isOnline={isOnline}
       />}
@@ -910,7 +1046,7 @@ async function handleWalkInSubmit() {
       {step === "clearanceResult" && (
   <ClearanceResultScreen
     queueNumber={clearanceQueueNumber}
-    onDone={resetSession}
+    onDone={onFlowDone}
     onFaq={openFaq}
     isOnline={isOnline}
   />
@@ -949,7 +1085,7 @@ async function handleWalkInSubmit() {
       year: "numeric",
     })}
     timeLabel={appointmentSelection.time}
-    onDone={resetSession}
+    onDone={onFlowDone}
     onFaq={openFaq}
     isOnline={isOnline}
   />
@@ -961,7 +1097,7 @@ async function handleWalkInSubmit() {
     purposeLabel={clearanceAppointmentPurpose}
     dateLabel={appointmentSelection.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
     timeLabel={appointmentSelection.time}
-    onDone={resetSession}
+    onDone={onFlowDone}
     onFaq={openFaq}
     isOnline={isOnline}
   />
@@ -975,6 +1111,8 @@ async function handleWalkInSubmit() {
             otherText={walkInOtherText}
             onOtherTextChange={setWalkInOtherText}
             temperatureC={walkInTemp}
+            mobileMode={mobileMode}
+            onTemperatureChange={(value) => setReadings((current) => ({ ...current, temperatureC: value }))}
             sensorFailed={sensorFailed}
             onRetry={() => triggerHardwareSensors("temperature", "Consultation")}
     onContinue={handleWalkInSubmit}
@@ -991,7 +1129,7 @@ async function handleWalkInSubmit() {
     queueCode={resultQueueNumber}
     temperatureC={walkInTemp}
     temperatureClassification={classifyTemp(walkInTemp)}
-    onTimeout={resetSession}
+    onTimeout={onFlowDone}
     onFaq={openFaq}
     isOnline={isOnline}
   />
@@ -1006,6 +1144,8 @@ async function handleWalkInSubmit() {
           selectedSymptoms={medicineSymptoms}
           safetyAnswers={medicineSafetyAnswers}
           temperatureC={readings.temperatureC}
+          mobileMode={mobileMode}
+          onTemperatureChange={(value) => setReadings((current) => ({ ...current, temperatureC: value }))}
           sensorFailed={sensorFailed}
           onRetry={() => triggerHardwareSensors("temperature", "Prescription/OTC Pickup")}
           onToggleSymptom={toggleMedicineSymptom}
@@ -1026,7 +1166,7 @@ async function handleWalkInSubmit() {
           queueCode={resultQueueNumber}
           temperatureC={walkInTemp}
           temperatureClassification={classifyTemp(walkInTemp)}
-          onTimeout={resetSession}
+          onTimeout={onFlowDone}
           onFaq={openFaq}
           isOnline={isOnline}
         />
@@ -1037,7 +1177,7 @@ async function handleWalkInSubmit() {
       )}
 
       {step === "checkedIn" && (
-        <CheckedInScreen info={checkInInfo} onDone={resetSession} isOnline={isOnline} />
+        <CheckedInScreen info={checkInInfo} onDone={onFlowDone} isOnline={isOnline} />
       )}
 
       {step === "screeningOptions" && (
@@ -1097,7 +1237,7 @@ async function handleWalkInSubmit() {
             bpNoReading={bpNoReading}
             bpWaiting={bpWaiting}
             isResult
-            onDone={resetSession}
+            onDone={onFlowDone}
             isOnline={isOnline}
           />
         ) : (
@@ -1109,7 +1249,7 @@ async function handleWalkInSubmit() {
               submittingRef.current = false;
               setStep("vitalsEntry");
             }}
-            onDone={resetSession}
+            onDone={onFlowDone}
             isOnline={isOnline}
           />
         )

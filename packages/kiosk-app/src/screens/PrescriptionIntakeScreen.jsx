@@ -16,6 +16,8 @@ export default function PrescriptionIntakeScreen({
   selectedSymptoms,
   safetyAnswers,
   temperatureC,
+  mobileMode = false,
+  onTemperatureChange,
   sensorFailed = false,
   onRetry,
   onToggleSymptom,
@@ -28,7 +30,7 @@ export default function PrescriptionIntakeScreen({
 }) {
   const temperature = temperatureC == null ? null : Number(temperatureC);
   const tempClass = temperature == null ? null : temperature < 35.5 ? "Hypothermia" : temperature >= 37.8 ? "Fever" : "Normal";
-  const canContinue = temperature != null && selectedSymptoms.length > 0 && (!selectedSymptoms.includes("Others") || otherText.trim().length > 0) && SAFETY_QUESTIONS.every((question) => safetyAnswers[question.id] != null);
+  const canContinue = (mobileMode || temperature != null) && selectedSymptoms.length > 0 && (!selectedSymptoms.includes("Others") || otherText.trim().length > 0) && SAFETY_QUESTIONS.every((question) => safetyAnswers[question.id] != null);
 
   return (
     <div className="kiosk-shell wic-screen med-screen">
@@ -78,7 +80,7 @@ export default function PrescriptionIntakeScreen({
         <section className="med-panel med-vitals-panel">
           <h2>MANDATORY VITAL SIGNS INTAKE</h2>
           <p className="med-instruction">Please position your right wrist in front of the temperature sensor and your left arm into the blood pressure cuff to acquire your vital signs</p>
-          <div className="med-vital-row"><strong>Temperature:</strong><span className={tempClass && tempClass !== "Normal" ? "med-abnormal" : ""}>{temperature == null ? "<<temperature in degrees celcius>>  <<classification>>" : `${temperature.toFixed(1)}°C  ${tempClass}`}</span></div>
+          <div className="med-vital-row"><strong>Temperature:</strong>{mobileMode ? <div className="mobile-optional-reading"><input aria-label="Optional temperature reading in degrees Celsius" type="number" inputMode="decimal" min="25" max="45" step="0.1" value={temperature ?? ""} onChange={(event) => onTemperatureChange?.(event.target.value === "" ? null : Number(event.target.value))} placeholder="Optional °C reading" /><small>Optional — enter a reading provided by clinic staff.</small></div> : <span className={tempClass && tempClass !== "Normal" ? "med-abnormal" : ""}>{temperature == null ? "<<temperature in degrees celcius>>  <<classification>>" : `${temperature.toFixed(1)}°C  ${tempClass}`}</span>}</div>
           <div className="med-vital-row"><strong>Blood Pressure:</strong><span>&lt;systolic/diastolic pressure in mmHg&gt;  &lt;classification&gt;</span></div>
         </section>
 

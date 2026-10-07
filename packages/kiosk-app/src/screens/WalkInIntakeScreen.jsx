@@ -31,6 +31,8 @@ export default function WalkInIntakeScreen({
   otherText = "",
   onOtherTextChange,
   temperatureC,          // number | null, from sensor
+  mobileMode = false,
+  onTemperatureChange,
   sensorFailed = false,
   onRetry,
   onContinue,            // () => void
@@ -40,7 +42,7 @@ export default function WalkInIntakeScreen({
 }) {
   const tempClass = classifyTemp(temperatureC);
   const isAbnormal = tempClass != null && tempClass !== "Normal";
-  const canContinue = temperatureC != null && selectedComplaints.length > 0 && (!selectedComplaints.includes("others") || otherText.trim().length > 0);
+  const canContinue = (mobileMode || temperatureC != null) && selectedComplaints.length > 0 && (!selectedComplaints.includes("others") || otherText.trim().length > 0);
 
   return (
     <div className="kiosk-shell wic-screen wic-screen--intake">
@@ -78,11 +80,14 @@ export default function WalkInIntakeScreen({
           </p>
           <div className="wic-vitals-row">
             <span className="wic-vitals-label">Temperature:</span>
-            <span className={`wic-vitals-value${isAbnormal ? " wic-vitals-value--danger" : ""}`}>
+            {mobileMode ? <div className="mobile-optional-reading">
+              <input aria-label="Optional temperature reading in degrees Celsius" type="number" inputMode="decimal" min="25" max="45" step="0.1" value={temperatureC ?? ""} onChange={(event) => onTemperatureChange?.(event.target.value === "" ? null : Number(event.target.value))} placeholder="Optional °C reading" />
+              <small>Optional — enter a reading provided by clinic staff.</small>
+            </div> : <span className={`wic-vitals-value${isAbnormal ? " wic-vitals-value--danger" : ""}`}>
               {temperatureC != null
                 ? `${temperatureC.toFixed(1)}°C - ${tempClass}`
                 : <span className="wic-vitals-value--pending">Waiting for reading...</span>}
-            </span>
+            </span>}
 
             <span className="wic-vitals-label">Blood Pressure:</span>
             <span className="wic-vitals-value--pending">Manual entry required (not yet wired to kiosk)</span>

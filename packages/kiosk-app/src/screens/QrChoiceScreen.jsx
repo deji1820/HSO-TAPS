@@ -12,10 +12,10 @@ export default function QrChoiceScreen({ url, onContinue, onBack, isOnline, prep
       <main className="qr-choice-content">
         <p className="qr-choice-step">SERVICE ACCESS</p>
         <h1>Choose how to select your service</h1>
-        <p className="qr-choice-description">Scan to open this same service selection page on your phone. Your choice will continue this kiosk session.</p>
+        <p className="qr-choice-description">Scan to continue the full check-in process on your phone, including service selection and any required forms.</p>
         {preparing ? <p className="qr-choice-unavailable">Preparing your secure session QR code…</p> : qrUrl ? (
           <figure className="qr-choice-code">
-            <img src={qrUrl} alt="QR code that opens service selection on your phone" />
+            <img src={qrUrl} alt="QR code that opens mobile check-in on your phone" />
             <figcaption>Open your phone camera and point it at this code.</figcaption>
           </figure>
         ) : <p className="qr-choice-unavailable">Phone selection is unavailable right now. Continue at the kiosk.</p>}
@@ -23,7 +23,7 @@ export default function QrChoiceScreen({ url, onContinue, onBack, isOnline, prep
           <button className="qr-choice-secondary" onClick={onBack}>Back</button>
           <button className="qr-choice-primary" onClick={onContinue}>Continue at this kiosk</button>
         </nav>
-        <p className="qr-choice-help">After selecting a service on your phone, return to the kiosk to continue.</p>
+        <p className="qr-choice-help">Keep this kiosk session open while you complete check-in on your phone.</p>
       </main>
     </div>
   );

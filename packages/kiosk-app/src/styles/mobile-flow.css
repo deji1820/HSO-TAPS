@@ -1,0 +1,50 @@
+.mobile-checkin-app { min-height: 100dvh; overflow-x: hidden; background: #f5f8fc; }
+.mobile-checkin-app .kiosk-shell { min-height: 100dvh; width: 100%; overflow-x: hidden; }
+.mobile-checkin-toolbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: #0a2a63; color: white; font-size: .9rem; }
+.mobile-checkin-toolbar button { min-height: 42px; padding: 8px 14px; border: 1px solid #fff; border-radius: 8px; background: transparent; color: white; font-size: .95rem; font-weight: 700; }
+.mobile-session-status { min-height: 100dvh; display: grid; align-content: center; justify-items: center; gap: 14px; padding: 28px; text-align: center; color: #24334b; font-family: "Open Sans", "Segoe UI", sans-serif; }
+.mobile-session-status h1 { color: #0756b5; font-size: clamp(1.8rem, 8vw, 2.6rem); }
+.mobile-session-status p { max-width: 36rem; font-size: 1.1rem; line-height: 1.5; }
+.mobile-session-status button { min-height: 52px; padding: 10px 18px; border: 0; border-radius: 8px; background: #0756b5; color: white; font-size: 1rem; font-weight: 700; }
+.mobile-checkin-app .mobile-service-error { bottom: 76px; }
+.mobile-optional-reading { display: grid; gap: 6px; }
+.mobile-optional-reading input { width: min(100%, 260px); min-height: 48px; padding: 10px 12px; border: 2px solid #9aa8ba; border-radius: 8px; font-size: 16px; }
+.mobile-optional-reading small { color: #52627a; font-size: .85rem; font-weight: 400; }
+
+@media (max-width: 700px) {
+  .mobile-checkin-app .ss .ss-content { width: calc(100% - 28px); padding: 24px 0 32px; }
+  .mobile-checkin-app .ss .ss-eyebrow { margin: 0 4px 8px; font-size: .85rem; }
+  .mobile-checkin-app .ss .ss-title { padding: 0 4px 10px; font-size: clamp(1.55rem, 7vw, 2rem); }
+  .mobile-checkin-app .ss .ss-grid { grid-template-columns: 1fr; width: 100%; margin: 16px 0 0; gap: 12px; }
+  .mobile-checkin-app .ss .ss-card { min-height: 0; display: grid; grid-template-columns: 50px 1fr; grid-template-rows: auto auto; column-gap: 14px; padding: 16px; border-radius: 12px; }
+  .mobile-checkin-app .ss .ss-card-icon { grid-row: span 2; width: 48px; height: 48px; font-size: 25px; }
+  .mobile-checkin-app .ss .ss-card-title { margin: 0; align-self: end; font-size: 1.1rem; }
+  .mobile-checkin-app .ss .ss-card-desc { margin: 4px 0 0; font-size: .92rem; }
+  .mobile-checkin-app .wic-content, .mobile-checkin-app .med-content, .mobile-checkin-app .clearance-content,
+  .mobile-checkin-app .kiosk-content, .mobile-checkin-app .apt-page, .mobile-checkin-app .qhs-options,
+  .mobile-checkin-app .qhs-reading-content, .mobile-checkin-app .mobile-vitals-content {
+    width: 100%; max-width: 640px; min-height: 0; margin: 0 auto; padding: 20px 16px 32px; box-sizing: border-box;
+  }
+  .mobile-checkin-app .wic-heading, .mobile-checkin-app .wic-content h1, .mobile-checkin-app .med-content h1,
+  .mobile-checkin-app .clearance-content h1, .mobile-checkin-app .apt-heading { font-size: clamp(1.45rem, 7vw, 2rem); line-height: 1.2; }
+  .mobile-checkin-app .wic-panel, .mobile-checkin-app .med-panel, .mobile-checkin-app .clearance-panel,
+  .mobile-checkin-app .apt-card { width: 100%; margin: 14px 0; padding: 16px; box-sizing: border-box; }
+  .mobile-checkin-app .wic-complaint-grid, .mobile-checkin-app .med-symptoms { grid-template-columns: 1fr; gap: 10px; }
+  .mobile-checkin-app .wic-complaint-item, .mobile-checkin-app .med-symptoms label,
+  .mobile-checkin-app .med-answer-row label, .mobile-checkin-app .clearance-document-list label { min-height: 48px; align-items: center; font-size: 1rem; }
+  .mobile-checkin-app .wic-complaint-item input, .mobile-checkin-app .med-symptoms input,
+  .mobile-checkin-app .med-answer-row input, .mobile-checkin-app .clearance-document-list input { width: 22px; height: 22px; flex: 0 0 22px; }
+  .mobile-checkin-app .apt-booking-grid { grid-template-columns: 1fr; gap: 14px; }
+  .mobile-checkin-app .apt-actions, .mobile-checkin-app .wic-actions, .mobile-checkin-app .med-actions,
+  .mobile-checkin-app .clearance-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .mobile-checkin-app .apt-actions button, .mobile-checkin-app .med-actions button,
+  .mobile-checkin-app .clearance-actions button, .mobile-checkin-app .wic-content > button { min-height: 50px; font-size: 1rem; }
+  .mobile-checkin-app input:not([type="checkbox"]):not([type="radio"]), .mobile-checkin-app textarea,
+  .mobile-checkin-app select { min-height: 50px; font-size: 16px; }
+  .mobile-checkin-app .qhs-options .card-grid { grid-template-columns: 1fr; gap: 12px; }
+  .mobile-checkin-app .qhs-options .service-card { min-height: 0; padding: 16px; }
+  .mobile-checkin-app .qhs-reading-heading { width: 100%; margin: 18px auto; }
+  .mobile-checkin-app .qhs-reading-panel { width: 100%; min-height: 0; margin: 0 auto; padding: 16px; box-sizing: border-box; }
+  .mobile-checkin-app .qhs-capture-actions { flex-direction: column; align-items: stretch; }
+  .mobile-checkin-app .qhs-capture-actions .qhs-done { width: 100%; }
+}

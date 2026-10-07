@@ -1,0 +1,13 @@
+.mobile-vitals-screen { background: #f5f8fc; }
+.mobile-vitals-content { width: min(620px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 40px; }
+.mobile-vitals-eyebrow { color: #34418e; font-size: .9rem; font-weight: 800; letter-spacing: .08em; }
+.mobile-vitals-content h1 { color: #0756b5; font-size: clamp(1.8rem, 7vw, 2.5rem); line-height: 1.15; }
+.mobile-vitals-help { color: #40516a; font-size: 1rem; line-height: 1.5; }
+.mobile-vitals-field { display: grid; gap: 8px; margin: 20px 0; color: #24334b; font-size: 1rem; font-weight: 700; }
+.mobile-vitals-field small { color: #52627a; font-size: .95em; font-weight: 500; }
+.mobile-vitals-field input { width: 100%; min-height: 54px; padding: 12px 14px; border: 2px solid #9aa8ba; border-radius: 8px; font: inherit; font-size: 16px; }
+.mobile-vitals-actions { display: flex; gap: 12px; margin-top: 24px; }
+.mobile-vitals-actions button { flex: 1; min-height: 54px; border: 0; border-radius: 8px; background: #0756b5; color: white; font-size: 1rem; font-weight: 750; }
+.mobile-vitals-actions button:first-child { border: 2px solid #34418e; background: white; color: #34418e; }
+.mobile-vitals-actions button:disabled { opacity: .65; }
+.mobile-vitals-error { color: #8d251e; }
