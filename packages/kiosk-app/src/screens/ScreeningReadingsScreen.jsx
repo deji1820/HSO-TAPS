@@ -142,13 +142,13 @@ export default function ScreeningReadingsScreen({
             <button className="qhs-done" onClick={onDone}>Done <span aria-hidden="true">✓</span></button>
             <p className="qhs-autoclose">Auto-closes in {remaining}s...</p>
           </>
-        ) : sensorFailed ? (
+        ) : (
           <div className="qhs-capture-actions">
-            <button className="qhs-done" onClick={onRetry}>Retry reading</button>
-            {mode !== "bloodPressure" && onManual && <button className="qhs-done" onClick={onManual}>Enter Readings Manually</button>}
-            <button className="qhs-done qhs-back" onClick={onBack}>Cancel and go back</button>
+            <button className="qhs-done" onClick={onRetry}>Restart readings</button>
+            {mode !== "bloodPressure" && onManual && <button className="qhs-done" onClick={onManual}>Enter readings manually</button>}
+            <button className="qhs-done qhs-back" onClick={onBack}>Back to screening options</button>
           </div>
-        ) : null}
+          )}
         <a className="qhs-faq" href="#faq" onClick={(event) => { event.preventDefault(); window.dispatchEvent(new CustomEvent("kiosk:faq")); }}>Frequently Asked Questions (FAQ’s)</a>
       </main>
     </div>

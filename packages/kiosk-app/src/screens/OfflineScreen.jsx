@@ -1,7 +1,7 @@
 import KioskHeader from "../components/KioskHeader.jsx";
 import "../offline.css";
 
-export default function OfflineScreen() {
+export default function OfflineScreen({ onRetry }) {
   return (
     <div className="kiosk-shell">
       <KioskHeader isOnline={false} />
@@ -28,6 +28,8 @@ export default function OfflineScreen() {
             Please step inside the <strong>Health Services Office</strong>. A clinic nurse will assist you with manual triage, vitals screening, and consultation registration.
           </p>
         </div>
+        <button type="button" className="offline-retry-button" onClick={onRetry}>Retry connection</button>
+        <p className="offline-retry-hint">If the system remains offline, clinic staff can complete your check-in at reception.</p>
       </div>
     </div>
   );

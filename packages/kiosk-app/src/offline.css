@@ -79,3 +79,17 @@
 .offline-simple-card strong {
   color: #0f172a;
 }
+
+.offline-retry-button {
+  min-height: 56px;
+  margin-top: 24px;
+  padding: 12px 28px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--nu-blue, #0f3f96);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.offline-retry-hint { margin: 12px 0 0; color: var(--text-secondary, #52627a); text-align: center; }

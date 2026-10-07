@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
 import "../styles/screens/ManualEntry.css";
 
@@ -33,6 +33,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
   const [digits, setDigits] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const lookupControllerRef = useRef(null);
 
   const canSubmit = digits.length === MAX_DIGITS && !loading;
 
@@ -52,12 +53,23 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
     if (!canSubmit) return;
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    lookupControllerRef.current = controller;
     try {
-      await onSubmit(formatId(digits));
+      await onSubmit(formatId(digits), controller.signal);
     } catch {
-      setError("Student ID not found. Please check the number and try again, or ask the front desk for help.");
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setError("Student ID could not be verified. Please check the number and try again, or ask the front desk for help.");
+      }
+    } finally {
+      if (lookupControllerRef.current === controller) lookupControllerRef.current = null;
+      if (!controller.signal.aborted) setLoading(false);
     }
+  }
+
+  function handleCancel() {
+    lookupControllerRef.current?.abort();
+    onCancel();
   }
 
   return (
@@ -68,7 +80,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
         <div className="manual-entry-card">
           <div className="manual-entry-titlebar">
             <span>Manual Student ID Entry</span>
-            <button className="manual-entry-close" onClick={onCancel} disabled={loading} aria-label="Close">
+            <button className="manual-entry-close" onClick={handleCancel} aria-label="Close">
               ✕
             </button>
           </div>
@@ -98,7 +110,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
             </div>
 
             <div className="manual-entry-actions">
-              <button className="btn-kiosk btn-kiosk-muted manual-entry-cancel" onClick={onCancel} disabled={loading}>
+              <button className="btn-kiosk btn-kiosk-muted manual-entry-cancel" onClick={handleCancel}>
                 Cancel
               </button>
               <button className="btn-kiosk btn-kiosk-primary manual-entry-confirm" onClick={handleContinue} disabled={!canSubmit}>

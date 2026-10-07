@@ -311,8 +311,8 @@ export default function App() {
 
   deviceEventHandlerRef.current = handleDeviceEvent;
 
-  async function handleManualSubmit(studentId) {
-    const found = await lookupStudent(studentId);
+  async function handleManualSubmit(studentId, signal) {
+    const found = await lookupStudent(studentId, { signal });
     if (!found) throw new Error("Student ID not found");
     setStudent(found);
     setStep("confirm");
@@ -575,6 +575,13 @@ async function handleWalkInSubmit() {
     }
   }
 
+  async function handleRetryScreening() {
+    const mode = captureMode;
+    if (!mode) return;
+    await handleCancelScreening();
+    await handleScreeningOptionSelect(mode);
+  }
+
   async function handleManualScreeningEntry() {
     clearTimeout(captureTimerRef.current);
     clearTimeout(bpTimeoutRef.current);
@@ -748,7 +755,7 @@ async function handleWalkInSubmit() {
 
   return (
     <div onClick={isOnline ? resetIdleTimer : undefined}>
-      {step === "offline" && <OfflineScreen onRetry={() => resetSession()} />}
+      {step === "offline" && <OfflineScreen onRetry={() => window.dispatchEvent(new Event("online"))} />}
 
       {step === "welcome" && <WelcomeScreen onManualEntry={() => setStep("manual")} />}
 
@@ -980,12 +987,7 @@ async function handleWalkInSubmit() {
             bpWaiting={bpWaiting}
             onManual={handleManualScreeningEntry}
             onBack={handleCancelScreening}
-            onRetry={() => {
-              setReadings({});
-              setBpNoReading(false);
-              setBpWaiting(false);
-              handleScreeningOptionSelect(captureMode);
-            }}
+            onRetry={handleRetryScreening}
             isOnline={isOnline}
           />
         ) : (
