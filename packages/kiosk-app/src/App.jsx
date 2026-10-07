@@ -3,6 +3,8 @@ import WelcomeScreen from "./screens/WelcomeScreen.jsx";
 import ManualEntryScreen from "./screens/ManualEntryScreen.jsx";
 import IdentityVerificationScreen from "./screens/IdentityVerificationScreen.jsx";
 import ServiceSelectScreen from "./screens/ServiceSelectScreen.jsx";
+import QrChoiceScreen from "./screens/QrChoiceScreen.jsx";
+import MobileServiceSelectionScreen from "./screens/MobileServiceSelectionScreen.jsx";
 import ConsultationTypeScreen from "./screens/ConsultationTypeScreen.jsx";
 import OtherServicesTypeScreen from "./screens/OtherServicesTypeScreen.jsx";
 import RequestTextScreen from "./screens/RequestTextScreen.jsx";
@@ -76,6 +78,8 @@ export default function App() {
   const [medicineSafetyAnswers, setMedicineSafetyAnswers] = useState({});
   const [walkInOtherText, setWalkInOtherText] = useState("");
   const [medicineOtherText, setMedicineOtherText] = useState("");
+  const [serviceSessionId, setServiceSessionId] = useState(null);
+  const [serviceSessionReady, setServiceSessionReady] = useState(false);
 
   const bridgeRef = useRef(null);
   const deviceEventHandlerRef = useRef(null);
@@ -84,6 +88,7 @@ export default function App() {
   const stepRef = useRef(step);
   const submittingRef = useRef(false); // guards against double-submit
   const currentSessionIdRef = useRef(null);
+  const serviceSelectHandlerRef = useRef(null);
   const bpTimeoutRef = useRef(null);
 
   useEffect(() => { stepRef.current = step; }, [step]);
@@ -119,6 +124,7 @@ export default function App() {
           if (payload.new?.rfid_uid && payload.new?.status === "tap_logged") {
             if (payload.new?.id) {
               currentSessionIdRef.current = payload.new.id;
+              setServiceSessionId(payload.new.id);
             }
             const rfid = payload.new.rfid_uid;
             try {
@@ -142,6 +148,15 @@ export default function App() {
         (payload) => {
           console.log("[Supabase Realtime] Session updated:", payload.new);
           if (!currentSessionIdRef.current || String(payload.new?.id) !== String(currentSessionIdRef.current)) return;
+          if (payload.new?.status === "mobile_service_selected" && stepRef.current === "serviceAccess") {
+            const serviceType = payload.new.service_selected;
+            const allowedServices = ["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription/OTC Pickup", "General Inquiry", "Quick Health Screening"];
+            if (allowedServices.includes(serviceType)) {
+              serviceSelectHandlerRef.current?.(serviceType);
+              void supabase.from("kiosk_sessions").update({ status: "completed" }).eq("id", payload.new.id).eq("status", "mobile_service_selected");
+            }
+            return;
+          }
           if (stepRef.current !== "capturing") return;
           const { height_m, temp_c, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, pulse_bpm, bp_classification } = payload.new;
           const patch = {};
@@ -241,6 +256,8 @@ export default function App() {
     setWalkInComplaints([]);
     setMedicineSymptoms([]);
     setMedicineSafetyAnswers({});
+    setServiceSessionId(null);
+    setServiceSessionReady(false);
     setWalkInOtherText("");
     setMedicineOtherText("");
 
@@ -250,7 +267,7 @@ export default function App() {
           .from("kiosk_sessions")
           .update({ status: statusReason })
           .eq("id", sessionIdToUpdate)
-          .in("status", ["pending_sensor", "tap_logged"]);
+          .in("status", ["pending_sensor", "tap_logged", "awaiting_service_selection", "mobile_service_selected"]);
       } catch (err) {
         console.warn("[Supabase] Failed to mark session status in resetSession:", err);
       }
@@ -318,8 +335,47 @@ export default function App() {
     setStep("confirm");
   }
 
-  function handleConfirmYes() {
-    setStep("service");
+  async function handleConfirmYes() {
+    setStep("serviceAccess");
+    if (!supabase) return;
+
+    const existingSessionId = currentSessionIdRef.current || serviceSessionId;
+    if (existingSessionId) {
+      try {
+        const { data, error } = await supabase.from("kiosk_sessions")
+          .update({ status: "awaiting_service_selection" })
+          .eq("id", existingSessionId)
+          .in("status", ["tap_logged", "awaiting_service_selection"])
+          .select("id")
+          .maybeSingle();
+        if (error) throw error;
+        if (data?.id) {
+          currentSessionIdRef.current = data.id;
+          setServiceSessionId(data.id);
+          setServiceSessionReady(true);
+        } else {
+          setServiceSessionReady(true);
+        }
+      } catch (error) {
+        console.warn("[handleConfirmYes] Could not prepare phone service selection:", error);
+        setServiceSessionReady(true);
+      }
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.from("kiosk_sessions").insert([{
+        rfid_uid: student?.rfidTagUid || student?.studentId,
+        status: "awaiting_service_selection",
+      }]).select("id").single();
+      if (error) throw error;
+      currentSessionIdRef.current = data.id;
+      setServiceSessionId(data.id);
+      setServiceSessionReady(true);
+    } catch (error) {
+      console.warn("[handleConfirmYes] Could not create phone service selection session:", error);
+      setServiceSessionReady(true);
+    }
   }
 
   function handleRescanId() {
@@ -330,7 +386,7 @@ export default function App() {
     resetSession();
   }
 
-  function handleServiceSelect(value) {
+function handleServiceSelect(value) {
   if (value === "Quick Health Screening") {
     setFlowType("screening");
     setStep("screeningOptions");
@@ -357,6 +413,19 @@ export default function App() {
     submitIntake({ studentId: student.studentId, serviceType: value, source: "kiosk" }).finally(resetSession);
   }
 }
+
+function handleKioskServiceSelect(value) {
+  const sessionId = currentSessionIdRef.current;
+  if (sessionId && supabase) {
+    void supabase.from("kiosk_sessions").update({ status: "cancelled" })
+      .eq("id", sessionId).eq("status", "awaiting_service_selection");
+  }
+  currentSessionIdRef.current = null;
+  setServiceSessionId(null);
+  setServiceSessionReady(false);
+  handleServiceSelect(value);
+}
+serviceSelectHandlerRef.current = handleServiceSelect;
 
 function toggleMedicineSymptom(symptom) {
   setMedicineSymptoms((current) => current.includes(symptom)
@@ -752,9 +821,11 @@ async function handleWalkInSubmit() {
   }
 
   const walkInTemp = readings.temperatureC != null ? Number(readings.temperatureC) : null;
+  const mobileServiceSessionId = new URLSearchParams(window.location.search).get("mobileServiceSession");
 
   return (
     <div onClick={isOnline ? resetIdleTimer : undefined}>
+      {mobileServiceSessionId ? <MobileServiceSelectionScreen sessionId={mobileServiceSessionId} /> : <>
       {step === "offline" && <OfflineScreen onRetry={() => window.dispatchEvent(new Event("online"))} />}
 
       {step === "welcome" && <WelcomeScreen onManualEntry={() => setStep("manual")} />}
@@ -768,8 +839,16 @@ async function handleWalkInSubmit() {
       )}
 
       {step === "service" && (
-        <ServiceSelectScreen onSelect={handleServiceSelect} onBack={() => setStep("confirm")} onFaq={openFaq} isOnline={isOnline} />
+        <ServiceSelectScreen onSelect={handleKioskServiceSelect} onBack={() => setStep("confirm")} onFaq={openFaq} isOnline={isOnline} />
       )}
+
+      {step === "serviceAccess" && <QrChoiceScreen
+        url={serviceSessionId && serviceSessionReady ? `${window.location.origin}${window.location.pathname}?mobileServiceSession=${encodeURIComponent(serviceSessionId)}` : null}
+        preparing={!!supabase && !serviceSessionReady}
+        onContinue={() => setStep("service")}
+        onBack={() => setStep("confirm")}
+        isOnline={isOnline}
+      />}
 
       {step === "consultationType" && (
         <ConsultationTypeScreen onSelect={handleConsultTypeSelect} onBack={() => setStep("service")} isOnline={isOnline} />
@@ -1036,6 +1115,7 @@ async function handleWalkInSubmit() {
         )
       )}
       {step === "faq" && <KioskFaqScreen onBack={() => setStep(faqReturnStep)} isOnline={isOnline} />}
+      </>}
 
     </div>
   );

@@ -1,0 +1,18 @@
+.qr-choice-screen { background: #f5f8fc; }
+.qr-choice-content { width: min(780px, calc(100% - 40px)); margin: auto; padding: clamp(28px, 5vh, 56px) 0; text-align: center; }
+.qr-choice-step { color: #34418e; font-size: 1rem; font-weight: 800; letter-spacing: .08em; }
+.qr-choice-content h1 { margin: 12px 0; color: #0756b5; font-size: clamp(2rem, 4vw, 3rem); }
+.qr-choice-description { max-width: 620px; margin: 0 auto 24px; color: #24334b; font-size: 1.25rem; line-height: 1.5; }
+.qr-choice-code { display: inline-flex; flex-direction: column; align-items: center; margin: 0 auto 24px; padding: 18px; background: white; border: 1px solid #d7deea; border-radius: 16px; box-shadow: 0 8px 28px #1a34501a; }
+.qr-choice-code img { display: block; width: min(320px, 65vw); height: auto; image-rendering: pixelated; }
+.qr-choice-code figcaption, .qr-choice-help { color: #40516a; font-size: 1rem; }
+.qr-choice-unavailable { margin: 30px auto; padding: 18px; background: #fff5df; border-radius: 12px; font-size: 1.1rem; }
+.qr-choice-actions { display: flex; justify-content: center; gap: 16px; margin: 12px auto; }
+.qr-choice-actions button { min-height: 60px; padding: 12px 26px; border-radius: 10px; font-size: 1.15rem; font-weight: 750; cursor: pointer; }
+.qr-choice-primary { border: 0; color: white; background: #0756b5; }
+.qr-choice-secondary { border: 2px solid #34418e; color: #34418e; background: white; }
+.mobile-service-confirmation { min-height: 100vh; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 28px; text-align: center; font-family: "Open Sans", "Segoe UI", sans-serif; color: #24334b; }
+.mobile-service-confirmation h1 { color: #0756b5; font-size: clamp(2rem, 8vw, 3rem); }
+.mobile-service-confirmation p { max-width: 34rem; font-size: 1.2rem; line-height: 1.5; }
+.mobile-service-status, .mobile-service-error { position: fixed; inset: auto 16px 16px; z-index: 10; max-width: 600px; margin: 0 auto; padding: 16px 20px; border-radius: 10px; background: #0b376f; color: white; text-align: center; font-size: 1rem; box-shadow: 0 4px 20px #0003; }
+.mobile-service-error { background: #8d251e; }

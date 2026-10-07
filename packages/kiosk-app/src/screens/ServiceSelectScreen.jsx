@@ -42,13 +42,13 @@ const SERVICES = [
   },
 ];
 
-export default function ServiceSelectScreen({ onSelect, onDocumentSubmission, onBack, onFaq, isOnline }) {
+export default function ServiceSelectScreen({ onSelect, onBack, onFaq, isOnline, mobileMode = false }) {
   return (
     <div className="kiosk-shell ss">
       <KioskHeader isOnline={isOnline} />
 
       <div className="ss-content">
-        <p className="ss-eyebrow">Step 2 of 2: Service Selection</p>
+        <p className="ss-eyebrow">{mobileMode ? "SERVICE SELECTION" : "Step 2 of 2: Service Selection"}</p>
         <h1 className="ss-title">What is the purpose of your visit?</h1>
 
         <div className="ss-grid">
@@ -61,13 +61,9 @@ export default function ServiceSelectScreen({ onSelect, onDocumentSubmission, on
           ))}
         </div>
 
-        <button className="ss-cancel" onClick={onBack}>
-          &lt;&lt; Back
-        </button>
+        {!mobileMode && <button className="ss-cancel" onClick={onBack}>&lt;&lt; Back</button>}
 
-        <button className="ss-faq" onClick={onFaq}>
-          Frequently Asked Questions (FAQ's)
-        </button>
+        {!mobileMode && <button className="ss-faq" onClick={onFaq}>Frequently Asked Questions (FAQ's)</button>}
       </div>
     </div>
   );
