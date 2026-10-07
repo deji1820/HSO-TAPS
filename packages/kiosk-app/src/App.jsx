@@ -5,6 +5,7 @@ import IdentityVerificationScreen from "./screens/IdentityVerificationScreen.jsx
 import ServiceSelectScreen from "./screens/ServiceSelectScreen.jsx";
 import QrChoiceScreen from "./screens/QrChoiceScreen.jsx";
 import MobileVitalsEntryScreen from "./screens/MobileVitalsEntryScreen.jsx";
+import MobileSensorReadingsScreen from "./screens/MobileSensorReadingsScreen.jsx";
 import "./styles/mobile-flow.css";
 import ConsultationTypeScreen from "./screens/ConsultationTypeScreen.jsx";
 import OtherServicesTypeScreen from "./screens/OtherServicesTypeScreen.jsx";
@@ -94,6 +95,7 @@ export default function App() {
   const stepRef = useRef(step);
   const submittingRef = useRef(false); // guards against double-submit
   const currentSessionIdRef = useRef(null);
+  const mobileSensorSessionIdRef = useRef(null);
   const bpTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -108,9 +110,9 @@ export default function App() {
     async function loadMobileSession() {
       try {
         const { data, error } = await supabase.from("kiosk_sessions")
-          .select("id, rfid_uid, status")
+          .select("id, rfid_uid, status, sensor_required, temp_c, height_m, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, pulse_bpm, bp_classification")
           .eq("id", mobileSessionToken)
-          .in("status", ["awaiting_service_selection", "mobile_flow_started"])
+          .in("status", ["awaiting_service_selection", "mobile_flow_started", "mobile_sensor_requested", "mobile_readings_ready"])
           .maybeSingle();
         if (error) throw error;
         if (!data?.rfid_uid) throw new Error("This mobile check-in link has expired. Please scan the kiosk QR code again.");
@@ -132,7 +134,21 @@ export default function App() {
         if (!active) return;
         currentSessionIdRef.current = data.id;
         setStudent(found);
-        setStep("service");
+        if (data.status === "mobile_sensor_requested" || data.status === "mobile_readings_ready") {
+          const nextReadings = {};
+          if (data.temp_c != null) nextReadings.temperatureC = Number(data.temp_c);
+          if (data.height_m != null) nextReadings.heightCm = Number(data.height_m) * 100;
+          if (data.weight_kg != null) nextReadings.weightKg = Number(data.weight_kg);
+          if (data.systolic_mmhg != null) nextReadings.systolicMmhg = Number(data.systolic_mmhg);
+          if (data.diastolic_mmhg != null) nextReadings.diastolicMmhg = Number(data.diastolic_mmhg);
+          if (data.blood_pressure != null) nextReadings.bloodPressure = String(data.blood_pressure);
+          if (data.pulse_bpm != null) nextReadings.pulseBpm = Number(data.pulse_bpm);
+          if (data.bp_classification != null) nextReadings.bloodPressureClassification = String(data.bp_classification);
+          setReadings(nextReadings);
+          setCaptureMode(data.sensor_required || "complete");
+          setFlowType("screening");
+          setStep(data.status === "mobile_readings_ready" ? "mobileSensorReview" : "mobileSensorWaiting");
+        } else setStep("service");
         setMobileSessionStatus("ready");
       } catch (error) {
         if (!active) return;
@@ -200,7 +216,8 @@ export default function App() {
         { event: "UPDATE", schema: "public", table: "kiosk_sessions" },
         (payload) => {
           console.log("[Supabase Realtime] Session updated:", payload.new);
-          if (!currentSessionIdRef.current || String(payload.new?.id) !== String(currentSessionIdRef.current)) return;
+          const isMobileSensorParent = mobileSensorSessionIdRef.current && String(payload.new?.id) === String(mobileSensorSessionIdRef.current);
+          if ((!currentSessionIdRef.current || String(payload.new?.id) !== String(currentSessionIdRef.current)) && !isMobileSensorParent) return;
           if (payload.new?.status === "mobile_flow_started" && stepRef.current === "serviceAccess") {
             setStep("mobileWaiting");
             return;
@@ -211,6 +228,81 @@ export default function App() {
           }
           if (payload.new?.status === "completed" && stepRef.current === "mobileWaiting") {
             void resetSession("completed");
+            return;
+          }
+          if (payload.new?.status === "mobile_sensor_requested" && !mobileSessionToken && !mobileSensorSessionIdRef.current && stepRef.current === "mobileWaiting") {
+            const mode = payload.new?.sensor_required || "complete";
+            mobileSensorSessionIdRef.current = payload.new.id;
+            setFlowType("mobileSensorCapture");
+            setCaptureMode(mode);
+            setReadings({});
+            setManualFields([]);
+            setBpNoReading(false);
+            setSensorFailed(false);
+            if (mode === "complete" || mode === "bloodPressure") {
+              setBpWaiting(true);
+              clearTimeout(bpTimeoutRef.current);
+              bpTimeoutRef.current = setTimeout(() => { setBpWaiting(false); setBpNoReading(true); }, BP_READING_TIMEOUT_MS);
+            }
+            setStep("capturing");
+            void triggerHardwareSensors(mode === "bmi" ? "physical" : mode, "Quick Health Screening");
+            return;
+          }
+          if (payload.new?.status === "mobile_readings_ready" && !mobileSessionToken && mobileSensorSessionIdRef.current) {
+            clearTimeout(captureTimerRef.current);
+            clearTimeout(bpTimeoutRef.current);
+            bpTimeoutRef.current = null;
+            currentSessionIdRef.current = mobileSensorSessionIdRef.current;
+            mobileSensorSessionIdRef.current = null;
+            setBpWaiting(false);
+            setFlowType(null);
+            setStep("mobileWaiting");
+            return;
+          }
+          if (payload.new?.status === "awaiting_service_selection" && !mobileSessionToken && mobileSensorSessionIdRef.current) {
+            clearTimeout(captureTimerRef.current);
+            clearTimeout(bpTimeoutRef.current);
+            bpTimeoutRef.current = null;
+            const sensorSessionId = currentSessionIdRef.current;
+            if (sensorSessionId) void supabase.from("kiosk_sessions").update({ status: "cancelled" }).eq("id", sensorSessionId).eq("status", "pending_sensor");
+            currentSessionIdRef.current = payload.new.id;
+            mobileSensorSessionIdRef.current = null;
+            setFlowType(null);
+            setCaptureMode(null);
+            setBpWaiting(false);
+            setStep("serviceAccess");
+            return;
+          }
+          if (payload.new?.status === "mobile_flow_started" && !mobileSessionToken && mobileSensorSessionIdRef.current && stepRef.current === "capturing") {
+            clearTimeout(captureTimerRef.current);
+            clearTimeout(bpTimeoutRef.current);
+            bpTimeoutRef.current = null;
+            const sensorSessionId = currentSessionIdRef.current;
+            if (sensorSessionId) void supabase.from("kiosk_sessions").update({ status: "cancelled" }).eq("id", sensorSessionId).eq("status", "pending_sensor");
+            currentSessionIdRef.current = payload.new.id;
+            mobileSensorSessionIdRef.current = null;
+            setFlowType(null);
+            setCaptureMode(null);
+            setBpWaiting(false);
+            setStep("mobileWaiting");
+            return;
+          }
+          if ((payload.new?.status === "mobile_readings_ready" || payload.new?.status === "mobile_sensor_requested") && mobileSessionToken && String(payload.new?.id) === String(mobileSessionToken)) {
+            const row = payload.new;
+            const nextReadings = {};
+            if (row.temp_c != null) nextReadings.temperatureC = Number(row.temp_c);
+            if (row.height_m != null) nextReadings.heightCm = Number(row.height_m) * 100;
+            if (row.weight_kg != null) nextReadings.weightKg = Number(row.weight_kg);
+            if (row.systolic_mmhg != null) nextReadings.systolicMmhg = Number(row.systolic_mmhg);
+            if (row.diastolic_mmhg != null) nextReadings.diastolicMmhg = Number(row.diastolic_mmhg);
+            if (row.blood_pressure != null) nextReadings.bloodPressure = String(row.blood_pressure);
+            else if (row.systolic_mmhg != null && row.diastolic_mmhg != null) nextReadings.bloodPressure = `${row.systolic_mmhg}/${row.diastolic_mmhg}`;
+            if (row.pulse_bpm != null) nextReadings.pulseBpm = Number(row.pulse_bpm);
+            if (row.bp_classification != null) nextReadings.bloodPressureClassification = String(row.bp_classification);
+            else if (nextReadings.systolicMmhg != null && nextReadings.diastolicMmhg != null) nextReadings.bloodPressureClassification = classifyBP(nextReadings.systolicMmhg, nextReadings.diastolicMmhg);
+            setReadings(nextReadings);
+            setManualFields([]);
+            if (row.status === "mobile_readings_ready") setStep("mobileSensorReview");
             return;
           }
           if (stepRef.current !== "capturing") return;
@@ -242,6 +334,7 @@ export default function App() {
             clearTimeout(captureTimerRef.current);
             setSensorFailed(false);
             setReadings((prev) => ({ ...prev, ...patch }));
+            if (!mobileSessionToken && mobileSensorSessionIdRef.current && String(payload.new?.id) === String(currentSessionIdRef.current)) void publishMobileReadingPatch(patch);
           }
         }
       )
@@ -271,9 +364,14 @@ export default function App() {
     const isComplete = required.length > 0 && required.every((field) => readings[field] != null);
     const hasBpReading = readings.bloodPressure != null ||
       (readings.systolicMmhg != null && readings.diastolicMmhg != null);
-    const bpRequiredForScreening = flowType === "screening" &&
+    const bpCaptureFailed = (flowType === "screening" || flowType === "mobileSensorCapture") && captureMode === "bloodPressure" && bpNoReading;
+    if (bpCaptureFailed) {
+      finishCapture(readings);
+      return;
+    }
+    const bpRequiredForScreening = (flowType === "screening" || flowType === "mobileSensorCapture") &&
       (captureMode === "complete" || captureMode === "bloodPressure");
-    if (isComplete && (bpWaiting || (bpRequiredForScreening && !hasBpReading))) return;
+    if (isComplete && (bpWaiting || (bpRequiredForScreening && !hasBpReading && !bpNoReading))) return;
     if (isComplete) finishCapture(readings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readings, step, captureMode, bpWaiting, flowType]);
@@ -331,6 +429,25 @@ export default function App() {
 
   }
 
+  async function publishMobileReadingPatch(patch) {
+    const sessionId = mobileSensorSessionIdRef.current;
+    if (!sessionId || !supabase) return;
+    const update = {};
+    if (patch.temperatureC != null) update.temp_c = patch.temperatureC;
+    if (patch.heightCm != null) update.height_m = Number(patch.heightCm) / 100;
+    if (patch.weightKg != null) update.weight_kg = patch.weightKg;
+    if (patch.bloodPressure != null) update.blood_pressure = patch.bloodPressure;
+    if (patch.systolicMmhg != null) update.systolic_mmhg = patch.systolicMmhg;
+    if (patch.diastolicMmhg != null) update.diastolic_mmhg = patch.diastolicMmhg;
+    if (patch.pulseBpm != null) update.pulse_bpm = patch.pulseBpm;
+    if (patch.bloodPressureClassification != null) update.bp_classification = patch.bloodPressureClassification;
+    if (Object.keys(update).length) {
+      const { error } = await supabase.from("kiosk_sessions").update(update)
+        .eq("id", sessionId).eq("status", "mobile_sensor_requested");
+      if (error) console.warn("[publishMobileReadingPatch] Could not send a live reading to the phone:", error);
+    }
+  }
+
   async function handleDeviceEvent(evt) {
     resetIdleTimer();
     console.log("[kiosk-app] received device event:", evt);
@@ -380,6 +497,7 @@ export default function App() {
     }
 
     setReadings((prev) => ({ ...prev, ...patch }));
+    if (mobileSensorSessionIdRef.current) void publishMobileReadingPatch(patch);
   }
 
   deviceEventHandlerRef.current = handleDeviceEvent;
@@ -671,7 +789,7 @@ async function handleMobileCancel() {
   if (sessionId && supabase) {
     try {
       await supabase.from("kiosk_sessions").update({ status: "awaiting_service_selection" })
-        .eq("id", sessionId).eq("status", "mobile_flow_started");
+        .eq("id", sessionId).in("status", ["mobile_flow_started", "mobile_sensor_requested", "mobile_readings_ready"]);
     } catch (error) {
       console.warn("[handleMobileCancel] Could not release the mobile session:", error);
     }
@@ -684,7 +802,7 @@ async function handleMobileDone() {
   if (sessionId && supabase) {
     try {
       await supabase.from("kiosk_sessions").update({ status: "completed" })
-        .eq("id", sessionId).eq("status", "mobile_flow_started");
+        .eq("id", sessionId).in("status", ["mobile_flow_started", "mobile_readings_ready"]);
     } catch (error) {
       console.warn("[handleMobileDone] Could not close the mobile session:", error);
     }
@@ -704,6 +822,51 @@ async function handleMobileVitalsSubmit(values) {
   await finishCapture(finalReadings);
 }
 
+async function requestMobileSensorReadings(mode) {
+  if (!mobileMode || !supabase || !currentSessionIdRef.current) {
+    setMobileSessionError("The kiosk sensor connection is unavailable. Please ask clinic staff to continue at the kiosk.");
+    setStep("mobileSensorWaiting");
+    return;
+  }
+  setCaptureMode(mode);
+  setFlowType("screening");
+  setMobileSessionError("");
+  setReadings({});
+  setStep("mobileSensorWaiting");
+  const { data: stoppedRequest } = await supabase.from("kiosk_sessions").update({ status: "mobile_flow_started" })
+    .eq("id", currentSessionIdRef.current).eq("status", "mobile_sensor_requested").select("id").maybeSingle();
+  if (stoppedRequest) await new Promise((resolve) => window.setTimeout(resolve, 500));
+  const sensorMode = mode === "bmi" ? "physical" : mode;
+  const { error } = await supabase.from("kiosk_sessions")
+    .update({ status: "mobile_sensor_requested", sensor_required: sensorMode })
+    .eq("id", currentSessionIdRef.current)
+    .in("status", ["mobile_flow_started", "mobile_readings_ready"]);
+  if (error) {
+    console.warn("[requestMobileSensorReadings] Could not request kiosk readings:", error);
+    setStep("mobileSensorWaiting");
+    setMobileSessionError("The kiosk could not start the sensors. Please try again or ask clinic staff for help.");
+  }
+}
+
+async function handleMobileSensorBack() {
+  const sessionId = currentSessionIdRef.current;
+  if (sessionId && supabase) {
+    await supabase.from("kiosk_sessions").update({ status: "mobile_flow_started" })
+      .eq("id", sessionId).eq("status", "mobile_sensor_requested");
+  }
+  setStep("screeningOptions");
+}
+
+async function handleMobileManualReadings() {
+  await handleMobileSensorBack();
+  setStep("mobileVitalsEntry");
+}
+
+async function handleMobileUseSensorReadings() {
+  setFlowType("screening");
+  await finishCapture(readings);
+}
+
 function handleReturnToKiosk() {
   const sessionId = currentSessionIdRef.current;
   if (sessionId && supabase) {
@@ -720,7 +883,7 @@ async function handleScreeningOptionSelect(mode) {
       setManualFields([]);
       setCaptureMode(mode);
       setFlowType("screening");
-      setStep("mobileVitalsEntry");
+      void requestMobileSensorReadings(mode);
       return;
     }
     submittingRef.current = false;
@@ -754,6 +917,18 @@ async function handleScreeningOptionSelect(mode) {
     setSensorFailed(false);
     setBpNoReading(false);
     setBpWaiting(false);
+    if (flowType === "mobileSensorCapture") {
+      const sensorSessionId = currentSessionIdRef.current;
+      if (sensorSessionId && supabase) void supabase.from("kiosk_sessions").update({ status: "cancelled" }).eq("id", sensorSessionId).eq("status", "pending_sensor");
+      currentSessionIdRef.current = mobileSensorSessionIdRef.current;
+      mobileSensorSessionIdRef.current = null;
+      submittingRef.current = false;
+      setReadings({});
+      setFlowType(null);
+      setCaptureMode(null);
+      setStep("mobileWaiting");
+      return;
+    }
     const sessionId = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
     submittingRef.current = false;
@@ -892,6 +1067,43 @@ async function handleScreeningOptionSelect(mode) {
 
   async function finishCapture(finalReadings) {
     submittingRef.current = true;
+    if (flowType === "mobileSensorCapture") {
+      const sessionId = mobileSensorSessionIdRef.current;
+      if (!sessionId || !supabase) {
+        submittingRef.current = false;
+        setSensorFailed(true);
+        return;
+      }
+      const pressure = finalReadings.bloodPressure ?? (finalReadings.systolicMmhg != null && finalReadings.diastolicMmhg != null
+        ? `${finalReadings.systolicMmhg}/${finalReadings.diastolicMmhg}` : null);
+      const { error } = await supabase.from("kiosk_sessions").update({
+        status: "mobile_readings_ready",
+        temp_c: finalReadings.temperatureC ?? null,
+        height_m: finalReadings.heightCm != null ? Number(finalReadings.heightCm) / 100 : null,
+        weight_kg: finalReadings.weightKg ?? null,
+        blood_pressure: pressure,
+        systolic_mmhg: finalReadings.systolicMmhg ?? null,
+        diastolic_mmhg: finalReadings.diastolicMmhg ?? null,
+        pulse_bpm: finalReadings.pulseBpm ?? null,
+        bp_classification: finalReadings.bloodPressureClassification ?? null,
+      }).eq("id", sessionId).eq("status", "mobile_sensor_requested");
+      if (error) {
+        console.warn("[finishCapture] Could not send readings to the phone:", error);
+        submittingRef.current = false;
+        setSensorFailed(true);
+        return;
+      }
+      clearTimeout(captureTimerRef.current);
+      clearTimeout(bpTimeoutRef.current);
+      bpTimeoutRef.current = null;
+      currentSessionIdRef.current = sessionId;
+      mobileSensorSessionIdRef.current = null;
+      submittingRef.current = false;
+      setBpWaiting(false);
+      setFlowType(null);
+      setStep("mobileWaiting");
+      return;
+    }
     if (!mobileMode) currentSessionIdRef.current = null;
     const targetStudentId = student?.studentId || student?.rfidTagUid;
     if (!targetStudentId) {
@@ -977,6 +1189,8 @@ async function handleScreeningOptionSelect(mode) {
       )}
 
       {step === "mobileVitalsEntry" && <MobileVitalsEntryScreen mode={captureMode} onSubmit={handleMobileVitalsSubmit} onBack={() => setStep("screeningOptions")} isOnline={isOnline} />}
+      {step === "mobileSensorWaiting" && <MobileSensorReadingsScreen mode={captureMode} waiting error={mobileSessionError} onBack={handleMobileSensorBack} onManual={handleMobileManualReadings} onRetry={() => requestMobileSensorReadings(captureMode)} isOnline={isOnline} />}
+      {step === "mobileSensorReview" && <MobileSensorReadingsScreen mode={captureMode} readings={readings} onBack={handleMobileSensorBack} onRetry={() => requestMobileSensorReadings(captureMode)} onContinue={handleMobileUseSensorReadings} isOnline={isOnline} />}
 
       {step === "serviceAccess" && <QrChoiceScreen
         url={serviceSessionId && serviceSessionReady ? `${window.location.origin}${window.location.pathname}?mobileServiceSession=${encodeURIComponent(serviceSessionId)}` : null}

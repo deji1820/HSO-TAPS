@@ -11,3 +11,6 @@
 .mobile-vitals-actions button:first-child { border: 2px solid #34418e; background: white; color: #34418e; }
 .mobile-vitals-actions button:disabled { opacity: .65; }
 .mobile-vitals-error { color: #8d251e; }
+.mobile-sensor-readings { display: grid; gap: 10px; margin: 24px 0; }
+.mobile-sensor-reading { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid #d7deea; border-radius: 10px; background: white; color: #24334b; font-size: 1rem; }
+.mobile-sensor-reading span { color: #0756b5; font-size: 1.05rem; font-weight: 750; text-align: right; }
