@@ -61,6 +61,7 @@ export default function ScreeningReadingsScreen({
   onManual,
   onDone,
   onBack,
+  onRetry,
   isOnline,
 }) {
   const [remaining, setRemaining] = useState(30);
@@ -143,8 +144,9 @@ export default function ScreeningReadingsScreen({
           </>
         ) : sensorFailed ? (
           <div className="qhs-capture-actions">
+            <button className="qhs-done" onClick={onRetry}>Retry reading</button>
             {mode !== "bloodPressure" && onManual && <button className="qhs-done" onClick={onManual}>Enter Readings Manually</button>}
-            <button className="qhs-done qhs-back" onClick={onBack}>&lt;&lt; Back</button>
+            <button className="qhs-done qhs-back" onClick={onBack}>Cancel and go back</button>
           </div>
         ) : null}
         <a className="qhs-faq" href="#faq" onClick={(event) => { event.preventDefault(); window.dispatchEvent(new CustomEvent("kiosk:faq")); }}>Frequently Asked Questions (FAQ’s)</a>

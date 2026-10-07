@@ -52,6 +52,7 @@ export default function CapturingScreen({
   manualFields = [],
   sensorFailed = false,
   onCancel,
+  onRetry,
   onManualEdit,
   onHome,
   isOnline,
@@ -173,6 +174,7 @@ export default function CapturingScreen({
               </p>
 
               <div className="sensor-modal-actions">
+                <button type="button" className="btn-kiosk btn-kiosk-primary" onClick={onRetry}>Retry</button>
                 <button type="button" className="btn-kiosk btn-kiosk-primary sensor-modal-btn-manual" onClick={onManualEdit}>
                   Manually Input
                 </button>

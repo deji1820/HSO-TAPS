@@ -42,7 +42,7 @@ const SERVICES = [
   },
 ];
 
-export default function ServiceSelectScreen({ onSelect, onBack, onFaq, isOnline }) {
+export default function ServiceSelectScreen({ onSelect, onDocumentSubmission, onBack, onFaq, isOnline }) {
   return (
     <div className="kiosk-shell ss">
       <KioskHeader isOnline={isOnline} />

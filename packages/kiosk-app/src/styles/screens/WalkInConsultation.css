@@ -587,3 +587,8 @@
   .med-vital-row { grid-template-columns: 1fr; gap: 3px; }
   .med-vital-row span { text-align: left; }
 }
+.wic-other-entry { display: grid; gap: 8px; margin-top: 18px; color: #26354b; font-size: 1.05rem; font-weight: 700; }
+.wic-other-entry input { width: 100%; min-height: 56px; padding: 12px 16px; border: 2px solid #9aa8ba; border-radius: 8px; font: inherit; }
+.wic-other-entry input:focus { outline: 3px solid #75aef4; border-color: #0756b5; }
+.wic-sensor-recovery { margin: 18px 0; padding: 18px; border: 2px solid #b42318; border-radius: 10px; background: #fff4f2; color: #7a271a; font-size: 1.05rem; }
+.wic-sensor-recovery button { min-height: 52px; padding: 10px 18px; border: 0; border-radius: 8px; background: #0756b5; color: white; font-size: 1rem; font-weight: 700; cursor: pointer; }

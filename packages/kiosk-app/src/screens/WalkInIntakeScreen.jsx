@@ -28,7 +28,11 @@ export default function WalkInIntakeScreen({
   consultSubType,        // "Medical" | "Dental"
   selectedComplaints,    // array of keys, lifted state
   onToggleComplaint,     // (key) => void
+  otherText = "",
+  onOtherTextChange,
   temperatureC,          // number | null, from sensor
+  sensorFailed = false,
+  onRetry,
   onContinue,            // () => void
   onBack,
   onFaq,
@@ -36,7 +40,7 @@ export default function WalkInIntakeScreen({
 }) {
   const tempClass = classifyTemp(temperatureC);
   const isAbnormal = tempClass != null && tempClass !== "Normal";
-  const canContinue = temperatureC != null && selectedComplaints.length > 0;
+  const canContinue = temperatureC != null && selectedComplaints.length > 0 && (!selectedComplaints.includes("others") || otherText.trim().length > 0);
 
   return (
     <div className="kiosk-shell wic-screen wic-screen--intake">
@@ -62,6 +66,9 @@ export default function WalkInIntakeScreen({
               </label>
             ))}
           </div>
+          {selectedComplaints.includes("others") && <label className="wic-other-entry">Please specify
+            <input value={otherText} onChange={(event) => onOtherTextChange?.(event.target.value)} placeholder="Describe your concern" maxLength={200} />
+          </label>}
         </div>
 
         <div className="wic-panel">
@@ -81,6 +88,8 @@ export default function WalkInIntakeScreen({
             <span className="wic-vitals-value--pending">Manual entry required (not yet wired to kiosk)</span>
           </div>
         </div>
+
+        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get a temperature reading. Retry the sensor or go back to service selection.</p><button type="button" onClick={onRetry}>Retry temperature scan</button></div>}
 
         <button
           className="btn-kiosk btn-kiosk-primary"

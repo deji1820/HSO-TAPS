@@ -16,7 +16,11 @@ export default function PrescriptionIntakeScreen({
   selectedSymptoms,
   safetyAnswers,
   temperatureC,
+  sensorFailed = false,
+  onRetry,
   onToggleSymptom,
+  otherText = "",
+  onOtherTextChange,
   onAnswerSafety,
   onContinue,
   onBack,
@@ -24,7 +28,7 @@ export default function PrescriptionIntakeScreen({
 }) {
   const temperature = temperatureC == null ? null : Number(temperatureC);
   const tempClass = temperature == null ? null : temperature < 35.5 ? "Hypothermia" : temperature >= 37.8 ? "Fever" : "Normal";
-  const canContinue = temperature != null && selectedSymptoms.length > 0 && SAFETY_QUESTIONS.every((question) => safetyAnswers[question.id] != null);
+  const canContinue = temperature != null && selectedSymptoms.length > 0 && (!selectedSymptoms.includes("Others") || otherText.trim().length > 0) && SAFETY_QUESTIONS.every((question) => safetyAnswers[question.id] != null);
 
   return (
     <div className="kiosk-shell wic-screen med-screen">
@@ -50,7 +54,12 @@ export default function PrescriptionIntakeScreen({
               </label>
             ))}
           </div>
+          {selectedSymptoms.includes("Others") && <label className="wic-other-entry">Please specify
+            <input value={otherText} onChange={(event) => onOtherTextChange?.(event.target.value)} placeholder="Describe your concern" maxLength={200} />
+          </label>}
         </section>
+
+        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get a temperature reading. Retry the sensor or go back to service selection.</p><button type="button" onClick={onRetry}>Retry temperature scan</button></div>}
 
         <section className="med-panel med-safety-panel">
           <h2>PATIENT SAFETY SCREENING</h2>

@@ -1,7 +1,7 @@
 ﻿import KioskHeader from "../components/KioskHeader.jsx";
 import "../styles/screens/IdentityVerification.css";
 
-export default function IdentityVerificationScreen({ student, onProceed, onBack, onFaq, isOnline }) {
+export default function IdentityVerificationScreen({ student, onProceed, onBack, onRescan, onFaq, isOnline }) {
   const fullName = [student?.lastName, student?.firstName, student?.middleName || student?.middleInitial]
     .filter(Boolean)
     .join(", ") || "Unknown Student";
@@ -27,6 +27,7 @@ export default function IdentityVerificationScreen({ student, onProceed, onBack,
 
         <div className="identity-actions">
           <button type="button" className="identity-back" onClick={onBack}>&lt;&lt; Back</button>
+          <button type="button" className="identity-back" onClick={onRescan}>Re-scan ID</button>
           <button type="button" className="identity-proceed" onClick={onProceed}>Proceed &gt;&gt;</button>
         </div>
         <a className="identity-faq" href="#faq" onClick={(event) => { event.preventDefault(); onFaq?.(); }}>

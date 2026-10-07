@@ -29,7 +29,6 @@ import PrescriptionIntakeScreen from "./screens/PrescriptionIntakeScreen.jsx";
 import ScreeningReadingsScreen from "./screens/ScreeningReadingsScreen.jsx";
 import { classifyBP } from "./utils/bp.js";
 
-const IDLE_TIMEOUT_MS = 30_000;
 // Leave time for non-BP sensors and BLE connection before the cuff's 120s wait ends.
 const BP_READING_TIMEOUT_MS = 180_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
@@ -75,6 +74,8 @@ export default function App() {
   const [walkInComplaints, setWalkInComplaints] = useState([]); // array of complaint keys
   const [medicineSymptoms, setMedicineSymptoms] = useState([]);
   const [medicineSafetyAnswers, setMedicineSafetyAnswers] = useState({});
+  const [walkInOtherText, setWalkInOtherText] = useState("");
+  const [medicineOtherText, setMedicineOtherText] = useState("");
 
   const bridgeRef = useRef(null);
   const deviceEventHandlerRef = useRef(null);
@@ -207,13 +208,8 @@ export default function App() {
   }, [readings, step, captureMode, bpWaiting, flowType]);
 
   function resetIdleTimer() {
-    if (stepRef.current === "capturing") {
-      clearTimeout(idleTimer.current);
-      idleTimer.current = null;
-      return;
-    }
     clearTimeout(idleTimer.current);
-    idleTimer.current = setTimeout(() => resetSession("timeout"), IDLE_TIMEOUT_MS);
+    idleTimer.current = null;
   }
 
   async function resetSession(statusReason = "cancelled") {
@@ -245,6 +241,8 @@ export default function App() {
     setWalkInComplaints([]);
     setMedicineSymptoms([]);
     setMedicineSafetyAnswers({});
+    setWalkInOtherText("");
+    setMedicineOtherText("");
 
     if (sessionIdToUpdate && supabase) {
       try {
@@ -315,12 +313,17 @@ export default function App() {
 
   async function handleManualSubmit(studentId) {
     const found = await lookupStudent(studentId);
+    if (!found) throw new Error("Student ID not found");
     setStudent(found);
     setStep("confirm");
   }
 
   function handleConfirmYes() {
     setStep("service");
+  }
+
+  function handleRescanId() {
+    resetSession();
   }
 
   function handleConfirmNo() {
@@ -366,7 +369,9 @@ async function handleMedicineSubmit() {
   submittingRef.current = true;
   const temperatureC = Number(readings.temperatureC);
   const temperatureClass = classifyTemp(temperatureC);
-  const reasonText = medicineSymptoms.join(", ");
+  const reasonText = medicineSymptoms
+    .map((symptom) => symptom === "Others" ? `Others: ${medicineOtherText.trim()}` : symptom)
+    .join(", ");
   try {
     const result = await submitIntake({
       studentId: student?.studentId || student?.rfidTagUid,
@@ -479,7 +484,7 @@ async function handleWalkInSubmit() {
 
   const serviceType = consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation";
   const complaintText = walkInComplaints
-    .map((k) => COMPLAINTS.find((c) => c.key === k)?.label ?? k)
+    .map((k) => k === "others" ? `Others: ${walkInOtherText.trim()}` : COMPLAINTS.find((c) => c.key === k)?.label ?? k)
     .join(", ");
   const reason = complaintText.length > 60 ? `${complaintText.slice(0, 57)}...` : complaintText;
 
@@ -752,7 +757,7 @@ async function handleWalkInSubmit() {
       )}
 
       {step === "confirm" && (
-        <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} onFaq={openFaq} isOnline={isOnline} />
+        <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} onRescan={handleRescanId} onFaq={openFaq} isOnline={isOnline} />
       )}
 
       {step === "service" && (
@@ -880,8 +885,12 @@ async function handleWalkInSubmit() {
   <WalkInIntakeScreen
     consultSubType={consultSubType}
     selectedComplaints={walkInComplaints}
-    onToggleComplaint={handleToggleComplaint}
-    temperatureC={walkInTemp}
+            onToggleComplaint={handleToggleComplaint}
+            otherText={walkInOtherText}
+            onOtherTextChange={setWalkInOtherText}
+            temperatureC={walkInTemp}
+            sensorFailed={sensorFailed}
+            onRetry={() => triggerHardwareSensors("temperature", "Consultation")}
     onContinue={handleWalkInSubmit}
     onFaq={openFaq}
     onBack={handleLeaveWalkIn}
@@ -911,7 +920,11 @@ async function handleWalkInSubmit() {
           selectedSymptoms={medicineSymptoms}
           safetyAnswers={medicineSafetyAnswers}
           temperatureC={readings.temperatureC}
+          sensorFailed={sensorFailed}
+          onRetry={() => triggerHardwareSensors("temperature", "Prescription/OTC Pickup")}
           onToggleSymptom={toggleMedicineSymptom}
+          otherText={medicineOtherText}
+          onOtherTextChange={setMedicineOtherText}
           onAnswerSafety={(question, answer) => setMedicineSafetyAnswers((current) => ({ ...current, [question]: answer }))}
           onContinue={handleMedicineSubmit}
           onFaq={openFaq}
@@ -967,6 +980,12 @@ async function handleWalkInSubmit() {
             bpWaiting={bpWaiting}
             onManual={handleManualScreeningEntry}
             onBack={handleCancelScreening}
+            onRetry={() => {
+              setReadings({});
+              setBpNoReading(false);
+              setBpWaiting(false);
+              handleScreeningOptionSelect(captureMode);
+            }}
             isOnline={isOnline}
           />
         ) : (
@@ -982,6 +1001,7 @@ async function handleWalkInSubmit() {
             }}
             onHome={resetSession}
             onCancel={resetSession}
+            onRetry={() => triggerHardwareSensors(captureMode || "complete")}
             isOnline={isOnline}
           />
         )

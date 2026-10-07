@@ -62,7 +62,8 @@
 .identity-details { margin: 0; font-size: 13px; }
 .identity-details div { display: flex; justify-content: space-between; padding: 3px 0; }
 .identity-details dt, .identity-details dd { margin: 0; }
-.identity-actions { display: flex; gap: 13px; margin-top: 28px; }
+.identity-actions { display: flex; flex-wrap: wrap; gap: 13px; margin-top: 28px; }
+.identity-actions button { min-height: 54px; font-size: 16px; }
 .identity-actions button {
   min-width: 104px;
   height: 24px;
