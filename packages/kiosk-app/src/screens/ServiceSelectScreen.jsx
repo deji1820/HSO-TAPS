@@ -40,6 +40,12 @@ const SERVICES = [
     desc: "Self-Service Body Temperature, Blood Pressure, Height, Weight & BMI Calculation.",
     icon: "\u{1F9BA}",
   },
+  {
+    value: "Document Submission",
+    title: "Document Submission",
+    desc: "Submit medical certificates, test results, and other medical documents to your health record.",
+    icon: "\u{1F4E4}",
+  },
 ];
 
 export default function ServiceSelectScreen({ onSelect, onBack, onFaq, isOnline, mobileMode = false }) {

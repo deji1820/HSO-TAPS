@@ -12,6 +12,8 @@ const externalDocumentSchema = new mongoose.Schema(
     formSource: { type: String, default: "MS Forms" },
     fileUrl: String, // link to the stored file (e.g. SharePoint / S3 / GridFS)
     category: String,
+    examDate: Date,
+    submissionDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
     name: String,
     contentType: String,
     fileData: Buffer,

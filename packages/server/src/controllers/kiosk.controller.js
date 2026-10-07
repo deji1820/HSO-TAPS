@@ -1,6 +1,7 @@
 import Student from "../models/Student.js";
 import VitalsLog from "../models/VitalsLog.js";
 import QueueEntry from "../models/QueueEntry.js";
+import ExternalDocument from "../models/ExternalDocument.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 
 // Per HSO-TAP_SYSTEM_NOTES: Hypothermia < 35.5, Normal 35.5-37.5, Fever >= 37.8
@@ -89,4 +90,37 @@ export async function submitIntake(req, res) {
         ? "Abnormal temperature detected — please proceed inside the clinic immediately."
         : undefined,
   });
+}
+
+export async function submitDocument(req, res) {
+  const { studentId, title, category, examDate, submissionDetails, name, contentType, fileData } = req.body || {};
+  if (!studentId || !title || !category || !examDate || !name || !fileData) {
+    return res.status(400).json({ message: "ID, purpose, category, examination date, and file are required." });
+  }
+  if (typeof fileData !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(fileData)) {
+    return res.status(400).json({ message: "The uploaded file is invalid." });
+  }
+  const student = await Student.findOne({ $or: [{ studentId }, { rfidTagUid: String(studentId).toUpperCase() }] });
+  if (!student) return res.status(404).json({ message: "No student or employee record matched that ID." });
+
+  const bytes = Buffer.from(fileData, "base64");
+  if (!bytes.length) return res.status(400).json({ message: "The uploaded file is empty." });
+  if (bytes.length > 12 * 1024 * 1024) return res.status(413).json({ message: "Files cannot exceed the current 12 MB server limit." });
+  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]);
+  if (contentType && !allowedTypes.has(contentType)) return res.status(415).json({ message: "Upload a PDF, JPG, PNG, or DOCX file." });
+
+  const document = await ExternalDocument.create({
+    student: student._id,
+    documentTitle: title,
+    formSource: "Kiosk Document Submission",
+    category,
+    name,
+    contentType,
+    fileData: bytes,
+    examDate: new Date(examDate),
+    submissionDetails: submissionDetails || {},
+    status: "Pending",
+    submittedAt: new Date(),
+  });
+  res.status(201).json({ id: document._id, name: document.name, category: document.category, status: document.status });
 }

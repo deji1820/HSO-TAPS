@@ -6,6 +6,7 @@ import ServiceSelectScreen from "./screens/ServiceSelectScreen.jsx";
 import QrChoiceScreen from "./screens/QrChoiceScreen.jsx";
 import MobileVitalsEntryScreen from "./screens/MobileVitalsEntryScreen.jsx";
 import MobileSensorReadingsScreen from "./screens/MobileSensorReadingsScreen.jsx";
+import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen.jsx";
 import "./styles/mobile-flow.css";
 import ConsultationTypeScreen from "./screens/ConsultationTypeScreen.jsx";
 import OtherServicesTypeScreen from "./screens/OtherServicesTypeScreen.jsx";
@@ -36,6 +37,7 @@ import { classifyBP } from "./utils/bp.js";
 // Leave time for non-BP sensors and BLE connection before the cuff's 120s wait ends.
 const BP_READING_TIMEOUT_MS = 180_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
+const standaloneDocumentSubmission = new URLSearchParams(window.location.search).get("documentSubmission") === "1";
 
 // Which readings each screening mode needs before we can move to the result screen
 const REQUIRED_FIELDS = {
@@ -561,7 +563,9 @@ export default function App() {
   }
 
 function handleServiceSelect(value) {
-  if (value === "Quick Health Screening") {
+  if (value === "Document Submission") {
+    setStep(mobileMode ? "documentSubmission" : "documentSubmissionQr");
+  } else if (value === "Quick Health Screening") {
     setFlowType("screening");
     setStep("screeningOptions");
   } else if (value === "Medical Consultation") {
@@ -1163,6 +1167,10 @@ async function handleScreeningOptionSelect(mode) {
   const walkInTemp = readings.temperatureC != null ? Number(readings.temperatureC) : null;
   const onFlowDone = mobileMode ? handleMobileDone : resetSession;
 
+  if (standaloneDocumentSubmission) {
+    return <div className="mobile-checkin-app"><DocumentSubmissionScreen onDone={() => window.location.assign(window.location.pathname)} /></div>;
+  }
+
   return (
     <div className={mobileSessionToken ? "mobile-checkin-app" : undefined} onClick={isOnline ? resetIdleTimer : undefined}>
       {mobileSessionToken && mobileSessionStatus === "loading" && <main className="mobile-session-status"><h1>Starting mobile check-in</h1><p>Verifying your student record…</p></main>}
@@ -1197,6 +1205,20 @@ async function handleScreeningOptionSelect(mode) {
         preparing={!!supabase && !serviceSessionReady}
         onContinue={handleContinueAtKiosk}
         onBack={() => setStep("confirm")}
+        isOnline={isOnline}
+      />}
+
+      {step === "documentSubmissionQr" && <QrChoiceScreen
+        url={`${window.location.origin}${window.location.pathname}?documentSubmission=1`}
+        documentMode
+        onContinue={() => setStep("documentSubmission")}
+        onBack={() => setStep("service")}
+        isOnline={isOnline}
+      />}
+      {step === "documentSubmission" && <DocumentSubmissionScreen
+        initialStudent={student}
+        onBack={() => setStep("service")}
+        onDone={onFlowDone}
         isOnline={isOnline}
       />}
 
