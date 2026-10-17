@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, getMedicalDocumentFile } from "../services/api.js";
+import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory } from "../services/api.js";
+import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/EMR.css";
 
@@ -164,7 +165,7 @@ function DocumentsTab({ documents }) {
                   {d.status}
                 </span>
               </td>
-              <td>{d.fileUrl ? (d.name ? <button type="button" className="btn btn-outline btn-sm" onClick={async () => { try { const blob = await getMedicalDocumentFile(d._id); const url = URL.createObjectURL(blob); window.open(url, "_blank", "noopener,noreferrer"); setTimeout(() => URL.revokeObjectURL(url), 60000); } catch { window.alert("Could not retrieve this document from the server."); } }}>View</button> : <a href={d.fileUrl} target="_blank" rel="noreferrer">View</a>) : "—"}</td>
+              <td>{d.fileUrl ? (d.name ? <div className="document-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(d._id, d.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(d._id, d.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : <a href={d.fileUrl} target="_blank" rel="noreferrer">View</a>) : "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -207,8 +208,8 @@ function HealthStatusDeclarationTab({ submissions, documents }) {
 function MedicalDocumentSubmissions({ files }) {
   if (!files.length) return <div className="table-empty">No documents have been submitted for this patient.</div>;
   return <div className="table-wrap"><table className="data-table">
-    <thead><tr><th>Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Submitted Details</th></tr></thead>
-    <tbody>{files.map((file) => <tr key={file.id}><td>{file.category || "N/A"}</td><td>{file.title || "N/A"}</td><td>{file.purpose || "N/A"}</td><td>{file.examDate ? formatDate(file.examDate) : "N/A"}</td><td>{formatDate(file.date)}</td><td>{file.name || "N/A"}</td><td><details><summary>View</summary><dl>{Object.entries(file.details || {}).filter(([, value]) => value !== undefined && value !== null && value !== "").map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}</dd></div>)}</dl></details></td></tr>)}</tbody>
+    <thead><tr><th>Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Submitted Details</th><th>Actions</th></tr></thead>
+    <tbody>{files.map((file) => <tr key={file.id}><td>{file.category || "N/A"}</td><td>{file.title || "N/A"}</td><td>{file.purpose || "N/A"}</td><td>{file.examDate ? formatDate(file.examDate) : "N/A"}</td><td>{formatDate(file.date)}</td><td>{file.name || "N/A"}</td><td><details><summary>View details</summary><dl>{Object.entries(file.details || {}).filter(([, value]) => value !== undefined && value !== null && value !== "").map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}</dd></div>)}</dl></details></td><td>{file.name ? <div className="document-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}</tbody>
   </table></div>;
 }
 
@@ -438,7 +439,7 @@ export default function EMRPage() {
       const [full, profiles, histories] = await Promise.all([getFullEmr(id), getMedicalProfiles(id), getPatientHistory(id)]);
       setRecord(full);
       setProfileHistory(profiles.map((profile) => ({ ...profile, id: profile._id })));
-      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission").map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.name, details: file.submissionDetails })));
+      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission").map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.name, fileUrl: file.fileUrl, details: file.submissionDetails })));
       setHealthStatusSubmissions((full.formSubmissions || []).filter((submission) => {
         const formTitle = `${submission.formName || ""} ${submission.rawPayload?.documentTitle || ""}`.toLowerCase();
         return /health status|declaration/.test(formTitle);

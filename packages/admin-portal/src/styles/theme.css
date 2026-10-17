@@ -83,6 +83,7 @@ a { color: inherit; }
 .btn-primary { background: var(--nu-blue); color: #fff; }
 .btn-primary:hover:not(:disabled) { opacity: 0.9; }
 .btn-outline { background: #fff; color: var(--nu-blue); border: 1px solid var(--nu-blue); }
+.document-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .btn-danger { background: var(--danger-bg); color: var(--danger); }
 .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
 

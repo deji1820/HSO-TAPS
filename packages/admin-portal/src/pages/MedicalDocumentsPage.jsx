@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getMedicalDocuments, getStudents, uploadMedicalDocument } from "../services/api.js";
+import { openMedicalDocument } from "../utils/medicalDocuments.js";
 
 export default function MedicalDocumentsPage() {
   const [files, setFiles] = useState([]);
@@ -55,8 +56,8 @@ export default function MedicalDocumentsPage() {
       {notice && <p role="status" className="page-subtitle">{notice}</p>}
     </form>
     <h2 className="section-title">Submission List</h2>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th></tr></thead><tbody>
-      {files.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.name || "—"}</td></tr>)}
+    <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Actions</th></tr></thead><tbody>
+      {files.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.name || "—"}</td><td>{file.name ? <div className="document-actions"><button className="btn btn-outline btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button className="btn btn-primary btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}
     </tbody></table>{!files.length && <div className="table-empty">No document submissions in this browser.</div>}</div>
   </div>;
 }
