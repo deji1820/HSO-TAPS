@@ -1165,7 +1165,23 @@ async function handleScreeningOptionSelect(mode) {
   const onFlowDone = mobileMode ? handleMobileDone : resetSession;
 
   if (standaloneDocumentSubmission) {
-    return <div className="mobile-checkin-app"><DocumentSubmissionScreen onDone={() => window.location.assign(window.location.pathname)} /></div>;
+    const returnToKiosk = () => window.location.assign(window.location.pathname);
+    if (mobileSessionToken && mobileSessionStatus === "loading") {
+      return <div className="mobile-checkin-app"><main className="mobile-session-status"><h1>Starting document submission</h1><p>Verifying your student record…</p></main></div>;
+    }
+    if (mobileSessionToken && mobileSessionStatus !== "ready") {
+      return <div className="mobile-checkin-app"><main className="mobile-session-status"><h1>Unable to start document submission</h1><p>{mobileSessionError || "This kiosk session is no longer available. Please scan the QR code again."}</p><button onClick={returnToKiosk}>Return to kiosk</button></main></div>;
+    }
+    return <div className="mobile-checkin-app"><DocumentSubmissionScreen
+      initialStudent={mobileSessionToken ? student : null}
+      onDone={async () => {
+        if (mobileSessionToken && supabase) {
+          await supabase.from("kiosk_sessions").update({ status: "completed" })
+            .eq("id", mobileSessionToken).eq("status", "mobile_flow_started");
+        }
+        returnToKiosk();
+      }}
+    /></div>;
   }
 
   return (
@@ -1206,7 +1222,10 @@ async function handleScreeningOptionSelect(mode) {
       />}
 
       {step === "documentSubmissionQr" && <QrChoiceScreen
-        url={`${window.location.origin}${window.location.pathname}?documentSubmission=1`}
+        url={serviceSessionId && serviceSessionReady
+          ? `${window.location.origin}${window.location.pathname}?mobileServiceSession=${encodeURIComponent(serviceSessionId)}&documentSubmission=1`
+          : !supabase ? `${window.location.origin}${window.location.pathname}?documentSubmission=1` : null}
+        preparing={!!supabase && !serviceSessionReady}
         documentMode
         onContinue={() => setStep("documentSubmission")}
         onBack={() => setStep("service")}
