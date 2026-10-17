@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { getMedicalDocuments, getStudents, uploadMedicalDocument } from "../services/api.js";
+import { getMedicalDocuments, getStudents, uploadMedicalDocument, updateMedicalDocumentStatus } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
+import { normalizeRole } from "../utils/roles.js";
 
 export default function MedicalDocumentsPage() {
   const [files, setFiles] = useState([]);
@@ -9,6 +10,9 @@ export default function MedicalDocumentsPage() {
   const [patient, setPatient] = useState(null);
   const [matches, setMatches] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [updatingStatusId, setUpdatingStatusId] = useState(null);
+  const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
+  const canReviewDocuments = ["nurse", "supervisor"].includes(normalizeRole(user.role));
 
   useEffect(() => { getMedicalDocuments().then(setFiles).catch(() => setNotice("Could not load submitted documents from the server.")); }, []);
 
@@ -43,6 +47,20 @@ export default function MedicalDocumentsPage() {
     } finally { setSaving(false); }
   }
 
+  async function updateStatus(file, status) {
+    setUpdatingStatusId(file._id);
+    setNotice("");
+    try {
+      const updated = await updateMedicalDocumentStatus(file._id, status);
+      setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated } : item));
+      setNotice(`Document status changed to ${status}.`);
+    } catch (error) {
+      setNotice(error?.response?.data?.message || "Could not update this document status.");
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  }
+
   return <div className="medical-documents-page">
     <div className="page-header"><h1>Medical Documents Submission</h1></div>
     <p className="page-subtitle">Submit a medical certificate, diagnostic test, laboratory result, or other clinic document.</p>
@@ -56,8 +74,8 @@ export default function MedicalDocumentsPage() {
       {notice && <p role="status" className="page-subtitle">{notice}</p>}
     </form>
     <h2 className="section-title">Submission List</h2>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Actions</th></tr></thead><tbody>
-      {files.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.name || "—"}</td><td>{file.name ? <div className="document-actions"><button className="btn btn-outline btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button className="btn btn-primary btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}
+    <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      {files.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.name || "—"}</td><td>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${file.documentTitle || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingStatusId === file._id} onChange={(event) => updateStatus(file, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <span className={`badge ${file.status === "Verified" ? "badge-routine" : file.status === "Rejected" ? "badge-high" : "badge-standard"}`}>{file.status || "Pending"}</span>}</td><td>{file.name ? <div className="document-actions"><button className="btn btn-outline btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button className="btn btn-primary btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}
     </tbody></table>{!files.length && <div className="table-empty">No document submissions in this browser.</div>}</div>
   </div>;
 }

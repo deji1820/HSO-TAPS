@@ -24,6 +24,7 @@ export const getPatientHistory = (id) => api.get(`/students/${id}/history`).then
 export const savePatientHistory = (id, payload) => api.put(`/students/${id}/history`, payload).then((r) => r.data);
 export const uploadMedicalDocument = (id, payload) => api.post(`/students/${id}/documents`, payload).then((r) => r.data);
 export const getMedicalDocuments = () => api.get("/documents").then((r) => r.data);
+export const updateMedicalDocumentStatus = (id, status) => api.patch(`/documents/${id}/status`, { status }).then((r) => r.data);
 export const getMedicalDocumentFile = (id) => api.get(`/documents/${id}/file`, { responseType: "blob" }).then((r) => r.data);
 export const getAnnouncement = () => api.get("/announcement").then((r) => r.data);
 export const saveAnnouncement = (text) => api.put("/announcement", { text }).then((r) => r.data);

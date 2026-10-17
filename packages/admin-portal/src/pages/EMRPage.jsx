@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory } from "../services/api.js";
+import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, updateMedicalDocumentStatus } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
+import { normalizeRole } from "../utils/roles.js";
 import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/EMR.css";
 
@@ -140,7 +141,7 @@ function ConsultationsTab({ consultations }) {
   );
 }
 
-function DocumentsTab({ documents }) {
+function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentId, onStatusChange }) {
   if (!documents?.length) return <div className="table-empty">No external documents synced yet.</div>;
   return (
     <div className="table-wrap">
@@ -160,11 +161,8 @@ function DocumentsTab({ documents }) {
               <td>{d.documentTitle}</td>
               <td>{d.formSource}</td>
               <td>{formatDate(d.submittedAt)}</td>
-              <td>
-                <span className={"badge " + (d.status === "Verified" ? "badge-routine" : d.status === "Rejected" ? "badge-high" : "badge-standard")}>
-                  {d.status}
-                </span>
-              </td>
+              <td>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${d.documentTitle || d.name || "document"}`} value={d.status || "Pending"} disabled={updatingDocumentId === d._id} onChange={(event) => onStatusChange(d._id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> :
+                <span className={"badge " + (d.status === "Verified" ? "badge-routine" : d.status === "Rejected" ? "badge-high" : "badge-standard")}>{d.status || "Pending"}</span>}</td>
               <td>{d.fileUrl ? (d.name ? <div className="document-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(d._id, d.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(d._id, d.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : <a href={d.fileUrl} target="_blank" rel="noreferrer">View</a>) : "—"}</td>
             </tr>
           ))}
@@ -191,7 +189,7 @@ function flattenFormPayload(payload, prefix = "") {
   });
 }
 
-function HealthStatusDeclarationTab({ submissions, documents }) {
+function HealthStatusDeclarationTab({ submissions, documents, canReviewDocuments, updatingDocumentId, onStatusChange }) {
   return <div className="emr-health-declaration">
     <h2 className="section-title">Health Status Declaration</h2>
     {submissions.length ? submissions.map((submission) => {
@@ -201,15 +199,15 @@ function HealthStatusDeclarationTab({ submissions, documents }) {
         {answers.length ? <dl>{answers.map(([question, answer]) => <div key={question}><dt>{question.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{answer}</dd></div>)}</dl> : <p>No declaration answers were included in this submission.</p>}
       </article>;
     }) : <div className="table-empty">No Health Status Declaration responses have been synced for this patient.</div>}
-    {documents?.length > 0 && <><h2 className="section-title">Attached Medical Forms</h2><DocumentsTab documents={documents} /></>}
+    {documents?.length > 0 && <><h2 className="section-title">Attached Medical Forms</h2><DocumentsTab documents={documents} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={onStatusChange} /></>}
   </div>;
 }
 
-function MedicalDocumentSubmissions({ files }) {
+function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumentId, onStatusChange }) {
   if (!files.length) return <div className="table-empty">No documents have been submitted for this patient.</div>;
   return <div className="table-wrap"><table className="data-table">
-    <thead><tr><th>Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Submitted Details</th><th>Actions</th></tr></thead>
-    <tbody>{files.map((file) => <tr key={file.id}><td>{file.category || "N/A"}</td><td>{file.title || "N/A"}</td><td>{file.purpose || "N/A"}</td><td>{file.examDate ? formatDate(file.examDate) : "N/A"}</td><td>{formatDate(file.date)}</td><td>{file.name || "N/A"}</td><td><details><summary>View details</summary><dl>{Object.entries(file.details || {}).filter(([, value]) => value !== undefined && value !== null && value !== "").map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}</dd></div>)}</dl></details></td><td>{file.name ? <div className="document-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}</tbody>
+    <thead><tr><th>Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Submitted Details</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>{files.map((file) => <tr key={file.id}><td>{file.category || "N/A"}</td><td>{file.title || "N/A"}</td><td>{file.purpose || "N/A"}</td><td>{file.examDate ? formatDate(file.examDate) : "N/A"}</td><td>{formatDate(file.date)}</td><td>{file.name || "N/A"}</td><td><details><summary>View details</summary><dl>{Object.entries(file.details || {}).filter(([, value]) => value !== undefined && value !== null && value !== "").map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}</dd></div>)}</dl></details></td><td>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${file.title || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingDocumentId === file.id} onChange={(event) => onStatusChange(file.id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <span className={"badge " + (file.status === "Verified" ? "badge-routine" : file.status === "Rejected" ? "badge-high" : "badge-standard")}>{file.status || "Pending"}</span>}</td><td>{file.name ? <div className="document-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}</tbody>
   </table></div>;
 }
 
@@ -383,6 +381,9 @@ export default function EMRPage() {
   const [loadingRecord, setLoadingRecord] = useState(false);
   const [tab, setTab] = useState("about");
   const [error, setError] = useState(null);
+  const [updatingDocumentId, setUpdatingDocumentId] = useState(null);
+  const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
+  const canReviewDocuments = ["nurse", "supervisor"].includes(normalizeRole(user.role));
 
   useEffect(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -439,7 +440,7 @@ export default function EMRPage() {
       const [full, profiles, histories] = await Promise.all([getFullEmr(id), getMedicalProfiles(id), getPatientHistory(id)]);
       setRecord(full);
       setProfileHistory(profiles.map((profile) => ({ ...profile, id: profile._id })));
-      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission").map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.name, fileUrl: file.fileUrl, details: file.submissionDetails })));
+      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission").map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.name, fileUrl: file.fileUrl, status: file.status, details: file.submissionDetails })));
       setHealthStatusSubmissions((full.formSubmissions || []).filter((submission) => {
         const formTitle = `${submission.formName || ""} ${submission.rawPayload?.documentTitle || ""}`.toLowerCase();
         return /health status|declaration/.test(formTitle);
@@ -452,6 +453,20 @@ export default function EMRPage() {
       setError("Could not load this student's record.");
     } finally {
       setLoadingRecord(false);
+    }
+  }
+
+  async function changeDocumentStatus(id, status) {
+    setUpdatingDocumentId(id);
+    setError(null);
+    try {
+      const updated = await updateMedicalDocumentStatus(id, status);
+      setRecord((current) => current ? { ...current, documents: (current.documents || []).map((document) => document._id === id ? { ...document, ...updated } : document) } : current);
+      setMedicalDocumentFiles((current) => current.map((file) => file.id === id ? { ...file, status: updated.status } : file));
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || "Could not update this document status.");
+    } finally {
+      setUpdatingDocumentId(null);
     }
   }
 
@@ -580,8 +595,8 @@ export default function EMRPage() {
             {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
-            {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} documents={record.documents?.filter((document) => /health status|declaration|medical form/i.test(document.documentTitle || ""))} />}
-            {tab === "files" && <><h2 className="section-title">Medical Document Submissions</h2><MedicalDocumentSubmissions files={medicalDocumentFiles} /><h2 className="section-title">Synced Medical Files</h2><DocumentsTab documents={record.documents} /></>}
+            {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} documents={record.documents?.filter((document) => /health status|declaration|medical form/i.test(document.documentTitle || ""))} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />}
+            {tab === "files" && <><h2 className="section-title">Medical Document Submissions</h2><MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /><h2 className="section-title">Synced Medical Files</h2><DocumentsTab documents={record.documents} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /></>}
           </div>
         </div>
       )}

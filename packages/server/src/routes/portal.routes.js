@@ -115,6 +115,20 @@ router.get("/documents", requireDocumentRole, async (_req, res) => {
     return result;
   }));
 });
+router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });
+  const allowedStatuses = ["Pending", "Verified", "Rejected"];
+  if (!allowedStatuses.includes(req.body.status)) return res.status(400).json({ message: "Invalid document status" });
+  const document = await ExternalDocument.findByIdAndUpdate(
+    req.params.id,
+    { $set: { status: req.body.status } },
+    { new: true, runValidators: true }
+  ).select("-fileData").populate("student", "studentId firstName lastName");
+  if (!document) return res.status(404).json({ message: "Document not found" });
+  const result = document.toObject();
+  if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
+  res.json(result);
+});
 router.get("/documents/:id/file", requireDocumentRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });
   const document = await ExternalDocument.findById(req.params.id).select("name contentType fileData");
