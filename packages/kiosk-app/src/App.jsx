@@ -589,6 +589,48 @@ function handleServiceSelect(value) {
   }
 }
 
+async function prepareDocumentSubmissionSession() {
+  setServiceSessionReady(false);
+  if (!supabase) {
+    setServiceSessionReady(true);
+    return;
+  }
+
+  try {
+    const existingSessionId = currentSessionIdRef.current || serviceSessionId;
+    if (existingSessionId) {
+      const { data, error } = await supabase.from("kiosk_sessions")
+        .update({ status: "awaiting_service_selection" })
+        .eq("id", existingSessionId)
+        .in("status", ["tap_logged", "awaiting_service_selection"])
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (data?.id) {
+        currentSessionIdRef.current = data.id;
+        setServiceSessionId(data.id);
+        setServiceSessionReady(true);
+        return;
+      }
+    }
+
+    const rfidUid = student?.rfidTagUid || student?.studentId;
+    if (!rfidUid) throw new Error("The verified student ID is unavailable.");
+    const { data, error } = await supabase.from("kiosk_sessions")
+      .insert([{ rfid_uid: rfidUid, status: "awaiting_service_selection" }])
+      .select("id")
+      .single();
+    if (error) throw error;
+    currentSessionIdRef.current = data.id;
+    setServiceSessionId(data.id);
+  } catch (error) {
+    console.warn("[DocumentSubmission] Could not prepare phone session:", error);
+    setServiceSessionId(null);
+  } finally {
+    setServiceSessionReady(true);
+  }
+}
+
 function handleKioskServiceSelect(value) {
   if (mobileMode) {
     handleServiceSelect(value);
@@ -597,7 +639,8 @@ function handleKioskServiceSelect(value) {
   // Document submission's phone QR uses this verified session to preload the
   // student's record. Keep it alive until the QR is scanned or the flow ends.
   if (value === "Document Submission") {
-    handleServiceSelect(value);
+    setStep("documentSubmissionQr");
+    void prepareDocumentSubmissionSession();
     return;
   }
   const sessionId = currentSessionIdRef.current;
