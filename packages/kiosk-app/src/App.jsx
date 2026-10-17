@@ -594,6 +594,12 @@ function handleKioskServiceSelect(value) {
     handleServiceSelect(value);
     return;
   }
+  // Document submission's phone QR uses this verified session to preload the
+  // student's record. Keep it alive until the QR is scanned or the flow ends.
+  if (value === "Document Submission") {
+    handleServiceSelect(value);
+    return;
+  }
   const sessionId = currentSessionIdRef.current;
   if (sessionId && supabase) {
     void supabase.from("kiosk_sessions").update({ status: "cancelled" })
