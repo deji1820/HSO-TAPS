@@ -112,7 +112,9 @@ export default function App() {
     async function loadMobileSession() {
       try {
         const { data, error } = await supabase.from("kiosk_sessions")
-          .select("id, rfid_uid, status, sensor_required, temp_c, height_m, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, pulse_bpm, bp_classification")
+          // Keep this lookup compatible with the kiosk_sessions columns in the
+          // deployed schema. Optional BP columns may not exist in older projects.
+          .select("id, rfid_uid, status, sensor_required, temp_c, height_m, weight_kg")
           .eq("id", mobileSessionToken)
           .in("status", ["awaiting_service_selection", "mobile_flow_started", "mobile_sensor_requested", "mobile_readings_ready"])
           .maybeSingle();
@@ -141,11 +143,6 @@ export default function App() {
           if (data.temp_c != null) nextReadings.temperatureC = Number(data.temp_c);
           if (data.height_m != null) nextReadings.heightCm = Number(data.height_m) * 100;
           if (data.weight_kg != null) nextReadings.weightKg = Number(data.weight_kg);
-          if (data.systolic_mmhg != null) nextReadings.systolicMmhg = Number(data.systolic_mmhg);
-          if (data.diastolic_mmhg != null) nextReadings.diastolicMmhg = Number(data.diastolic_mmhg);
-          if (data.blood_pressure != null) nextReadings.bloodPressure = String(data.blood_pressure);
-          if (data.pulse_bpm != null) nextReadings.pulseBpm = Number(data.pulse_bpm);
-          if (data.bp_classification != null) nextReadings.bloodPressureClassification = String(data.bp_classification);
           setReadings(nextReadings);
           setCaptureMode(data.sensor_required || "complete");
           setFlowType("screening");
