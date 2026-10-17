@@ -5,6 +5,7 @@ import "../styles/pages/ControlCenter.css";
 
 const MODULES = [
   { title: "Dashboard", description: "Live queue and patient check-in", to: "/dashboard", icon: "dashboard", tone: "green" },
+  { title: "Live Queue Board", description: "Full-screen waiting-room ticket display", to: "/queue-board", icon: "dashboard", tone: "green" },
   { title: "Electronic Medical Records", description: "Student profiles and clinical history", to: "/emr", icon: "folder", tone: "green" },
   { title: "Booking Appointments", description: "View scheduled clinic appointments", to: "/appointments", icon: "document", tone: "green" },
   { title: "Medicine Inventory", description: "Track medicines, supplies, and stock levels", to: "/inventory", icon: "inventory", tone: "green" },
@@ -27,12 +28,12 @@ export default function ControlCenterPage({ user }) {
   const [search, setSearch] = useState("");
   const role = normalizeRole(user?.role);
   const modulesByRole = {
-    superadmin: ["Admin", "Forms"],
-    supervisor: ["Dashboard", "Electronic Medical Records", "Booking Appointments", "Medicine Inventory", "Data Analytics"],
-    nurse: ["Dashboard", "Electronic Medical Records", "Booking Appointments", "Medicine Inventory"],
-    physician: ["Dashboard", "Electronic Medical Records", "Booking Appointments"],
-    dentist: ["Dashboard", "Electronic Medical Records", "Booking Appointments"],
-    staff: ["Dashboard", "Booking Appointments"],
+    superadmin: ["Admin", "Forms", "Live Queue Board"],
+    supervisor: ["Dashboard", "Live Queue Board", "Electronic Medical Records", "Booking Appointments", "Medicine Inventory", "Data Analytics"],
+    nurse: ["Dashboard", "Live Queue Board", "Electronic Medical Records", "Booking Appointments", "Medicine Inventory"],
+    physician: ["Dashboard", "Live Queue Board", "Electronic Medical Records", "Booking Appointments"],
+    dentist: ["Dashboard", "Live Queue Board", "Electronic Medical Records", "Booking Appointments"],
+    staff: ["Dashboard", "Live Queue Board", "Booking Appointments"],
   };
   const allowedModules = MODULES.filter((module) => (modulesByRole[role] || []).includes(module.title));
   const modules = useMemo(() => {

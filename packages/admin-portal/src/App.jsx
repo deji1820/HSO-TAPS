@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
@@ -13,6 +13,7 @@ import NewMedicalRecordPage from "./pages/NewMedicalRecordPage.jsx";
 import { normalizeRole } from "./utils/roles.js";
 import MedicalDocumentsPage from "./pages/MedicalDocumentsPage.jsx";
 import InventoryPage from "./pages/InventoryPage.jsx";
+import QueueBoardPage from "./pages/QueueBoardPage.jsx";
 
 function ProtectedRoute({ user, children }) {
   if (!user) return <Navigate to="/login" replace />;
@@ -22,6 +23,13 @@ function ProtectedRoute({ user, children }) {
 function RoleRoute({ user, allowed, children }) {
   if (!user) return <Navigate to="/login" replace />;
   return allowed.includes(normalizeRole(user.role)) ? children : <Navigate to="/" replace />;
+}
+
+function AppShell({ user, onLogout, routes }) {
+  const location = useLocation();
+  const onQueueBoard = location.pathname.replace(/\/+$/, "") === "/queue-board";
+  if (onQueueBoard) return <QueueBoardPage />;
+  return user ? <Layout user={user} onLogout={onLogout}>{routes}</Layout> : routes;
 }
 
 export default function App() {
@@ -110,13 +118,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {user ? (
-        <Layout user={user} onLogout={handleLogout}>
-          {routes}
-        </Layout>
-      ) : (
-        routes
-      )}
+      <AppShell user={user} onLogout={handleLogout} routes={routes} />
     </BrowserRouter>
   );
 }

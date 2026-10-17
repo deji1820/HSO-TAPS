@@ -4,6 +4,19 @@ import QueueEntry from "../models/QueueEntry.js";
 
 const router = Router();
 
+// Public waiting-room display: expose only queue numbers and their current state.
+router.get("/board", async (_req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  const entries = await QueueEntry.find({ status: { $in: ["waiting", "called", "in_session"] } })
+    .select("queueNumber status createdAt")
+    .sort({ createdAt: 1 })
+    .lean();
+  res.json({
+    serving: entries.filter((entry) => ["called", "in_session"].includes(entry.status)).map(({ queueNumber, status }) => ({ queueNumber, status })),
+    waiting: entries.filter((entry) => entry.status === "waiting").map(({ queueNumber }) => ({ queueNumber })),
+  });
+});
+
 router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), async (req, res) => {
   const role = String(req.user.role || "").toLowerCase();
   const clinicalRole = ["nurse", "supervisor", "physician", "doctor", "dentist"].includes(role);
