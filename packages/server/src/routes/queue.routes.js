@@ -3,11 +3,22 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import QueueEntry from "../models/QueueEntry.js";
 
 const router = Router();
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function getManilaDayRange(now = new Date()) {
+  const manilaNow = new Date(now.getTime() + MANILA_OFFSET_MS);
+  const start = Date.UTC(manilaNow.getUTCFullYear(), manilaNow.getUTCMonth(), manilaNow.getUTCDate()) - MANILA_OFFSET_MS;
+  return { start: new Date(start), end: new Date(start + 24 * 60 * 60 * 1000) };
+}
 
 // Public waiting-room display: expose only queue numbers and their current state.
 router.get("/board", async (_req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
-  const entries = await QueueEntry.find({ status: { $in: ["waiting", "called", "in_session"] } })
+  const { start, end } = getManilaDayRange();
+  const entries = await QueueEntry.find({
+    status: { $in: ["waiting", "called", "in_session"] },
+    createdAt: { $gte: start, $lt: end },
+  })
     .select("queueNumber status createdAt")
     .sort({ createdAt: 1 })
     .lean();
