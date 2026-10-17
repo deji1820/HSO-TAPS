@@ -9,6 +9,7 @@ const MODULES = [
   { title: "Booking Appointments", description: "View scheduled clinic appointments", to: "/appointments", icon: "document", tone: "green" },
   { title: "Medicine Inventory", description: "Track medicines, supplies, and stock levels", to: "/inventory", icon: "inventory", tone: "green" },
   { title: "Data Analytics", description: "Clinic visits and service summaries", to: "/analytics", icon: "chart", tone: "green" },
+  { title: "Forms", description: "Form pipelines and submission sync logs", to: "/forms", icon: "document", tone: "green" },
   { title: "Admin", description: "Manage student master data", to: "/admin", icon: "list", tone: "green" },
 ];
 
@@ -25,13 +26,15 @@ function ModuleIcon({ type }) {
 export default function ControlCenterPage({ user }) {
   const [search, setSearch] = useState("");
   const role = normalizeRole(user?.role);
-  const allowedModules = role === "superadmin"
-    ? MODULES.filter((module) => module.title === "Admin")
-    : role === "supervisor"
-      ? MODULES.filter((module) => module.title !== "Admin")
-      : role === "physician" || role === "dentist"
-        ? MODULES.filter((module) => !["Admin", "Medicine Inventory", "Data Analytics"].includes(module.title))
-        : MODULES.filter((module) => module.title !== "Admin" && (module.title !== "Medicine Inventory" || role === "nurse"));
+  const modulesByRole = {
+    superadmin: ["Admin", "Forms"],
+    supervisor: ["Dashboard", "Electronic Medical Records", "Booking Appointments", "Medicine Inventory", "Data Analytics"],
+    nurse: ["Dashboard", "Electronic Medical Records", "Booking Appointments", "Medicine Inventory"],
+    physician: ["Dashboard", "Electronic Medical Records", "Booking Appointments"],
+    dentist: ["Dashboard", "Electronic Medical Records", "Booking Appointments"],
+    staff: ["Dashboard", "Booking Appointments"],
+  };
+  const allowedModules = MODULES.filter((module) => (modulesByRole[role] || []).includes(module.title));
   const modules = useMemo(() => {
     const query = search.trim().toLowerCase();
     return query ? allowedModules.filter((module) => `${module.title} ${module.description}`.toLowerCase().includes(query)) : allowedModules;

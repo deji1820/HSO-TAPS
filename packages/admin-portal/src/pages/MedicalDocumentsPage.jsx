@@ -55,8 +55,8 @@ export default function MedicalDocumentsPage() {
       {notice && <p role="status" className="page-subtitle">{notice}</p>}
     </form>
     <h2 className="section-title">Submission List</h2>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Date Submitted</th><th>File Name</th></tr></thead><tbody>
-      {files.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category}</td><td>{file.documentTitle || file.title}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.name}</td></tr>)}
+    <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th></tr></thead><tbody>
+      {files.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.name || "—"}</td></tr>)}
     </tbody></table>{!files.length && <div className="table-empty">No document submissions in this browser.</div>}</div>
   </div>;
 }

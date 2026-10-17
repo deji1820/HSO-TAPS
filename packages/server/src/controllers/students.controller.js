@@ -2,6 +2,8 @@ import Student from "../models/Student.js";
 import VitalsLog from "../models/VitalsLog.js";
 import ConsultationRecord from "../models/ConsultationRecord.js";
 import ExternalDocument from "../models/ExternalDocument.js";
+import QueueEntry from "../models/QueueEntry.js";
+import { SyncLog } from "../models/FormPipeline.js";
 
 // GET /api/students/lookup/:studentId  (kiosk "Is this your profile?" screen by studentId or rfidTagUid)
 export async function lookupForKiosk(req, res) {
@@ -28,11 +30,13 @@ export async function listStudents(req, res) {
 
 // GET /api/students/:id/emr  (Consultation History + Vitals + External Documents tabs)
 export async function getFullEmr(req, res) {
-  const [student, vitals, consultations, documents] = await Promise.all([
+  const [student, vitals, consultations, documents, kioskRequests, formSubmissions] = await Promise.all([
     Student.findById(req.params.id),
     VitalsLog.find({ student: req.params.id }).sort({ capturedAt: -1 }),
     ConsultationRecord.find({ student: req.params.id }).sort({ visitDate: -1 }),
     ExternalDocument.find({ student: req.params.id }).select("-fileData").sort({ submittedAt: -1 }),
+    QueueEntry.find({ student: req.params.id, status: { $ne: "cancelled" } }).sort({ createdAt: -1 }),
+    SyncLog.find({ matchedStudent: req.params.id }).sort({ createdAt: -1 }),
   ]);
   if (!student) return res.status(404).json({ message: "Student not found" });
   const safeDocuments = documents.map((document) => {
@@ -40,7 +44,7 @@ export async function getFullEmr(req, res) {
     if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
     return result;
   });
-  res.json({ student, vitals, consultations, documents: safeDocuments });
+  res.json({ student, vitals, consultations, documents: safeDocuments, kioskRequests, formSubmissions });
 }
 
 // POST /api/students/bulk-upload  (Admin > Upload Master Data, after CSV/XLSX is parsed client- or server-side)

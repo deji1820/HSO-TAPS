@@ -13,6 +13,24 @@ export function requireAuth(req, res, next) {
   }
 }
 
+/** Enforce role permissions at the API boundary; hiding a portal route alone is not access control. */
+export function requireRole(...allowedRoles) {
+  return (req, res, next) => {
+    const role = normalizeRole(req.user?.role);
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(403).json({ message: "You do not have access to this resource" });
+    }
+    next();
+  };
+}
+
+function normalizeRole(role) {
+  const value = String(role || "").toLowerCase();
+  if (value === "admin" || value === "super_admin") return "superadmin";
+  if (value === "doctor") return "physician";
+  return value;
+}
+
 /** Separate, simpler check for the kiosk device — it's a shared device, not a logged-in staff account. */
 export function requireKioskKey(req, res, next) {
   const key = req.headers["x-kiosk-key"];

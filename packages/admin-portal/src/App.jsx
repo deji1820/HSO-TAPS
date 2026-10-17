@@ -66,7 +66,7 @@ export default function App() {
       <Route
         path="/emr"
         element={
-          <RoleRoute user={user} allowed={["nurse", "supervisor", "physician", "dentist", "staff"]}>
+          <RoleRoute user={user} allowed={["nurse", "supervisor", "physician", "dentist"]}>
             <EMRPage />
           </RoleRoute>
         }

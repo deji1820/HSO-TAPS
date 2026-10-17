@@ -1,6 +1,6 @@
 ﻿import { Router } from "express";
 import mongoose from "mongoose";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import Student from "../models/Student.js";
 import QueueEntry from "../models/QueueEntry.js";
 import ConsultationRecord from "../models/ConsultationRecord.js";
@@ -16,33 +16,32 @@ router.use(requireAuth);
 const validId = (id) => mongoose.isValidObjectId(id);
 const inventoryFields = ["name", "genericName", "category", "quantity", "unit", "reorderLevel", "expiryDate", "batchNumber", "supplier", "notes"];
 const inventoryInput = (body) => Object.fromEntries(Object.entries(body || {}).filter(([key]) => inventoryFields.includes(key)));
-function requireInventoryAccess(req, res, next) {
-  if (!["nurse", "supervisor", "superadmin"].includes(req.user.role)) return res.status(403).json({ message: "You do not have access to medicine inventory" });
-  next();
-}
+const requireClinicalRole = requireRole("nurse", "supervisor", "physician", "dentist");
+const requireNurseOrSupervisor = requireRole("nurse", "supervisor");
+const requireDocumentRole = requireRole("nurse", "supervisor", "physician", "dentist");
 
-router.get("/inventory", requireInventoryAccess, async (_req, res) => {
+router.get("/inventory", requireNurseOrSupervisor, async (_req, res) => {
   res.json(await MedicineInventory.find({ isActive: true }).sort({ name: 1 }));
 });
-router.post("/inventory", requireInventoryAccess, async (req, res) => {
+router.post("/inventory", requireNurseOrSupervisor, async (req, res) => {
   const item = await MedicineInventory.create(inventoryInput(req.body));
   res.status(201).json(item);
 });
-router.patch("/inventory/:id", requireInventoryAccess, async (req, res) => {
+router.patch("/inventory/:id", requireNurseOrSupervisor, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid inventory item ID" });
   const updates = inventoryInput(req.body);
   const item = await MedicineInventory.findOneAndUpdate({ _id: req.params.id, isActive: true }, { $set: updates }, { new: true, runValidators: true });
   if (!item) return res.status(404).json({ message: "Inventory item not found" });
   res.json(item);
 });
-router.delete("/inventory/:id", requireInventoryAccess, async (req, res) => {
+router.delete("/inventory/:id", requireNurseOrSupervisor, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid inventory item ID" });
   const item = await MedicineInventory.findOneAndUpdate({ _id: req.params.id, isActive: true }, { isActive: false }, { new: true });
   if (!item) return res.status(404).json({ message: "Inventory item not found" });
   res.json({ deleted: true, id: item._id });
 });
 
-router.post("/consultations", async (req, res) => {
+router.post("/consultations", requireClinicalRole, async (req, res) => {
   const { queueEntryId, visitType, secondaryVitals = {} } = req.body;
   const queueEntry = await QueueEntry.findById(queueEntryId).populate("student").populate("linkedVitals");
   if (!queueEntry) return res.status(404).json({ message: "Queue entry not found" });
@@ -61,27 +60,28 @@ router.post("/consultations", async (req, res) => {
   queueEntry.completedAt = new Date();
   await queueEntry.save();
   const updated = await QueueEntry.findById(queueEntry._id).populate("student").populate("linkedVitals");
-  req.app.get("io")?.emit("queue:update", updated);
+  req.app.get("io")?.to("clinical-queue").emit("queue:update", updated);
+  req.app.get("io")?.to("frontdesk-queue").emit("queue:update", { _id: updated._id, status: updated.status, calledAt: updated.calledAt, startedAt: updated.startedAt, completedAt: updated.completedAt });
   res.status(201).json({ consultation, queueEntry: updated });
 });
 
-router.get("/students/:id/medical-profiles", async (req, res) => {
+router.get("/students/:id/medical-profiles", requireClinicalRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid student ID" });
   res.json(await MedicalProfile.find({ student: req.params.id }).sort({ examinedAt: -1 }));
 });
-router.post("/students/:id/medical-profiles", async (req, res) => {
+router.post("/students/:id/medical-profiles", requireClinicalRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid student ID" });
   const student = await Student.findById(req.params.id);
   if (!student) return res.status(404).json({ message: "Student not found" });
   const profile = await MedicalProfile.create({ ...req.body, student: student._id, studentId: student.studentId });
   res.status(201).json(profile);
 });
-router.get("/students/:id/history", async (req, res) => {
+router.get("/students/:id/history", requireClinicalRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid student ID" });
   const history = await PatientHistory.findOne({ student: req.params.id });
   res.json(history || { familyHistory: { answers: {}, others: "" }, medicalHistory: { answers: {} } });
 });
-router.put("/students/:id/history", async (req, res) => {
+router.put("/students/:id/history", requireClinicalRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid student ID" });
   const student = await Student.findById(req.params.id);
   if (!student) return res.status(404).json({ message: "Student not found" });
@@ -90,7 +90,7 @@ router.put("/students/:id/history", async (req, res) => {
   }, { upsert: true, new: true, runValidators: true });
   res.json(history);
 });
-router.post("/students/:id/documents", async (req, res) => {
+router.post("/students/:id/documents", requireDocumentRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid student ID" });
   const student = await Student.findById(req.params.id);
   if (!student) return res.status(404).json({ message: "Student not found" });
@@ -107,7 +107,7 @@ router.post("/students/:id/documents", async (req, res) => {
   result.fileUrl = `/api/documents/${document._id}/file`;
   res.status(201).json(result);
 });
-router.get("/documents", async (_req, res) => {
+router.get("/documents", requireDocumentRole, async (_req, res) => {
   const documents = await ExternalDocument.find().select("-fileData").populate("student", "studentId firstName lastName").sort({ submittedAt: -1, createdAt: -1 });
   res.json(documents.map((document) => {
     const result = document.toObject();
@@ -115,7 +115,7 @@ router.get("/documents", async (_req, res) => {
     return result;
   }));
 });
-router.get("/documents/:id/file", async (req, res) => {
+router.get("/documents/:id/file", requireDocumentRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });
   const document = await ExternalDocument.findById(req.params.id).select("name contentType fileData");
   if (!document?.fileData) return res.status(404).json({ message: "File not found" });

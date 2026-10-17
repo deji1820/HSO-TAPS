@@ -15,6 +15,15 @@ const TEST_USERS = [
   { name: "Test Staff", email: "staff.test@nufv.edu.ph", role: "staff" },
 ];
 
+function getMongoHostname(uri) {
+  const authority = uri.match(/^mongodb(?:\+srv)?:\/\/(?:[^/?#@]+@)?(\[[^\]]+\]|[^/?#]+)/i)?.[1];
+  if (!authority) throw new Error("MONGODB_URI must be a valid MongoDB connection string.");
+  const firstHost = authority.split(",")[0];
+  return firstHost.startsWith("[")
+    ? firstHost.slice(1, firstHost.indexOf("]"))
+    : firstHost.replace(/:\d+$/, "");
+}
+
 async function main() {
   if (process.env.NODE_ENV === "production") {
     throw new Error("Refusing to seed test accounts in production.");
@@ -22,11 +31,18 @@ async function main() {
   if (process.env.ALLOW_TEST_USER_SEED !== "true") {
     throw new Error("Set ALLOW_TEST_USER_SEED=true to explicitly enable local test-user seeding.");
   }
-  const uri = process.env.MONGODB_URI;
+  const uri = process.env.MONGODB_URI?.trim().replace(/^MONGODB_URI\s*=\s*/i, "").replace(/^([\"'])(.*)\1$/, "$2");
   if (!uri) throw new Error("MONGODB_URI is not set.");
-  const hostname = new URL(uri).hostname;
-  if (!["localhost", "127.0.0.1", "::1"].includes(hostname)) {
-    throw new Error(`Refusing to seed a non-local MongoDB host (${hostname}).`);
+  if (!/^mongodb(?:\+srv)?:\/\//i.test(uri)) {
+    throw new Error("MONGODB_URI must start with mongodb:// or mongodb+srv://.");
+  }
+  process.env.MONGODB_URI = uri;
+  if (process.env.ALLOW_REMOTE_TEST_USER_SEED !== "true") {
+    const hostname = getMongoHostname(uri);
+    const localHosts = ["localhost", "127.0.0.1", "::1"];
+    if (!localHosts.includes(hostname)) {
+      throw new Error("Set ALLOW_REMOTE_TEST_USER_SEED=true to seed a remote presentation database.");
+    }
   }
 
   await connectDB();

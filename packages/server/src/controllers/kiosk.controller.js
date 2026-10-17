@@ -78,7 +78,7 @@ export async function submitIntake(req, res) {
       requestDetails,
       linkedVitals: vitals._id,
     });
-    io?.emit("queue:new", queueEntry); // pushes to Live Nurse/Doctor Dashboard in real time
+    io?.to("clinical-queue").to("frontdesk-queue").emit("queue:new", { _id: queueEntry._id });
   }
 
   res.status(201).json({

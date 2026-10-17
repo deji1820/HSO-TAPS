@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import { FormPipeline, SyncLog } from "../models/FormPipeline.js";
 import { handleFormSubmission } from "../services/formsSync.service.js";
 
@@ -18,11 +18,11 @@ router.post("/webhook/:pipelineId", async (req, res) => {
   res.json(result);
 });
 
-router.get("/", requireAuth, async (_req, res) => {
+router.get("/", requireAuth, requireRole("superadmin"), async (_req, res) => {
   res.json(await FormPipeline.find());
 });
 
-router.get("/sync-log", requireAuth, async (_req, res) => {
+router.get("/sync-log", requireAuth, requireRole("superadmin"), async (_req, res) => {
   res.json(await SyncLog.find().sort({ createdAt: -1 }).limit(100));
 });
 

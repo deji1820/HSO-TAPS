@@ -69,12 +69,12 @@ export default function Layout({ user, onLogout, children }) {
   const supervisor = role === "supervisor";
   const provider = isClinicalProvider(role);
   const navItems = superadmin
-    ? [{ to: "/admin", label: "Admin", icon: icons.list }]
+    ? [{ to: "/admin", label: "Admin", icon: icons.list }, { to: "/forms", label: "Forms", icon: icons.doc }]
     : [
         { to: provider ? "/dashboard" : "/dashboard", label: provider ? "Patient Queue" : "Dashboard", icon: icons.home },
-        { to: "/emr", label: "Electronic Medical Records", icon: icons.folder },
+        ...(["nurse", "supervisor", "physician", "dentist"].includes(role) ? [{ to: "/emr", label: "Electronic Medical Records", icon: icons.folder }] : []),
         { to: "/appointments", label: "Booking Appointments", icon: icons.list },
-        { to: "/medical-documents", label: "Medical Documents", icon: icons.doc },
+        ...(["nurse", "supervisor", "physician", "dentist"].includes(role) ? [{ to: "/medical-documents", label: "Medical Documents", icon: icons.doc }] : []),
         ...(["nurse", "supervisor"].includes(role) ? [{ to: "/inventory", label: "Medicine Inventory", icon: icons.box }] : []),
         ...(supervisor ? [{ to: "/analytics", label: "Data Analytics", icon: icons.chart }] : []),
         ...(!provider ? [{ to: "/admin", label: "Admin", icon: icons.list, adminOnly: true }] : []),

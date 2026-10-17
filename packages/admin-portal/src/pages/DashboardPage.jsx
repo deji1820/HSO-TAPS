@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const provider = ["physician", "doctor", "dentist"].includes(user.role);
   const supervisor = user.role === "supervisor";
+  const clinicalRole = ["nurse", "supervisor", "physician", "doctor", "dentist"].includes(user.role);
   const [announcement, setAnnouncement] = useState("Health Services Office announcements will appear here.");
   const [sortOrder, setSortOrder] = useState("asc");
 
@@ -30,7 +31,7 @@ export default function DashboardPage() {
       getQueue().then(setQueue).catch((error) => console.warn("Could not refresh the live queue:", error));
       setSelectedId((current) => current || entry._id);
     };
-    const onUpdate = (entry) => setQueue((items) => ["completed", "cancelled"].includes(entry.status) ? items.filter((item) => item._id !== entry._id) : items.map((item) => item._id === entry._id ? entry : item));
+    const onUpdate = (entry) => setQueue((items) => ["completed", "cancelled"].includes(entry.status) ? items.filter((item) => item._id !== entry._id) : items.map((item) => item._id === entry._id ? { ...item, ...entry } : item));
     socket.on("queue:new", onNew);
     socket.on("queue:update", onUpdate);
     const onAnnouncement = (value) => setAnnouncement(value.text);
@@ -60,7 +61,7 @@ export default function DashboardPage() {
       <label className="dashboard-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search..." aria-label="Search queue" /></label>
     </div>
     <section className="announcement-banner"><div><strong>📣 Announcement:</strong><p>{announcement}</p></div>{supervisor && <button type="button" className="announcement-edit" onClick={async () => { const next = window.prompt("Announcement text", announcement); if (next?.trim()) { try { const saved = await saveAnnouncement(next.trim()); setAnnouncement(saved.text); } catch { window.alert("Could not save the announcement to the server."); } } }}>Edit Banner</button>}</section>
-    {!provider && <div className="dashboard-create-row"><button className="btn btn-success" onClick={() => navigate("/new-record")}>＋ New Medical Record</button></div>}
+    {["nurse", "supervisor"].includes(user.role) && <div className="dashboard-create-row"><button className="btn btn-success" onClick={() => navigate("/new-record")}>＋ New Medical Record</button></div>}
 
     <div className="dashboard-grid">
       <section className="card dashboard-queue-card">
@@ -75,8 +76,8 @@ export default function DashboardPage() {
         <div className="snapshot-field"><span>Student ID:</span> {selected.student?.studentId || "—"}</div>
         <div className="snapshot-field"><span>Department:</span> {selected.student?.program || "—"}</div>
         <div className="snapshot-field"><span>Purpose:</span> {selected.serviceType || "—"}</div>
-        <div className="snapshot-actions"><button className="btn btn-warning" disabled={selected.status !== "waiting"} onClick={() => changeStatus(selected._id, "called")}>Call to Desk</button><button className="btn btn-success" onClick={async () => { if (selected.status !== "in_session") await changeStatus(selected._id, "in_session"); setSessionEntry(selected); }}>{selected.status === "in_session" ? "Resume" : "Start"}</button></div>
-        <div className="snapshot-actions"><button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button><button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Full EMR</button></div>
+        <div className="snapshot-actions"><button className="btn btn-warning" disabled={selected.status !== "waiting"} onClick={() => changeStatus(selected._id, "called")}>Call to Desk</button>{clinicalRole && <button className="btn btn-success" onClick={async () => { if (selected.status !== "in_session") await changeStatus(selected._id, "in_session"); setSessionEntry(selected); }}>{selected.status === "in_session" ? "Resume" : "Start"}</button>}</div>
+        <div className="snapshot-actions"><button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button>{clinicalRole && <button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Full EMR</button>}</div>
       </>}</section>
     </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getStudents, getFullEmr, getSyncLog, getMedicalProfiles, getPatientHistory, savePatientHistory, getMedicalDocumentFile } from "../services/api.js";
+import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, getMedicalDocumentFile } from "../services/api.js";
 import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/EMR.css";
 
@@ -30,6 +30,8 @@ function VitalsTab({ vitals }) {
           <tr>
             <th>Date</th>
             <th>Temp (°C)</th>
+            <th>Blood Pressure</th>
+            <th>Pulse</th>
             <th>Height (cm)</th>
             <th>Weight (kg)</th>
             <th>BMI</th>
@@ -43,8 +45,10 @@ function VitalsTab({ vitals }) {
               <td>{formatDate(v.capturedAt)}</td>
               <td>
                 {v.temperatureC ?? "—"}
-                {v.isFeverFlagged && <span className="badge badge-high" style={{ marginLeft: 6 }}>Fever</span>}
+                {v.temperatureStatus && <span className={"badge " + (v.temperatureStatus === "Normal" ? "badge-routine" : "badge-high")} style={{ marginLeft: 6 }}>{v.temperatureStatus}</span>}
               </td>
+              <td>{v.bloodPressure || "—"}{v.bloodPressureClassification ? ` (${v.bloodPressureClassification})` : ""}</td>
+              <td>{v.pulseRate ?? "—"}</td>
               <td>{v.heightCm ?? "—"}</td>
               <td>{v.weightKg ?? "—"}</td>
               <td>{v.bmi ?? "—"}</td>
@@ -203,8 +207,30 @@ function HealthStatusDeclarationTab({ submissions, documents }) {
 function MedicalDocumentSubmissions({ files }) {
   if (!files.length) return <div className="table-empty">No documents have been submitted for this patient.</div>;
   return <div className="table-wrap"><table className="data-table">
-    <thead><tr><th>Category</th><th>Document</th><th>Date Submitted</th><th>File Name</th></tr></thead>
-    <tbody>{files.map((file) => <tr key={file.id}><td>{file.category || "—"}</td><td>{file.title || "—"}</td><td>{formatDate(file.date)}</td><td>{file.name || "—"}</td></tr>)}</tbody>
+    <thead><tr><th>Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Submitted Details</th></tr></thead>
+    <tbody>{files.map((file) => <tr key={file.id}><td>{file.category || "N/A"}</td><td>{file.title || "N/A"}</td><td>{file.purpose || "N/A"}</td><td>{file.examDate ? formatDate(file.examDate) : "N/A"}</td><td>{formatDate(file.date)}</td><td>{file.name || "N/A"}</td><td><details><summary>View</summary><dl>{Object.entries(file.details || {}).filter(([, value]) => value !== undefined && value !== null && value !== "").map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}</dd></div>)}</dl></details></td></tr>)}</tbody>
+  </table></div>;
+}
+
+function KioskRequestsTab({ requests = [] }) {
+  if (!requests.length) return <div className="table-empty">No kiosk service requests recorded for this patient.</div>;
+  const formatDetails = (value) => {
+    if (!value) return "—";
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === "object") {
+        return Object.entries(parsed).map(([key, item]) => {
+          const label = key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ");
+          const detail = Array.isArray(item) ? item.join(", ") : typeof item === "object" && item !== null ? JSON.stringify(item) : String(item);
+          return `${label}: ${detail}`;
+        }).join(" · ");
+      }
+    } catch { /* Non-JSON details are free-text requests. */ }
+    return value;
+  };
+  return <div className="table-wrap"><table className="data-table">
+    <thead><tr><th>Date</th><th>Service</th><th>Reason</th><th>Details entered at kiosk</th></tr></thead>
+    <tbody>{requests.map((request) => <tr key={request._id}><td>{formatDate(request.createdAt)}</td><td>{request.serviceType || "—"}</td><td>{request.reason || "—"}</td><td>{formatDetails(request.requestDetails)}</td></tr>)}</tbody>
   </table></div>;
 }
 
@@ -412,18 +438,11 @@ export default function EMRPage() {
       const [full, profiles, histories] = await Promise.all([getFullEmr(id), getMedicalProfiles(id), getPatientHistory(id)]);
       setRecord(full);
       setProfileHistory(profiles.map((profile) => ({ ...profile, id: profile._id })));
-      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Admin Portal").map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, date: file.submittedAt, name: file.name })));
-      try {
-        const syncLog = await getSyncLog();
-        const studentId = String(full.student._id);
-        setHealthStatusSubmissions(syncLog.filter((submission) => {
-          const matchedStudent = submission.matchedStudent?._id || submission.matchedStudent;
-          const formTitle = `${submission.formName || ""} ${submission.rawPayload?.documentTitle || ""}`.toLowerCase();
-          return String(matchedStudent) === studentId && /health status|declaration/.test(formTitle);
-        }));
-      } catch {
-        setHealthStatusSubmissions([]);
-      }
+      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission").map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.name, details: file.submissionDetails })));
+      setHealthStatusSubmissions((full.formSubmissions || []).filter((submission) => {
+        const formTitle = `${submission.formName || ""} ${submission.rawPayload?.documentTitle || ""}`.toLowerCase();
+        return /health status|declaration/.test(formTitle);
+      }));
       setFamilyHistory(histories.familyHistory || { answers: {}, others: "" });
       setMedicalHistory(histories.medicalHistory || { answers: {} });
       setEditingFamilyHistory(false);
@@ -557,7 +576,7 @@ export default function EMRPage() {
               <div><span className="field-label-inline">Sex:</span> {record.student.sex || "—"}</div>
               <div><span className="field-label-inline">Guardian Contact:</span> {record.student.guardianContact || "—"}</div>
             </div><p className="page-subtitle">Profile data is sourced from the student master-data import.</p></div>}
-            {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
+            {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
             {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} documents={record.documents?.filter((document) => /health status|declaration|medical form/i.test(document.documentTitle || ""))} />}
