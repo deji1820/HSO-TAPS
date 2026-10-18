@@ -18,6 +18,8 @@ export function connectDeviceBridge(onEvent) {
     return {
       simulateRfidTap: (uid = "MOCKUID001") => onEvent({ type: "rfid_tap", uid }),
       simulateTemperature: (celsius = 36.7) => onEvent({ type: "temperature_reading", celsius }),
+      simulateHeight: (cm = 170) => onEvent({ type: "height_reading", cm }),
+      simulateWeight: (kg = 62) => onEvent({ type: "weight_reading", kg }),
       simulateHeightWeight: (cm = 170, kg = 62) => {
         onEvent({ type: "height_reading", cm });
         onEvent({ type: "weight_reading", kg });

@@ -112,10 +112,15 @@ export default function ScreeningReadingsScreen({
           <h1>Follow the prompts to measure your vitals</h1>
         </div>
         <section className="qhs-reading-panel">
-          <h2>{isComplete ? "VITAL SIGNS AND PHYSICAL METRICS READINGS" : currentStep.title.toUpperCase()}</h2>
+          <h2>{isComplete && isResult ? "VITAL SIGNS AND PHYSICAL METRICS READINGS" : currentStep.title.toUpperCase()}</h2>
           {!isResult && <p className="qhs-instruction">{currentStep.text}</p>}
 
-          {isComplete ? (
+          {isComplete && !isResult ? (
+            currentStep.key === "temperatureC" ? <Reading label="Temperature:">{temp}</Reading>
+              : currentStep.key === "heightCm" ? <Reading label="Height:">{meters}</Reading>
+                : currentStep.key === "weightKg" ? <Reading label="Weight:">{weight}</Reading>
+                  : <BloodPressureRows readings={readings} pulseBpm={pulseBpm} bpNoReading={bpNoReading} bpWaiting={bpWaiting} />
+          ) : isComplete ? (
             <>
               <Reading label="Temperature:">{temp}</Reading>
               <BloodPressureRows readings={readings} pulseBpm={pulseBpm} bpNoReading={bpNoReading} bpWaiting={bpWaiting} />

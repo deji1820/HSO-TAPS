@@ -46,6 +46,20 @@ const REQUIRED_FIELDS = {
   bmi: ["heightCm", "weightKg"],
 };
 
+const SENSOR_STAGES_BY_MODE = {
+  complete: ["temperature", "height", "weight", "bloodPressure"],
+  bmi: ["height", "weight"],
+  physical: ["height", "weight"],
+  temperature: ["temperature"],
+  bloodPressure: ["bloodPressure"],
+};
+const SENSOR_EVENT_STAGE = {
+  temperature_reading: "temperature",
+  height_reading: "height",
+  weight_reading: "weight",
+  blood_pressure_reading: "bloodPressure",
+};
+
 export default function App() {
   const mobileSessionToken = new URLSearchParams(window.location.search).get("mobileServiceSession");
   const [mobileSessionStatus, setMobileSessionStatus] = useState(mobileSessionToken ? "loading" : "idle");
@@ -95,6 +109,8 @@ export default function App() {
   const submittingRef = useRef(false); // guards against double-submit
   const currentSessionIdRef = useRef(null);
   const mobileSensorSessionIdRef = useRef(null);
+  const sensorStageSequenceRef = useRef([]);
+  const activeSensorStageRef = useRef(null);
   const bpTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -235,13 +251,9 @@ export default function App() {
             setManualFields([]);
             setBpNoReading(false);
             setSensorFailed(false);
-            if (mode === "complete" || mode === "bloodPressure") {
-              setBpWaiting(true);
-              clearTimeout(bpTimeoutRef.current);
-              bpTimeoutRef.current = setTimeout(() => { setBpWaiting(false); setBpNoReading(true); }, BP_READING_TIMEOUT_MS);
-            }
+            const firstStage = startSensorStages(mode);
             setStep("capturing");
-            void triggerHardwareSensors(mode === "bmi" ? "physical" : mode, "Quick Health Screening");
+            void triggerHardwareSensors(firstStage, "Quick Health Screening");
             return;
           }
           if (payload.new?.status === "mobile_readings_ready" && !mobileSessionToken && mobileSensorSessionIdRef.current) {
@@ -302,6 +314,60 @@ export default function App() {
             return;
           }
           if (stepRef.current !== "capturing") return;
+          if (sensorStageSequenceRef.current.length > 0) {
+            const stage = payload.new?.sensor_required;
+            if (payload.new?.status !== "completed" ||
+                String(payload.new?.id) !== String(currentSessionIdRef.current) ||
+                stage !== activeSensorStageRef.current) return;
+
+            const row = payload.new;
+            const patch = stage === "temperature"
+              ? (row.temp_c == null ? {} : { temperatureC: Number(row.temp_c) })
+              : stage === "height"
+                ? (row.height_m == null ? {} : { heightCm: Number(row.height_m) * 100 })
+                : stage === "weight"
+                  ? (row.weight_kg == null ? {} : { weightKg: Number(row.weight_kg) })
+                  : stage === "bloodPressure"
+                    ? (() => {
+                        const result = {};
+                        if (row.systolic_mmhg != null) result.systolicMmhg = Number(row.systolic_mmhg);
+                        if (row.diastolic_mmhg != null) result.diastolicMmhg = Number(row.diastolic_mmhg);
+                        if (row.blood_pressure != null) result.bloodPressure = String(row.blood_pressure);
+                        else if (row.systolic_mmhg != null && row.diastolic_mmhg != null) result.bloodPressure = `${row.systolic_mmhg}/${row.diastolic_mmhg}`;
+                        if (row.pulse_bpm != null) result.pulseBpm = Number(row.pulse_bpm);
+                        if (row.bp_classification != null) result.bloodPressureClassification = String(row.bp_classification);
+                        else if (row.systolic_mmhg != null && row.diastolic_mmhg != null) result.bloodPressureClassification = classifyBP(row.systolic_mmhg, row.diastolic_mmhg);
+                        return result;
+                      })()
+                    : {};
+
+            clearTimeout(captureTimerRef.current);
+            if (Object.keys(patch).length === 0) {
+              if (stage === "bloodPressure") {
+                clearTimeout(bpTimeoutRef.current);
+                bpTimeoutRef.current = null;
+                setBpWaiting(false);
+                setBpNoReading(true);
+              }
+              activeSensorStageRef.current = null;
+              setSensorFailed(true);
+              return;
+            }
+
+            if (stage === "bloodPressure") {
+              clearTimeout(bpTimeoutRef.current);
+              bpTimeoutRef.current = null;
+              setBpWaiting(false);
+              setBpNoReading(false);
+            }
+            setSensorFailed(false);
+            setReadings((prev) => ({ ...prev, ...patch }));
+            if (!mobileSessionToken && mobileSensorSessionIdRef.current && String(row.id) === String(currentSessionIdRef.current)) {
+              void publishMobileReadingPatch(patch);
+            }
+            void advanceSensorStage(stage);
+            return;
+          }
           const { height_m, temp_c, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, pulse_bpm, bp_classification } = payload.new;
           const patch = {};
           if (temp_c != null) patch.temperatureC = temp_c;
@@ -388,6 +454,8 @@ export default function App() {
     setBpWaiting(false);
     const sessionIdToUpdate = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
+    sensorStageSequenceRef.current = [];
+    activeSensorStageRef.current = null;
     submittingRef.current = false;
     setStudent(null);
     setCaptureMode(null);
@@ -466,6 +534,13 @@ export default function App() {
 
     if (stepRef.current !== "capturing" && stepRef.current !== "medicineIntake") return;
 
+    const eventStage = SENSOR_EVENT_STAGE[evt.type];
+    const isSequencedScreening = sensorStageSequenceRef.current.length > 0;
+    if (isSequencedScreening && eventStage !== activeSensorStageRef.current) {
+      console.warn("[kiosk-app] Ignoring out-of-order sensor reading:", evt.type);
+      return;
+    }
+
     const fieldMap = {
       temperature_reading: { temperatureC: evt.celsius },
       height_reading: { heightCm: evt.cm },
@@ -493,6 +568,7 @@ export default function App() {
 
     setReadings((prev) => ({ ...prev, ...patch }));
     if (mobileSensorSessionIdRef.current) void publishMobileReadingPatch(patch);
+    if (isMock && isSequencedScreening && eventStage) void advanceSensorStage(eventStage);
   }
 
   deviceEventHandlerRef.current = handleDeviceEvent;
@@ -890,6 +966,26 @@ async function handleMobileUseSensorReadings() {
   await finishCapture(readings);
 }
 
+function startSensorStages(mode) {
+  const stages = SENSOR_STAGES_BY_MODE[mode] || [];
+  sensorStageSequenceRef.current = stages;
+  activeSensorStageRef.current = stages[0] || null;
+  return stages[0] || mode;
+}
+
+async function advanceSensorStage(completedStage) {
+  const stages = sensorStageSequenceRef.current;
+  const index = stages.indexOf(completedStage);
+  if (index < 0) return;
+  const nextStage = stages[index + 1];
+  if (!nextStage) {
+    activeSensorStageRef.current = null;
+    return;
+  }
+  activeSensorStageRef.current = nextStage;
+  await triggerHardwareSensors(nextStage, "Quick Health Screening");
+}
+
 function handleReturnToKiosk() {
   const sessionId = currentSessionIdRef.current;
   if (sessionId && supabase) {
@@ -919,18 +1015,8 @@ async function handleScreeningOptionSelect(mode) {
     setCaptureMode(mode);
     setFlowType("screening");
     setStep("capturing");
-
-    const needsBp = mode === "bloodPressure" || mode === "complete";
-    if (needsBp) {
-      setBpWaiting(true);
-      bpTimeoutRef.current = setTimeout(() => {
-        setBpWaiting(false);
-        setBpNoReading(true);
-        setSensorFailed(true);
-      }, BP_READING_TIMEOUT_MS);
-    }
-    const sensorMode = mode === "bmi" ? "physical" : mode;
-    await triggerHardwareSensors(sensorMode, "Quick Health Screening");
+    const firstStage = startSensorStages(mode);
+    await triggerHardwareSensors(firstStage, "Quick Health Screening");
   }
 
   async function handleCancelScreening() {
@@ -940,6 +1026,8 @@ async function handleScreeningOptionSelect(mode) {
     setSensorFailed(false);
     setBpNoReading(false);
     setBpWaiting(false);
+    sensorStageSequenceRef.current = [];
+    activeSensorStageRef.current = null;
     if (flowType === "mobileSensorCapture") {
       const sensorSessionId = currentSessionIdRef.current;
       if (sensorSessionId && supabase) void supabase.from("kiosk_sessions").update({ status: "cancelled" }).eq("id", sensorSessionId).eq("status", "pending_sensor");
@@ -979,6 +1067,8 @@ async function handleScreeningOptionSelect(mode) {
     clearTimeout(captureTimerRef.current);
     clearTimeout(bpTimeoutRef.current);
     bpTimeoutRef.current = null;
+    sensorStageSequenceRef.current = [];
+    activeSensorStageRef.current = null;
     const sessionId = currentSessionIdRef.current;
     if (!mobileMode) currentSessionIdRef.current = null;
     if (sessionId && supabase) {
@@ -996,11 +1086,34 @@ async function handleScreeningOptionSelect(mode) {
     setSensorFailed(false);
     currentSessionIdRef.current = null;
 
+    if (sensorCmd === "bloodPressure" && sensorStageSequenceRef.current.length > 0) {
+      setBpNoReading(false);
+      setBpWaiting(true);
+      clearTimeout(bpTimeoutRef.current);
+      bpTimeoutRef.current = setTimeout(() => {
+        activeSensorStageRef.current = null;
+        setBpWaiting(false);
+        setBpNoReading(true);
+        setSensorFailed(true);
+      }, BP_READING_TIMEOUT_MS);
+    } else if (selectedService === "Quick Health Screening") {
+      clearTimeout(bpTimeoutRef.current);
+      bpTimeoutRef.current = null;
+      setBpWaiting(false);
+    }
+
     if (isMock) {
       window.setTimeout(() => {
-        if (sensorCmd === "complete" || sensorCmd === "temperature") bridgeRef.current?.simulateTemperature?.();
-        if (sensorCmd === "complete" || sensorCmd === "physical") bridgeRef.current?.simulateHeightWeight?.();
-        if (sensorCmd === "complete" || sensorCmd === "bloodPressure") bridgeRef.current?.simulateBloodPressure?.();
+        if (sensorCmd === "temperature") bridgeRef.current?.simulateTemperature?.();
+        if (sensorCmd === "height") bridgeRef.current?.simulateHeight?.();
+        if (sensorCmd === "weight") bridgeRef.current?.simulateWeight?.();
+        if (sensorCmd === "bloodPressure") bridgeRef.current?.simulateBloodPressure?.();
+        if (sensorCmd === "complete") {
+          bridgeRef.current?.simulateTemperature?.();
+          bridgeRef.current?.simulateHeightWeight?.();
+          bridgeRef.current?.simulateBloodPressure?.();
+        }
+        if (sensorCmd === "physical") bridgeRef.current?.simulateHeightWeight?.();
       }, 350);
     } else if (supabase) {
       try {
@@ -1021,9 +1134,10 @@ async function handleScreeningOptionSelect(mode) {
 
     const timeoutMs = sensorCmd === "complete" || sensorCmd === "bloodPressure"
       ? BP_READING_TIMEOUT_MS
-      : sensorCmd === "physical" ? 14_000 : 12_000;
+      : sensorCmd === "height" || sensorCmd === "weight" || sensorCmd === "physical" ? 14_000 : 12_000;
     captureTimerRef.current = setTimeout(() => {
       console.warn("[triggerHardwareSensors] No sensor data received from hardware within timeout.");
+      if (sensorStageSequenceRef.current.length > 0) activeSensorStageRef.current = null;
       setSensorFailed(true);
     }, timeoutMs);
   }
@@ -1046,50 +1160,37 @@ async function handleScreeningOptionSelect(mode) {
     }
 
     // Case 2: Partial or empty (Hybrid / Auto-scan required for missing fields)
-    let sensorCmd = "complete";
     const needsTemp = missing.includes("temperatureC");
-    const needsPhysical = missing.includes("heightCm") || missing.includes("weightKg");
-
-    if (needsTemp && !needsPhysical) {
-      sensorCmd = "temperature";
-    } else if (!needsTemp && needsPhysical) {
-      sensorCmd = "physical";
-    } else {
-      sensorCmd = "complete";
-    }
+    const sensorStages = [];
+    if (needsTemp) sensorStages.push("temperature");
+    if (missing.includes("heightCm")) sensorStages.push("height");
+    if (missing.includes("weightKg")) sensorStages.push("weight");
+    const hasBp = enteredReadings.bloodPressure != null ||
+      (enteredReadings.systolicMmhg != null && enteredReadings.diastolicMmhg != null);
+    if (mode === "complete" && !bpNoReading && !hasBp) sensorStages.push("bloodPressure");
+    if (mode === "bloodPressure" && missing.includes("bloodPressure")) sensorStages.push("bloodPressure");
+    sensorStageSequenceRef.current = sensorStages;
+    activeSensorStageRef.current = sensorStages[0] || null;
 
     setStep("capturing");
-    if (sensorCmd === "complete" && !bpNoReading) {
-      clearTimeout(bpTimeoutRef.current);
-      setBpWaiting(true);
-      bpTimeoutRef.current = setTimeout(() => {
-        setBpWaiting(false);
-        setBpNoReading(true);
-      }, BP_READING_TIMEOUT_MS);
-    }
-    await triggerHardwareSensors(sensorCmd);
+    if (sensorStages[0]) await triggerHardwareSensors(sensorStages[0], "Quick Health Screening");
   }
 
   async function handleFullAutoScan() {
     const mode = captureMode || "complete";
     setReadings({});
     setManualFields([]);
-    const sensorCmd = mode === "complete" ? "complete" : mode === "temperature" ? "temperature" : "physical";
+    const firstStage = startSensorStages(mode);
     setStep("capturing");
-    if (sensorCmd === "complete") {
-      clearTimeout(bpTimeoutRef.current);
-      setBpNoReading(false);
-      setBpWaiting(true);
-      bpTimeoutRef.current = setTimeout(() => {
-        setBpWaiting(false);
-        setBpNoReading(true);
-      }, BP_READING_TIMEOUT_MS);
-    }
-    await triggerHardwareSensors(sensorCmd);
+    setBpNoReading(false);
+    setBpWaiting(false);
+    await triggerHardwareSensors(firstStage, "Quick Health Screening");
   }
 
   async function finishCapture(finalReadings) {
     submittingRef.current = true;
+    sensorStageSequenceRef.current = [];
+    activeSensorStageRef.current = null;
     if (flowType === "mobileSensorCapture") {
       const sessionId = mobileSensorSessionIdRef.current;
       if (!sessionId || !supabase) {
