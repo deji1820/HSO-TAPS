@@ -28,8 +28,7 @@ const APConfig KNOWN_NETWORKS[] = KIOSK_WIFI_NETWORKS;
 const int TOTAL_NETWORKS = sizeof(KNOWN_NETWORKS) / sizeof(KNOWN_NETWORKS[0]);
 WiFiMulti wifiMulti;
 
-// Keep this project in sync with packages/kiosk-app/src/services/supabase.js.
-static const char *SUPABASE_URL = "https://schwdhhqngrfjkhobwuo.supabase.co/rest/v1/kiosk_sessions";
+static const char *SUPABASE_URL = "https://nwgjzwfyqtyhexrjetyr.supabase.co/rest/v1/kiosk_sessions";
 
 // 38-pin ESP32 DevKit pin assignment from the supplied firmware.
 #define RFID_SS_PIN 15
@@ -87,10 +86,7 @@ volatile bool omronReadingNeedsProcessing = false;
 volatile bool pendingOmronBP = false;
 volatile bool bpUploadTaskRunning = false;
 uint32_t lastOmronReadingSignature = 0;
-String activeKioskSessionId;
-String activeSensorRequired;
-String lastHandledSensorSessionId;
-String lastHandledSensorRequired;
+int activeKioskSessionId = -1;
 volatile bool activeSessionNeedsBP = false;
 
 struct OmronBPReading {
@@ -101,8 +97,7 @@ struct OmronBPReading {
 OmronBPReading latestOmronBP;
 
 struct OmronBPUploadTaskData {
-  String sessionId;
-  String expectedStatus;
+  int sessionId;
   OmronBPReading reading;
 };
 
@@ -130,13 +125,13 @@ void addSupabaseHeaders(HTTPClient &http) {
   http.addHeader("apikey", SUPABASE_KEY);
 }
 
-bool updateOmronBPForSession(const String &sessionId, const OmronBPReading &reading, const String &expectedStatus) {
-  if (sessionId.length() == 0 || !reading.valid || WiFi.status() != WL_CONNECTED) return false;
+bool updateOmronBPForSession(int sessionId, const OmronBPReading &reading) {
+  if (sessionId < 0 || !reading.valid || WiFi.status() != WL_CONNECTED) return false;
   HTTPClient http;
   http.setTimeout(5000);
-  http.begin(String(SUPABASE_URL) + "?id=eq." + sessionId + "&status=eq." + expectedStatus);
+  http.begin(String(SUPABASE_URL) + "?id=eq." + String(sessionId) + "&status=eq.completed");
   addSupabaseHeaders(http);
-  String payload = "{\"status\":\"completed\",\"systolic_mmhg\":" + String(reading.systolic) +
+  String payload = "{\"systolic_mmhg\":" + String(reading.systolic) +
     ",\"diastolic_mmhg\":" + String(reading.diastolic) +
     ",\"pulse_bpm\":" + String(reading.pulse) + "}";
   int code = http.sendRequest("PATCH", payload);
@@ -149,7 +144,7 @@ bool updateOmronBPForSession(const String &sessionId, const OmronBPReading &read
 
 void omronBPUploadTask(void *parameter) {
   OmronBPUploadTaskData *taskData = static_cast<OmronBPUploadTaskData *>(parameter);
-  bool saved = updateOmronBPForSession(taskData->sessionId, taskData->reading, taskData->expectedStatus);
+  bool saved = updateOmronBPForSession(taskData->sessionId, taskData->reading);
   if (!saved) {
     pendingOmronBP = true;
     Serial.println("[OMRON] BP upload failed in background; RFID polling remains active.");
@@ -170,7 +165,7 @@ uint32_t getOmronReadingSignature() {
 }
 
 void handleOmronBPReading() {
-  if (!latestOmronBP.valid || activeKioskSessionId.length() == 0 || !omronReadingNeedsProcessing) return;
+  if (!latestOmronBP.valid || activeKioskSessionId < 0 || !omronReadingNeedsProcessing) return;
   omronReadingNeedsProcessing = false;
   // The cuff may keep advertising the same stored measurement after it
   // finishes. Disarm BP discovery immediately so queued advertisements do
@@ -193,7 +188,6 @@ void handleOmronBPReading() {
     return;
   }
   taskData->sessionId = activeKioskSessionId;
-  taskData->expectedStatus = activeSensorRequired == "bloodPressure" ? "pending_sensor" : "completed";
   taskData->reading = latestOmronBP;
   bpUploadTaskRunning = true;
   BaseType_t taskCreated = xTaskCreate(omronBPUploadTask, "omronBPUpload", 8192, taskData, 1, nullptr);
@@ -302,10 +296,10 @@ class ScaleScanCallbacks : public NimBLEScanCallbacks {
     if (address == TARGET_OMRON_MAC || name == TARGET_OMRON_NAME) {
       if (millis() - lastOmronAdvertisementLogMs >= 5000) {
         lastOmronAdvertisementLogMs = millis();
-        Serial.printf("[BLE] Omron advertisement seen; BP request=%s, session=%s\n",
-                      activeSessionNeedsBP ? "yes" : "no", activeKioskSessionId.c_str());
+        Serial.printf("[BLE] Omron advertisement seen; BP request=%s, session=%d\n",
+                      activeSessionNeedsBP ? "yes" : "no", activeKioskSessionId);
       }
-      if (activeSessionNeedsBP && activeKioskSessionId.length() > 0 && !omronConnectRequested && (!omronClient || !omronClient->isConnected()) &&
+      if (activeSessionNeedsBP && activeKioskSessionId >= 0 && !omronConnectRequested && (!omronClient || !omronClient->isConnected()) &&
           millis() - lastOmronAttemptMs >= OMRON_RECONNECT_COOLDOWN_MS) {
         NimBLEDevice::getScan()->stop();
         if (omronAdvertisedDevice) delete omronAdvertisedDevice;
@@ -314,7 +308,7 @@ class ScaleScanCallbacks : public NimBLEScanCallbacks {
       }
       return;
     }
-    if (address != TARGET_SCALE_MAC || activeSensorRequired != "weight" || !device->haveManufacturerData()) return;
+    if (address != TARGET_SCALE_MAC || !device->haveManufacturerData()) return;
     std::string data = device->getManufacturerData();
     if (data.size() < 4) return;
     const auto *bytes = reinterpret_cast<const uint8_t *>(data.data());
@@ -452,38 +446,32 @@ bool sendRfidTapToSupabase(const String &uid) {
   if (at >= 0) {
     int colon = response.indexOf(':', at), end = response.indexOf(',', colon);
     if (end < 0) end = response.indexOf('}', colon);
-    if (colon >= 0 && end > colon) {
-      activeKioskSessionId = response.substring(colon + 1, end);
-      activeKioskSessionId.trim();
-      activeKioskSessionId.replace("\"", "");
-    }
+    if (colon >= 0 && end > colon) activeKioskSessionId = response.substring(colon + 1, end).toInt();
   }
-  if (activeKioskSessionId.length() > 0 && pendingOmronBP) updateOmronBPForSession(activeKioskSessionId, latestOmronBP, "pending_sensor");
+  if (activeKioskSessionId >= 0 && pendingOmronBP) updateOmronBPForSession(activeKioskSessionId, latestOmronBP);
   return true;
 }
 
-void updateSupabaseVitals(const String &sessionId, const String &sensorRequired) {
-  if (WiFi.status() != WL_CONNECTED || sessionId.length() == 0 || sensorRequired == "bloodPressure") return;
-  String payload = "{\"status\":\"completed\"";
-  if (sensorRequired == "temperature" || sensorRequired == "complete") {
-    float temp = measureTemperature();
-    payload += ",\"temp_c\":";
-    payload += temp > 0 ? String(temp, 2) : String("null");
+void updateSupabaseVitals(int id, const String &sensorRequired) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  float temp = 0, height = 0, weight = -1;
+  if (sensorRequired == "complete" || sensorRequired == "temperature") temp = measureTemperature();
+  if (sensorRequired == "complete" || sensorRequired == "physical") {
+    height = measureHeight(); weight = measureWeightFromScale(10000);
   }
-  if (sensorRequired == "height" || sensorRequired == "physical" || sensorRequired == "complete") {
-    float height = measureHeight();
+  String payload = "{\"status\":\"completed\",\"temp_c\":";
+  if ((sensorRequired == "complete" || sensorRequired == "temperature") && temp > 0) payload += String(temp, 2);
+  else payload += "null";
+  if (sensorRequired == "complete" || sensorRequired == "physical") {
     payload += ",\"height_m\":";
-    payload += height > 0 ? String(height, 2) : String("null");
-  }
-  if (sensorRequired == "weight" || sensorRequired == "physical" || sensorRequired == "complete") {
-    float weight = measureWeightFromScale(10000);
+    payload += height > 0 ? String(height, 2) : "null";
     payload += ",\"weight_kg\":";
-    payload += weight > 0 ? String(weight, 2) : String("null");
-  }
+    payload += weight > 0 ? String(weight, 2) : "null";
+  } else payload += ",\"height_m\":null,\"weight_kg\":null";
   payload += "}";
-  HTTPClient http; http.setTimeout(5000); http.begin(String(SUPABASE_URL) + "?id=eq." + sessionId + "&status=eq.pending_sensor"); addSupabaseHeaders(http);
+  HTTPClient http; http.setTimeout(5000); http.begin(String(SUPABASE_URL) + "?id=eq." + String(id) + "&status=eq.pending_sensor"); addSupabaseHeaders(http);
   int code = http.sendRequest("PATCH", payload); http.end();
-  Serial.printf("[Supabase] %s sensor PATCH: %d\n", sensorRequired.c_str(), code); updateStatusLED();
+  Serial.printf("[Supabase] Vitals PATCH: %d\n", code); updateStatusLED();
 }
 
 void pollSupabaseForSensorRequests() {
@@ -499,23 +487,14 @@ void pollSupabaseForSensorRequests() {
       int idEnd = body.indexOf(',', idAt);
       int start = sensorAt + 19, end = body.indexOf('"', start);
       if (idEnd > idAt && end > start) {
-        String requestedSessionId = body.substring(idAt + 5, idEnd);
-        requestedSessionId.trim();
-        requestedSessionId.replace("\"", "");
+        int requestedSessionId = body.substring(idAt + 5, idEnd).toInt();
         String sensorRequired = body.substring(start, end);
-        if (requestedSessionId == lastHandledSensorSessionId && sensorRequired == lastHandledSensorRequired) {
-          http.end();
-          return;
-        }
-        Serial.printf("[Supabase] Pending sensor request: id=%s, sensor_required=%s\n",
-                      requestedSessionId.c_str(), sensorRequired.c_str());
+        Serial.printf("[Supabase] Pending sensor request: id=%d, sensor_required=%s\n",
+                      requestedSessionId, sensorRequired.c_str());
         activeKioskSessionId = requestedSessionId;
-        activeSensorRequired = sensorRequired;
-        lastHandledSensorSessionId = requestedSessionId;
-        lastHandledSensorRequired = sensorRequired;
-        activeSessionNeedsBP = requestedSessionId.length() > 0 && (sensorRequired == "complete" || sensorRequired == "bloodPressure");
+        activeSessionNeedsBP = sensorRequired == "complete" || sensorRequired == "bloodPressure";
         lastOmronReadingSignature = 0;
-        if (sensorRequired != "bloodPressure") updateSupabaseVitals(requestedSessionId, sensorRequired);
+        updateSupabaseVitals(requestedSessionId, sensorRequired);
       }
     } else if (millis() - lastNoPendingRequestLogMs >= 10000) {
       lastNoPendingRequestLogMs = millis();
