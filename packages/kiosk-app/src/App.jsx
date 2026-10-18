@@ -9,8 +9,6 @@ import MobileSensorReadingsScreen from "./screens/MobileSensorReadingsScreen.jsx
 import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen.jsx";
 import "./styles/mobile-flow.css";
 import ConsultationTypeScreen from "./screens/ConsultationTypeScreen.jsx";
-import OtherServicesTypeScreen from "./screens/OtherServicesTypeScreen.jsx";
-import RequestTextScreen from "./screens/RequestTextScreen.jsx";
 import CheckedInScreen from "./screens/CheckedInScreen.jsx";
 import ScreeningOptionsScreen from "./screens/ScreeningOptionsScreen.jsx";
 import KioskFaqScreen from "./screens/KioskFaqScreen.jsx";
@@ -77,7 +75,6 @@ export default function App() {
   // finishCapture() submits and where it routes afterwards.
   const [flowType, setFlowType] = useState(null);
   const [consultSubType, setConsultSubType] = useState(null); // "Medical" | "Dental"
-  const [otherServiceSubType, setOtherServiceSubType] = useState(null); // "Prescription/OTC" | "General Inquiry"
   const [checkInInfo, setCheckInInfo] = useState(null); // shown on CheckedInScreen
   const [appointmentSelection, setAppointmentSelection] = useState(null);
   const [clearanceAppointmentPurpose, setClearanceAppointmentPurpose] = useState(null);
@@ -400,7 +397,6 @@ export default function App() {
     setResultQueueNumber(null);
     setFlowType(null);
     setConsultSubType(null);
-    setOtherServiceSubType(null);
     setCheckInInfo(null);
     setAppointmentSelection(null);
     setClearanceAppointmentPurpose(null);
@@ -570,16 +566,12 @@ function handleServiceSelect(value) {
   } else if (value === "Dental Consultation") {
     handleConsultTypeSelect("Dental");
   } else if (value === "Prescription/OTC Pickup") {
-    setOtherServiceSubType("Prescription/OTC");
     setFlowType("medicine");
     setReadings({});
     setMedicineSymptoms([]);
     setMedicineSafetyAnswers({});
     setStep("medicineIntake");
     if (!mobileMode) triggerHardwareSensors("temperature", "Prescription/OTC Pickup");
-  } else if (value === "General Inquiry") {
-    setOtherServiceSubType("General Inquiry");
-    setStep("requestText");
   } else if (value === "Medical Clearance") {
     setFlowType("clearance");
     setClearanceQueueNumber(null);
@@ -802,25 +794,6 @@ async function handleWalkInSubmit() {
     alert("We couldn't check you in. Please try again or see the clinic staff.");
   }
 }
-
-  function handleOtherServiceTypeSelect(subType) {
-    setOtherServiceSubType(subType);
-    setStep("requestText");
-  }
-
-  async function handleRequestTextSubmit(text) {
-    const serviceType = otherServiceSubType === "Prescription/OTC" ? "Prescription/OTC Pickup" : "General Inquiry";
-    const reason = text.length > 60 ? `${text.slice(0, 57)}...` : text;
-    const result = await submitIntake({
-      studentId: student.studentId,
-      serviceType,
-      reason,
-      requestDetails: text,
-      source: "kiosk",
-    });
-    setCheckInInfo({ serviceType, queueNumber: result?.queueEntry?.queueNumber });
-    setStep("checkedIn");
-  }
 
 async function handleContinueAtKiosk() {
   const sessionId = currentSessionIdRef.current;
@@ -1436,10 +1409,6 @@ async function handleScreeningOptionSelect(mode) {
   />
 )}
 
-      {step === "otherServicesType" && (
-        <OtherServicesTypeScreen onSelect={handleOtherServiceTypeSelect} onBack={() => setStep("service")} isOnline={isOnline} />
-      )}
-
       {step === "medicineIntake" && (
         <PrescriptionIntakeScreen
           selectedSymptoms={medicineSymptoms}
@@ -1471,10 +1440,6 @@ async function handleScreeningOptionSelect(mode) {
           onFaq={openFaq}
           isOnline={isOnline}
         />
-      )}
-
-      {step === "requestText" && (
-        <RequestTextScreen onSubmit={handleRequestTextSubmit} onBack={() => setStep("service")} isOnline={isOnline} />
       )}
 
       {step === "checkedIn" && (
