@@ -1134,7 +1134,7 @@ async function handleScreeningOptionSelect(mode) {
 
     const timeoutMs = sensorCmd === "complete" || sensorCmd === "bloodPressure"
       ? BP_READING_TIMEOUT_MS
-      : sensorCmd === "height" || sensorCmd === "weight" || sensorCmd === "physical" ? 14_000 : 12_000;
+      : sensorCmd === "physical" ? 30_000 : 25_000;
     captureTimerRef.current = setTimeout(() => {
       console.warn("[triggerHardwareSensors] No sensor data received from hardware within timeout.");
       if (sensorStageSequenceRef.current.length > 0) activeSensorStageRef.current = null;

@@ -62,6 +62,7 @@ static NimBLEUUID OMRON_DATA_UUID("49123040-aee8-11e1-a74d-0002a5d5c51b");
 
 MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 Adafruit_MLX90614 mlx;
+bool temperatureSensorReady = false;
 NimBLEScan *pBLEScan = nullptr;
 NimBLEClient *omronClient = nullptr;
 NimBLERemoteCharacteristic *omronB305Char = nullptr;
@@ -411,16 +412,40 @@ float measureWeightFromScale(unsigned long maxWaitMs) {
 }
 
 float measureTemperature() {
+  if (!temperatureSensorReady) {
+    Serial.println("[TEMP] MLX90614 is not initialized; check power, SDA GPIO21, and SCL GPIO22.");
+    return -1.0f;
+  }
   unsigned long start = millis();
-  while (millis() - start < 5000 && mlx.readObjectTempC() < SKIN_PRESENCE_THRESHOLD) delay(50);
+  unsigned long lastLog = 0;
+  float objectTemp = mlx.readObjectTempC();
+  while (millis() - start < 5000 && objectTemp < SKIN_PRESENCE_THRESHOLD) {
+    if (millis() - lastLog >= 500) {
+      Serial.printf("[TEMP] Waiting for a warm target; object=%.2f C, needs >= %.1f C\n",
+                    objectTemp, SKIN_PRESENCE_THRESHOLD);
+      lastLog = millis();
+    }
+    delay(50);
+    objectTemp = mlx.readObjectTempC();
+  }
+  if (objectTemp < SKIN_PRESENCE_THRESHOLD) {
+    Serial.printf("[TEMP] No warm target detected in 5 seconds; last object=%.2f C\n", objectTemp);
+  }
   std::vector<float> samples;
   start = millis();
   while (millis() - start < 3000) {
     float value = mlx.readObjectTempC();
     if (value >= 28.0f && value <= 43.0f) samples.push_back(value + TEMP_CLINICAL_OFFSET);
+    if (millis() - lastLog >= 500) {
+      Serial.printf("[TEMP] Object=%.2f C, adjusted=%.2f C\n", value, value + TEMP_CLINICAL_OFFSET);
+      lastLog = millis();
+    }
     delay(100);
   }
-  return computeFilteredAverage(samples, 0.6f);
+  float result = computeFilteredAverage(samples, 0.6f);
+  Serial.printf("[TEMP] Filtered result: %.2f C from %u valid samples\n",
+                result, static_cast<unsigned>(samples.size()));
+  return result;
 }
 
 float measureHeight() {
@@ -467,6 +492,7 @@ void updateSupabaseVitals(const String &sessionId, const String &sensorRequired)
   String payload = "{\"status\":\"completed\"";
   if (sensorRequired == "temperature" || sensorRequired == "complete") {
     float temp = measureTemperature();
+    Serial.printf("[TEMP] Sending kiosk reading: %.2f C\n", temp);
     payload += ",\"temp_c\":";
     payload += temp > 0 ? String(temp, 2) : String("null");
   }
@@ -482,8 +508,12 @@ void updateSupabaseVitals(const String &sessionId, const String &sensorRequired)
   }
   payload += "}";
   HTTPClient http; http.setTimeout(5000); http.begin(String(SUPABASE_URL) + "?id=eq." + sessionId + "&status=eq.pending_sensor"); addSupabaseHeaders(http);
-  int code = http.sendRequest("PATCH", payload); http.end();
-  Serial.printf("[Supabase] %s sensor PATCH: %d\n", sensorRequired.c_str(), code); updateStatusLED();
+  int code = http.sendRequest("PATCH", payload);
+  String response = http.getString();
+  http.end();
+  Serial.printf("[Supabase] %s sensor PATCH: HTTP %d%s%s\n", sensorRequired.c_str(), code,
+                response.length() ? " - " : "", response.c_str());
+  updateStatusLED();
 }
 
 void pollSupabaseForSensorRequests() {
@@ -547,7 +577,13 @@ void setup() {
   setLEDColor(false, false, false);
   pinMode(RFID_SS_PIN, OUTPUT); digitalWrite(RFID_SS_PIN, HIGH);
   Serial.begin(115200); delay(1000);
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN); mlx.begin();
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  temperatureSensorReady = mlx.begin();
+  Serial.printf("[TEMP] MLX90614 init: %s\n", temperatureSensorReady ? "OK" : "FAILED (check wiring/power and I2C address 0x5A)");
+  if (temperatureSensorReady) {
+    Serial.printf("[TEMP] Startup ambient=%.2f C, object=%.2f C\n",
+                  mlx.readAmbientTempC(), mlx.readObjectTempC());
+  }
   SPI.begin(RFID_SCK_PIN, RFID_MISO_PIN, RFID_MOSI_PIN, RFID_SS_PIN);
   pinMode(RFID_RST_PIN, OUTPUT); digitalWrite(RFID_RST_PIN, LOW); delay(20);
   digitalWrite(RFID_RST_PIN, HIGH); delay(50); rfid.PCD_Init(); rfid.PCD_AntennaOn(); rfid.PCD_SetAntennaGain(rfid.RxGain_max);
