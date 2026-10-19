@@ -281,20 +281,52 @@ bool runOmronSync() {
 }
 
 bool connectToOmron(NimBLEAdvertisedDevice *device) {
-  if (!device) return false;
+  if (!device) {
+    Serial.println("[OMRON] Connect aborted: advertised device is missing.");
+    return false;
+  }
   lastOmronAttemptMs = millis();
-  if (!omronClient) { omronClient = NimBLEDevice::createClient(); omronClient->setConnectTimeout(20); }
-  if (!omronClient->connect(device)) return false;
+  if (!omronClient) omronClient = NimBLEDevice::createClient();
+  // NimBLE-Arduino 1.x uses seconds while 2.x uses milliseconds.
+#if defined(NIMBLE_CPP_VERSION_MAJOR) && NIMBLE_CPP_VERSION_MAJOR >= 2
+  omronClient->setConnectTimeout(30000);
+#else
+  omronClient->setConnectTimeout(30);
+#endif
+  Serial.printf("[OMRON] Connecting to %s (timeout 30 s).\n",
+                device->getAddress().toString().c_str());
+  if (!omronClient->connect(device)) {
+    Serial.println("[OMRON] BLE connect failed before service discovery.");
+    return false;
+  }
+  Serial.println("[OMRON] BLE connected; discovering service.");
   delay(1500);
   NimBLERemoteService *service = omronClient->getService(OMRON_SERVICE_UUID);
-  if (!service) { omronClient->disconnect(); return false; }
+  if (!service) {
+    Serial.println("[OMRON] Expected FE4A service was not found.");
+    omronClient->disconnect();
+    return false;
+  }
   omronB305Char = service->getCharacteristic(OMRON_B305_UUID);
   omronDb5bChar = service->getCharacteristic(OMRON_DB5B_UUID);
   omronDataChar = service->getCharacteristic(OMRON_DATA_UUID);
-  if (!omronB305Char || !omronDb5bChar || !omronDataChar ||
-      !omronB305Char->subscribe(true, omronNotifyCallback) ||
-      !omronDataChar->subscribe(true, omronNotifyCallback)) {
-    omronClient->disconnect(); return false;
+  if (!omronB305Char || !omronDb5bChar || !omronDataChar) {
+    Serial.printf("[OMRON] Missing characteristic(s): B305=%s DB5B=%s DATA=%s.\n",
+                  omronB305Char ? "yes" : "no",
+                  omronDb5bChar ? "yes" : "no",
+                  omronDataChar ? "yes" : "no");
+    omronClient->disconnect();
+    return false;
+  }
+  if (!omronB305Char->subscribe(true, omronNotifyCallback)) {
+    Serial.println("[OMRON] Failed to subscribe to B305 notifications.");
+    omronClient->disconnect();
+    return false;
+  }
+  if (!omronDataChar->subscribe(true, omronNotifyCallback)) {
+    Serial.println("[OMRON] Failed to subscribe to measurement notifications.");
+    omronClient->disconnect();
+    return false;
   }
   bool synced = runOmronSync();
   Serial.printf("[OMRON] Sync returned: %s\n", synced ? "success" : "failure");
