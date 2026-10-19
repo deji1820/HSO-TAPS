@@ -11,7 +11,7 @@
 
 The firmware sends RFID session inserts and sensor/BP updates directly to the Supabase REST table. The Supabase table and row-level security policies must permit only the required operations and columns.
 
-At startup, the firmware reads the newest kiosk-session ID and ignores pending requests that were already present. During operation, it only polls for pending IDs newer than the last request it handled, so abandoned requests cannot be picked up after a newer screening finishes. If a request was already pending when the ESP32 boots, start a fresh scan from the kiosk. Omron retries create a fresh NimBLE client and repeat service discovery once if the first discovery is empty.
+At startup, the firmware reads the newest kiosk-session ID and ignores pending requests that were already present. During operation, it only polls for pending IDs newer than the last request it handled, so abandoned requests cannot be picked up after a newer screening finishes. If a request was already pending when the ESP32 boots, start a fresh scan from the kiosk. Omron retries create a fresh NimBLE client and repeat service discovery once if the first discovery is empty. It continues retrying for up to 160 seconds while the same request remains pending, then stops; the kiosk marks timed-out requests cancelled.
 
 After changing `kiosk_main.ino`, upload it to the ESP32 from Arduino IDE. A Vercel deployment updates the kiosk web app but does not flash firmware to the ESP32.
 

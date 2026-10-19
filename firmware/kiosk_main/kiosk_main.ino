@@ -53,7 +53,8 @@ static const char *TARGET_SCALE_MAC = "78:66:a5:e0:5e:77";
 static const unsigned long SCALE_SIGNAL_TIMEOUT_MS = 6000;
 static const char *TARGET_OMRON_MAC = "c9:33:c0:ef:a2:e5";
 static const char *TARGET_OMRON_NAME = "BLESmart_0000047EC933C0EFA2E5";
-static const unsigned long OMRON_RECONNECT_COOLDOWN_MS = 10000;
+static const unsigned long OMRON_RECONNECT_COOLDOWN_MS = 8000;
+static const unsigned long OMRON_RETRY_WINDOW_MS = 160000;
 static NimBLEUUID OMRON_SERVICE_UUID("0000FE4A-0000-1000-8000-00805F9B34FB");
 static NimBLEUUID OMRON_B305_UUID("b305b680-aee7-11e1-a730-0002a5d5c51b");
 static NimBLEUUID OMRON_DB5B_UUID("db5b55e0-aee7-11e1-965e-0002a5d5c51b");
@@ -90,9 +91,10 @@ uint32_t lastOmronReadingSignature = 0;
 int activeKioskSessionId = -1;
 volatile bool activeSessionNeedsBP = false;
 int highestSeenSensorRequestId = -1;
+unsigned long activeSensorRequestStartedMs = 0;
 int omronAttemptSessionId = -1;
 uint8_t omronAttemptsForSession = 0;
-static const uint8_t MAX_OMRON_ATTEMPTS_PER_SESSION = 2;
+static const uint8_t MAX_OMRON_ATTEMPTS_PER_SESSION = 12;
 
 struct OmronBPReading {
   int systolic = 0, diastolic = 0, pulse = 0;
@@ -314,6 +316,22 @@ void resetOmronClient() {
   omronClient = nullptr;
 }
 
+bool sensorRequestIsPending(int sessionId) {
+  if (sessionId < 0 || WiFi.status() != WL_CONNECTED) return true;
+  HTTPClient http;
+  http.setTimeout(5000);
+  http.begin(String(SUPABASE_URL) + "?select=id&id=eq." + String(sessionId) + "&status=eq.pending_sensor&limit=1");
+  http.addHeader("apikey", SUPABASE_KEY);
+  int code = http.GET();
+  String body = code == 200 ? http.getString() : "";
+  http.end();
+  if (code != 200) {
+    Serial.printf("[Supabase] Could not check BP request %d status: HTTP %d; keeping retry eligible.\n", sessionId, code);
+    return true;
+  }
+  return body.indexOf("\"id\"") >= 0;
+}
+
 bool connectToOmron(NimBLEAdvertisedDevice *device) {
   if (!device) {
     Serial.println("[OMRON] Connect aborted: advertised device is missing.");
@@ -456,6 +474,15 @@ void processOmronConnectionRequest() {
     omronAttemptSessionId = activeKioskSessionId;
     omronAttemptsForSession = 0;
   }
+  if (!sensorRequestIsPending(activeKioskSessionId)) {
+    Serial.printf("[OMRON] BP session %d is no longer pending; stopping retries.\n", activeKioskSessionId);
+    delete omronAdvertisedDevice;
+    omronAdvertisedDevice = nullptr;
+    omronConnectRequested = false;
+    activeSessionNeedsBP = false;
+    if (pBLEScan && !pBLEScan->isScanning()) pBLEScan->start(0, false, true);
+    return;
+  }
   omronAttemptsForSession++;
   NimBLEAdvertisedDevice *device = omronAdvertisedDevice;
   omronAdvertisedDevice = nullptr;
@@ -466,7 +493,13 @@ void processOmronConnectionRequest() {
   if (!ok) {
     // Permit one automatic retry for this request, but cap attempts so a
     // missing cuff packet cannot repeatedly block RFID polling indefinitely.
-    bool retryAllowed = omronAttemptsForSession < MAX_OMRON_ATTEMPTS_PER_SESSION;
+    bool inRetryWindow = millis() - activeSensorRequestStartedMs < OMRON_RETRY_WINDOW_MS;
+    bool retryAllowed = omronAttemptsForSession < MAX_OMRON_ATTEMPTS_PER_SESSION && inRetryWindow;
+    if (!inRetryWindow) Serial.printf("[OMRON] BP retry window expired for session=%d.\n", activeKioskSessionId);
+    if (retryAllowed && !sensorRequestIsPending(activeKioskSessionId)) {
+      retryAllowed = false;
+      Serial.printf("[OMRON] BP session %d was cancelled while connecting.\n", activeKioskSessionId);
+    }
     activeSessionNeedsBP = retryAllowed;
     lastOmronAttemptMs = millis();
     Serial.printf("[OMRON] BP attempt %u/%u failed for session=%d; %s.\n",
@@ -661,6 +694,7 @@ void pollSupabaseForSensorRequests() {
                       requestedSessionId, serviceSelected.c_str(), sensorRequired.c_str());
         activeKioskSessionId = requestedSessionId;
         activeSessionNeedsBP = sensorRequired == "complete" || sensorRequired == "bloodPressure";
+        activeSensorRequestStartedMs = millis();
         omronAttemptSessionId = requestedSessionId;
         omronAttemptsForSession = 0;
         lastOmronReadingSignature = 0;
@@ -705,7 +739,7 @@ void setup() {
   initializeSensorRequestWatermark();
   setupBLE();
   Serial.println("ESP32 KIOSK READY: BLE SCALE + OMRON HEM-7140T1");
-  Serial.println("FIRMWARE BUILD: 2026-10-20-BP-SESSION-GUARD");
+  Serial.println("FIRMWARE BUILD: 2026-10-20-BP-READY-RETRY");
 }
 
 void loop() {
