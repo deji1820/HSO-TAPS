@@ -136,16 +136,25 @@
   text-align: center;
   font-size: 11px;
 }
+.clearance-field-label {
+  display: block;
+  margin: 0 17px 10px;
+  color: var(--nu-blue-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+.clearance-field-label select { margin-top: 4px; }
 .clearance-documents-panel { min-height: 124px; }
 .clearance-document-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px 22px;
+  flex-direction: column;
+  gap: 12px;
   padding: 18px 10px 4px;
   color: var(--nu-blue-dark);
   font-size: 13px;
 }
-.clearance-document-list label, .clearance-acknowledge { display: flex; align-items: center; gap: 8px; }
+.clearance-document-list label, .clearance-acknowledge { display: flex; align-items: flex-start; gap: 8px; }
+.clearance-document-list p { margin: 0; }
 .clearance-document-list input, .clearance-acknowledge input { accent-color: var(--nu-blue); }
 .clearance-empty-documents { margin: 27px 0 0; color: var(--text-secondary); font-size: 13px; font-style: italic; text-align: center; }
 .clearance-policy { width: min(755px, 100%); margin: -4px auto 14px; color: var(--nu-blue-dark); font-size: 12px; font-style: italic; line-height: 1.35; }

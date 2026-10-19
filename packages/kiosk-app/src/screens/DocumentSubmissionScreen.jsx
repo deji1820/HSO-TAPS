@@ -1,42 +1,9 @@
 import { useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
 import { lookupStudent, submitKioskDocument } from "../services/api.js";
+import { DOCUMENT_PURPOSES, DOCUMENT_PURPOSE_REQUIREMENTS } from "../data/documentPurposes.js";
 import "../styles/screens/DocumentSubmission.css";
 
-const CLEARANCE_PURPOSES = {
-  Student: [
-    "OJT Medical Clearance",
-    "Validation of Medical Certificate",
-    "Off-Campus Tour Medical Clearance",
-    "Sports Medical Clearance (U-WEEK NFG)",
-    "New Enrollee Clearance (Medical / Dental)",
-    "SHS Work Immersion",
-    "Completion of Medical Records (Continuing Students)",
-    "Issuance of Medical Certificate (Illness-Related)",
-    "Medical / Dental Consultation",
-  ],
-  Employee: [
-    "New Employee Clearance",
-    "Review of Annual Physical Exam (APE) Results",
-    "Validation of Medical Certificate",
-    "Issuance of Medical Certificate (Illness-Related)",
-    "Medical / Dental Consultation",
-  ],
-};
-
-const REQUIRED_DOCUMENTS = {
-  "OJT Medical Clearance": ["Updated Chest X-ray result issued within the last 6 months."],
-  "Validation of Medical Certificate": ["Outside medical certificate for official validation."],
-  "Off-Campus Tour Medical Clearance": ["Coordinate with HSO personnel before the appointment to confirm the complete medical records on file."],
-  "Sports Medical Clearance (U-WEEK NFG)": ["Updated Chest X-ray result issued within the last 6 months.", "Updated ECG result issued within the last 3 months, especially for competitive or physical sports."],
-  "New Enrollee Clearance (Medical / Dental)": ["Updated Chest X-ray result issued within the last 6 months.", "Physical and dental examination will be conducted on the booked appointment date."],
-  "SHS Work Immersion": ["Updated Chest X-ray result issued within the last 6 months."],
-  "Completion of Medical Records (Continuing Students)": ["Check NUIS clearance issues before visiting.", "If the X-ray is missing, bring an updated Chest X-ray result from within the last 6 months.", "If the dental exam is missing, attend the booked appointment.", "Coordinate with HSO personnel about other deficiencies."],
-  "Issuance of Medical Certificate (Illness-Related)": ["If you were seen by the clinic during the illness, include available diagnostic or laboratory results.", "If you were not seen by the clinic, submit an outside doctor's medical certificate and select Validation of Medical Certificate."],
-  "Medical / Dental Consultation": ["Bring any available diagnostic or laboratory results for the doctor or dentist to review."],
-  "New Employee Clearance": ["Photocopies of the basic five medical results: latest Chest X-ray, CBC, urinalysis, fecalysis, and drug test.", "Physical and dental examination will be conducted on the booked appointment date."],
-  "Review of Annual Physical Exam (APE) Results": ["If the APE was done at NU Fairview, coordinate with HSO personnel if printed results are needed.", "If the APE was done outside NU Fairview, submit a complete photocopy of the APE results."],
-};
 
 const DOCUMENT_TYPES = [
   "Medical Certificate / Clearance",
@@ -61,6 +28,13 @@ function fileContentType(file) {
   return ({ pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })[extension] || "application/octet-stream";
 }
 
+function localDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function DocumentSubmissionScreen({ initialStudent = null, onBack, onDone, isOnline = true }) {
   const [student, setStudent] = useState(initialStudent);
   const [studentId, setStudentId] = useState(initialStudent?.studentId || "");
@@ -82,6 +56,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [completed, setCompleted] = useState(false);
+  const latestAllowedDateOfBirth = localDateInputValue();
 
   async function verifyIdentity(event) {
     event.preventDefault();
@@ -129,6 +104,10 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     }
     if (!privacyAccepted || !declarationAccepted || files.length === 0) {
       setError("Confirm the privacy notice and document declaration, and attach at least one file.");
+      return;
+    }
+    if (dateOfBirth > latestAllowedDateOfBirth) {
+      setError("Date of birth cannot be in the future.");
       return;
     }
     if (!fullName.trim() || !sex || !dateOfBirth || !institutionalAffiliation.trim() || !purpose || !documentType || !examDate || (documentType === "Other" && !otherType.trim())) {
@@ -195,11 +174,11 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
             <label>Student ID / Employee ID<input required value={studentId} onChange={(event) => { setStudentId(event.target.value); setVerified(false); }} /></label>
             <label className="document-field-wide">Full name (Last Name, First Name, Middle Initial)<input required value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
             <label>Sex assigned at birth<select required value={sex} onChange={(event) => setSex(event.target.value)}><option value="">Select</option><option>Male</option><option>Female</option></select></label>
-            <label>Date of birth<input required type="date" value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} /></label>
+            <label>Date of birth<input required type="date" max={latestAllowedDateOfBirth} value={dateOfBirth} onChange={(event) => { setDateOfBirth(event.target.value); setError(""); }} /></label>
             <label>{affiliation === "Student" ? "Academic program / grade level" : "Department"}<input required value={institutionalAffiliation} onChange={(event) => setInstitutionalAffiliation(event.target.value)} /></label>
-            <label className="document-field-wide">Purpose<select required value={purpose} onChange={(event) => setPurpose(event.target.value)}><option value="">Select the reason for submitting</option>{CLEARANCE_PURPOSES[affiliation].map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="document-field-wide">Purpose<select required value={purpose} onChange={(event) => setPurpose(event.target.value)}><option value="">Select the reason for submitting</option>{DOCUMENT_PURPOSES[affiliation].map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
-          {purpose && <div className="document-requirements"><h3>Requirements for this purpose</h3><ul>{(REQUIRED_DOCUMENTS[purpose] || []).map((item) => <li key={item}>{item}</li>)}</ul></div>}
+          {purpose && <div className="document-requirements"><h3>Requirements for this purpose</h3><ul>{(DOCUMENT_PURPOSE_REQUIREMENTS[purpose] || []).map((item) => <li key={item}>{item}</li>)}</ul></div>}
         </fieldset>
 
         <fieldset className="document-card" disabled={!verified || loading}>
