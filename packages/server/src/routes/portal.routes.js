@@ -20,7 +20,7 @@ const requireClinicalRole = requireRole("nurse", "supervisor", "physician", "den
 const requireNurseOrSupervisor = requireRole("nurse", "supervisor");
 const requireDocumentRole = requireRole("nurse", "supervisor", "physician", "dentist");
 
-router.get("/inventory", requireNurseOrSupervisor, async (_req, res) => {
+router.get("/inventory", requireClinicalRole, async (_req, res) => {
   res.json(await MedicineInventory.find({ isActive: true }).sort({ name: 1 }));
 });
 router.post("/inventory", requireNurseOrSupervisor, async (req, res) => {

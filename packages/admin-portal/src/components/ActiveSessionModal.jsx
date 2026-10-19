@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { completeSession } from "../services/api.js";
+import useMedicineInventory, { inventoryItemLabel, isInventoryItemUnavailable } from "../hooks/useMedicineInventory.js";
 import "../styles/components/ActiveSessionModal.css";
 
 const PRIORITY_BADGE = {
@@ -45,7 +46,9 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
   const [plan, setPlan] = useState("");
 
   // Medication & Relief
-  const [itemDispensed, setItemDispensed] = useState("");
+  const [selectedMedicineId, setSelectedMedicineId] = useState("");
+  const { inventoryItems, inventoryLoading, inventoryError } = useMedicineInventory();
+  const selectedMedicine = inventoryItems.find((item) => item._id === selectedMedicineId);
   const [quantity, setQuantity] = useState("");
   const [otcInstructions, setOtcInstructions] = useState("");
   const [careProvided, setCareProvided] = useState("");
@@ -88,7 +91,7 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
         Object.assign(payload, { subjective, objective, assessment, plan });
       } else if (tab === "medication") {
         Object.assign(payload, {
-          otc: { itemDispensed, quantity, instructions: otcInstructions },
+          otc: { itemDispensed: selectedMedicine?.name || "", quantity: quantity && selectedMedicine?.unit ? `${quantity} ${selectedMedicine.unit}` : quantity, instructions: otcInstructions },
           firstAid: { careProvided, appliedTo, restRequired },
           safetyChecklist: {
             verifiedIdentityAndAllergies,
@@ -209,10 +212,15 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
             <div className="workstation-panel medication-panel">
               <div>
                 <h4 className="med-subheading">Over the Counter (OTC) Medicine:</h4>
-                <label className="field-label">Item Dispensed:</label>
-                <input className="text-input" value={itemDispensed} onChange={(e) => setItemDispensed(e.target.value)} />
-                <label className="field-label">Quantity</label>
-                <input className="text-input" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                <label className="field-label" htmlFor="inventory-medicine">Item Dispensed:</label>
+                <select id="inventory-medicine" className="text-input" value={selectedMedicineId} onChange={(e) => { setSelectedMedicineId(e.target.value); setQuantity(""); }}>
+                  <option value="">{inventoryLoading ? "Loading inventory…" : "Select an inventory item"}</option>
+                  {inventoryItems.map((item) => <option key={item._id} value={item._id} disabled={isInventoryItemUnavailable(item)}>{inventoryItemLabel(item)}</option>)}
+                </select>
+                {inventoryError && <p className="error-text">{inventoryError}</p>}
+                {!inventoryLoading && !inventoryItems.length && <p className="field-hint">No active inventory items are available.</p>}
+                <label className="field-label" htmlFor="medicine-quantity">Quantity{selectedMedicine?.unit ? ` (${selectedMedicine.unit})` : ""}</label>
+                <input id="medicine-quantity" className="text-input" type="number" min="1" max={selectedMedicine?.quantity || undefined} value={quantity} onChange={(e) => setQuantity(e.target.value)} disabled={!selectedMedicine || isInventoryItemUnavailable(selectedMedicine)} />
                 <label className="field-label">Instructions:</label>
                 <input className="text-input" value={otcInstructions} onChange={(e) => setOtcInstructions(e.target.value)} />
 
