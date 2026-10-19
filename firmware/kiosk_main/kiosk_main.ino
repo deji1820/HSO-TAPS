@@ -88,6 +88,10 @@ volatile bool bpUploadTaskRunning = false;
 uint32_t lastOmronReadingSignature = 0;
 int activeKioskSessionId = -1;
 volatile bool activeSessionNeedsBP = false;
+int lastHandledSensorRequestId = -1;
+int omronAttemptSessionId = -1;
+uint8_t omronAttemptsForSession = 0;
+static const uint8_t MAX_OMRON_ATTEMPTS_PER_SESSION = 2;
 
 struct OmronBPReading {
   int systolic = 0, diastolic = 0, pulse = 0;
@@ -129,16 +133,22 @@ bool updateOmronBPForSession(int sessionId, const OmronBPReading &reading) {
   if (sessionId < 0 || !reading.valid || WiFi.status() != WL_CONNECTED) return false;
   HTTPClient http;
   http.setTimeout(5000);
-  http.begin(String(SUPABASE_URL) + "?id=eq." + String(sessionId) + "&status=eq.completed");
+  http.begin(String(SUPABASE_URL) + "?id=eq." + String(sessionId) + "&status=eq.pending_sensor");
   addSupabaseHeaders(http);
-  String payload = "{\"systolic_mmhg\":" + String(reading.systolic) +
+  http.addHeader("Prefer", "return=representation");
+  String payload = "{\"status\":\"completed\",\"systolic_mmhg\":" + String(reading.systolic) +
     ",\"diastolic_mmhg\":" + String(reading.diastolic) +
     ",\"pulse_bpm\":" + String(reading.pulse) + "}";
   int code = http.sendRequest("PATCH", payload);
   String response = http.getString();
   http.end();
   Serial.printf("[Supabase] BP PATCH response: %d %s\n", code, response.c_str());
-  if (code >= 200 && code < 300) { pendingOmronBP = false; activeSessionNeedsBP = false; return true; }
+  if (code >= 200 && code < 300 && response.indexOf("\"id\"") >= 0) {
+    pendingOmronBP = false;
+    activeSessionNeedsBP = false;
+    Serial.println("[Supabase] BP reading saved and sensor session completed.");
+    return true;
+  }
   return false;
 }
 
@@ -203,6 +213,8 @@ void handleOmronBPReading() {
 
 void omronNotifyCallback(NimBLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool) {
   if (!length) return;
+  Serial.printf("[OMRON] BLE notification uuid=%s length=%u data=", characteristic->getUUID().toString().c_str(), (unsigned)length);
+  for (size_t i = 0; i < length; ++i) Serial.printf("%02X%s", data[i], i + 1 < length ? " " : "\n");
   if (characteristic->getUUID() == OMRON_B305_UUID) {
     if (length >= 6 && data[0] == 0x91 && data[1] == 0x00 && data[2] == 0x71 &&
         data[3] == 0x00 && data[4] == 0xF3 && data[5] == 0x6A) omronSessionAcknowledged = true;
@@ -336,6 +348,11 @@ void setupBLE() {
 
 void processOmronConnectionRequest() {
   if (!omronConnectRequested || !omronAdvertisedDevice) return;
+  if (omronAttemptSessionId != activeKioskSessionId) {
+    omronAttemptSessionId = activeKioskSessionId;
+    omronAttemptsForSession = 0;
+  }
+  omronAttemptsForSession++;
   NimBLEAdvertisedDevice *device = omronAdvertisedDevice;
   omronAdvertisedDevice = nullptr;
   omronConnectRequested = false;
@@ -343,11 +360,15 @@ void processOmronConnectionRequest() {
   delete device;
   Serial.printf("[OMRON] Connection flow returned: %s\n", ok ? "success" : "failure");
   if (!ok) {
-    // Do not reconnect on every advertisement after a failed/expired reading.
-    // Each BLE attempt blocks the main loop while the cuff is measured; a
-    // repeated retry loop would also starve RFID card polling indefinitely.
-    activeSessionNeedsBP = false;
-    Serial.println("[OMRON] BP attempt failed; automatic reconnect paused. Retry BP from the kiosk.");
+    // Permit one automatic retry for this request, but cap attempts so a
+    // missing cuff packet cannot repeatedly block RFID polling indefinitely.
+    bool retryAllowed = omronAttemptsForSession < MAX_OMRON_ATTEMPTS_PER_SESSION;
+    activeSessionNeedsBP = retryAllowed;
+    lastOmronAttemptMs = millis();
+    Serial.printf("[OMRON] BP attempt %u/%u failed for session=%d; %s.\n",
+                  omronAttemptsForSession, MAX_OMRON_ATTEMPTS_PER_SESSION,
+                  activeKioskSessionId,
+                  retryAllowed ? "one retry remains" : "retry from kiosk to start a new request");
   }
   // Keep BLE teardown and RFID recovery ahead of the HTTPS upload.
   if (omronClient && omronClient->isConnected()) omronClient->disconnect();
@@ -466,7 +487,8 @@ void updateSupabaseVitals(int id, const String &sensorRequired) {
   if (sensorRequired == "complete" || sensorRequired == "physical") {
     height = measureHeight(); weight = measureWeightFromScale(10000);
   }
-  String payload = "{\"status\":\"completed\",\"temp_c\":";
+  bool waitForBP = sensorRequired == "complete" || sensorRequired == "bloodPressure";
+  String payload = String("{\"status\":\"") + (waitForBP ? "pending_sensor" : "completed") + "\",\"temp_c\":";
   if ((sensorRequired == "complete" || sensorRequired == "temperature") && temp > 0) payload += String(temp, 2);
   else payload += "null";
   if (sensorRequired == "complete" || sensorRequired == "physical") {
@@ -496,11 +518,20 @@ void pollSupabaseForSensorRequests() {
       if (idEnd > idAt && end > start) {
         int requestedSessionId = body.substring(idAt + 5, idEnd).toInt();
         String sensorRequired = body.substring(start, end);
+        // Keep a BP request pending until a valid cuff result is uploaded.
+        // Don't re-run temperature/height capture for the same database row.
+        if (requestedSessionId == lastHandledSensorRequestId) {
+          http.end();
+          return;
+        }
         Serial.printf("[Supabase] Pending sensor request: id=%d, sensor_required=%s\n",
                       requestedSessionId, sensorRequired.c_str());
         activeKioskSessionId = requestedSessionId;
         activeSessionNeedsBP = sensorRequired == "complete" || sensorRequired == "bloodPressure";
+        omronAttemptSessionId = requestedSessionId;
+        omronAttemptsForSession = 0;
         lastOmronReadingSignature = 0;
+        lastHandledSensorRequestId = requestedSessionId;
         updateSupabaseVitals(requestedSessionId, sensorRequired);
       }
     } else if (millis() - lastNoPendingRequestLogMs >= 10000) {
@@ -540,6 +571,7 @@ void setup() {
   pinMode(US_TRIG_PIN, OUTPUT); pinMode(US_ECHO_PIN, INPUT); digitalWrite(US_TRIG_PIN, LOW);
   setupWiFiMulti(); setupBLE();
   Serial.println("ESP32 KIOSK READY: BLE SCALE + OMRON HEM-7140T1");
+  Serial.println("FIRMWARE BUILD: 2026-10-20-BP-PENDING-FIX");
 }
 
 void loop() {

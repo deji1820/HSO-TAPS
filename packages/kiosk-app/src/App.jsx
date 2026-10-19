@@ -500,7 +500,6 @@ export default function App() {
     if (patch.temperatureC != null) update.temp_c = patch.temperatureC;
     if (patch.heightCm != null) update.height_m = Number(patch.heightCm) / 100;
     if (patch.weightKg != null) update.weight_kg = patch.weightKg;
-    if (patch.bloodPressure != null) update.blood_pressure = patch.bloodPressure;
     if (patch.systolicMmhg != null) update.systolic_mmhg = patch.systolicMmhg;
     if (patch.diastolicMmhg != null) update.diastolic_mmhg = patch.diastolicMmhg;
     if (patch.pulseBpm != null) update.pulse_bpm = patch.pulseBpm;
@@ -1208,14 +1207,11 @@ async function handleScreeningOptionSelect(mode) {
         setSensorFailed(true);
         return;
       }
-      const pressure = finalReadings.bloodPressure ?? (finalReadings.systolicMmhg != null && finalReadings.diastolicMmhg != null
-        ? `${finalReadings.systolicMmhg}/${finalReadings.diastolicMmhg}` : null);
       const { error } = await supabase.from("kiosk_sessions").update({
         status: "mobile_readings_ready",
         temp_c: finalReadings.temperatureC ?? null,
         height_m: finalReadings.heightCm != null ? Number(finalReadings.heightCm) / 100 : null,
         weight_kg: finalReadings.weightKg ?? null,
-        blood_pressure: pressure,
         systolic_mmhg: finalReadings.systolicMmhg ?? null,
         diastolic_mmhg: finalReadings.diastolicMmhg ?? null,
         pulse_bpm: finalReadings.pulseBpm ?? null,
