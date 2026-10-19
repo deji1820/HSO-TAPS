@@ -38,3 +38,18 @@ export const bulkUpload = (rows, mode) => api.post("/students/bulk-upload", { ro
 export const getFormPipelines = () => api.get("/forms").then((r) => r.data);
 export const getSyncLog = () => api.get("/forms/sync-log").then((r) => r.data);
 export const getAnalyticsSummary = (days) => api.get("/analytics/summary", { params: { days } }).then((r) => r.data);
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const requestUrl = error.config?.url || "";
+    const isLoginRequest = /\/auth\/login\/?$/.test(requestUrl);
+    if (error.response?.status === 401 && !isLoginRequest) {
+      localStorage.removeItem("hsotap_token");
+      localStorage.removeItem("hsotap_user");
+      if (window.location.pathname !== "/login") {
+        window.location.replace("/login?session=expired");
+      }
+    }
+    return Promise.reject(error);
+  }
+);

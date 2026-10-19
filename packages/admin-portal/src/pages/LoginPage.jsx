@@ -26,7 +26,11 @@ export default function LoginPage({ onLoggedIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    new URLSearchParams(window.location.search).get("session") === "expired"
+      ? "Your session expired. Please log in again."
+      : ""
+  );
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
