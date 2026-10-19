@@ -101,6 +101,8 @@ export default function ScreeningReadingsScreen({
     if (key === "bloodPressure") return !readings.bloodPressure && readings.systolicMmhg == null && !bpNoReading;
     return readings[key] == null;
   }) || steps[steps.length - 1];
+  const showBpInstructions = currentStep.key === "bloodPressure" ||
+    (isResult && (mode === "complete" || mode === "bloodPressure"));
 
   return (
     <div className="kiosk-shell qhs-reading-screen">
@@ -111,6 +113,7 @@ export default function ScreeningReadingsScreen({
           <p>SERVICE: QUICK HEALTH SCREENING &gt; {MODE_LABELS[mode]}</p>
           <h1>Follow the prompts to measure your vitals</h1>
         </div>
+        <div className={`qhs-reading-layout${showBpInstructions ? " qhs-reading-layout--with-bp-help" : ""}`}>
         <section className="qhs-reading-panel">
           <h2>{isComplete ? "VITAL SIGNS AND PHYSICAL METRICS READINGS" : currentStep.title.toUpperCase()}</h2>
           {!isResult && <p className="qhs-instruction">{currentStep.text}</p>}
@@ -137,11 +140,24 @@ export default function ScreeningReadingsScreen({
           )}
           {sensorFailed && !isResult && !bpWaiting && !bpNoReading && <p className="qhs-sensor-error">Sensor readings are unavailable. Please ask clinic staff for assistance.</p>}
         </section>
+        {showBpInstructions && (
+          <aside className="qhs-bp-help" aria-label="Blood pressure monitor instructions">
+            <h2>How to send your blood pressure reading</h2>
+            <ol>
+              <li>Wrap the cuff snugly around your upper arm. Align its arrow with the pulse point on the inside of your arm.</li>
+              <li>Press <strong>Start</strong> and keep your arm still until the measurement finishes.</li>
+              <li>Wait 3 seconds, then press the <strong>Bluetooth</strong> button. Wait for its indicator to blink.</li>
+              <li>Press <strong>Start</strong> once to turn the blinking indicator off.</li>
+              <li>Press and hold the <strong>Bluetooth</strong> button until the monitor displays <strong>P</strong>.</li>
+              <li>Wait for your blood pressure result to appear on the kiosk.</li>
+            </ol>
+          </aside>
+        )}
         {isResult ? (
-          <>
+          <div className="qhs-result-actions">
             <button className="qhs-done" onClick={onDone}>Done <span aria-hidden="true">✓</span></button>
             <p className="qhs-autoclose">Auto-closes in {remaining}s...</p>
-          </>
+          </div>
         ) : (
           <div className="qhs-capture-actions">
             <button className="qhs-done" onClick={onRetry}>Restart readings</button>
@@ -149,6 +165,7 @@ export default function ScreeningReadingsScreen({
             <button className="qhs-done qhs-back" onClick={onBack}>Back to screening options</button>
           </div>
           )}
+        </div>
         <a className="qhs-faq" href="#faq" onClick={(event) => { event.preventDefault(); window.dispatchEvent(new CustomEvent("kiosk:faq")); }}>Frequently Asked Questions (FAQ’s)</a>
       </main>
     </div>
