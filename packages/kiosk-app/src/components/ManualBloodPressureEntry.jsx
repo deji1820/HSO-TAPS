@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "../styles/components/ManualBloodPressureEntry.css";
 
 export default function ManualBloodPressureEntry({ onSubmit }) {
   const [systolic, setSystolic] = useState("");

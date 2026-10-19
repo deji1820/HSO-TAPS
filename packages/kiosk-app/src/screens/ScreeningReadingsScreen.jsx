@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
+import ManualBloodPressureEntry from "../components/ManualBloodPressureEntry.jsx";
 import { classifyBP } from "../utils/bp.js";
 import "../styles/screens/Screening.css";
 
@@ -59,6 +60,7 @@ export default function ScreeningReadingsScreen({
   isResult = false,
   sensorFailed = false,
   onManual,
+  onManualBpSubmit,
   onDone,
   onBack,
   onRetry,
@@ -137,6 +139,9 @@ export default function ScreeningReadingsScreen({
               <Reading label="Weight:">{weight}</Reading>
               <Reading label="BMI:">{bmi ? `${bmi}  ${Number(bmi) < 18.5 ? "Underweight" : Number(bmi) < 25 ? "Normal" : Number(bmi) < 30 ? "Overweight" : "Obese"}` : "<<numerical body mass index>>  <<classification>>"}</Reading>
             </>
+          )}
+          {!isResult && currentStep.key === "bloodPressure" && !hasPressure && (
+            <ManualBloodPressureEntry onSubmit={onManualBpSubmit} />
           )}
           {sensorFailed && !isResult && !bpWaiting && !bpNoReading && <p className="qhs-sensor-error">Sensor readings are unavailable. Please ask clinic staff for assistance.</p>}
         </section>

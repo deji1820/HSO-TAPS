@@ -1634,6 +1634,7 @@ async function handleScreeningOptionSelect(mode) {
             bpNoReading={bpNoReading}
             bpWaiting={bpWaiting}
             onManual={handleManualScreeningEntry}
+            onManualBpSubmit={handleManualBpSubmit}
             onBack={handleCancelScreening}
             onRetry={handleRetryScreening}
             isOnline={isOnline}

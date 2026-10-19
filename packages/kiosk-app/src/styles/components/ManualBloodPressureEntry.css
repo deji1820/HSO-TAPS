@@ -1,0 +1,10 @@
+.wic-manual-bp { margin-top: 18px; padding: 16px; border: 2px solid #9aa8ba; border-radius: 8px; background: #f8fafc; color: #26354b; }
+.wic-manual-bp h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.wic-manual-bp > p { margin: 0 0 12px; }
+.wic-manual-bp-fields { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.wic-manual-bp-fields label { display: grid; gap: 6px; color: #26354b; font-weight: 700; }
+.wic-manual-bp-fields input { width: 100%; min-height: 50px; padding: 9px 12px; border: 2px solid #9aa8ba; border-radius: 6px; background: #fff; color: #172b4d; font: inherit; font-size: 1.1rem; }
+.wic-manual-bp-fields input:focus { outline: 3px solid #75aef4; border-color: #0756b5; }
+.wic-manual-bp .wic-manual-bp-submit { min-height: 52px; padding: 10px 18px; border: 0; border-radius: 8px; background: #0756b5; color: white; font-size: 1rem; font-weight: 700; cursor: pointer; }
+.wic-manual-bp .wic-manual-bp-error { margin: 0 0 10px; color: #b42318; font-weight: 700; }
+@media (max-width: 700px) { .wic-manual-bp-fields { grid-template-columns: 1fr; } }

@@ -101,9 +101,12 @@ export default function WalkInIntakeScreen({
                 : <span className="wic-vitals-value--pending">{sensorStep === "bloodPressure" ? "Waiting for blood pressure reading..." : "Waiting for temperature reading..."}</span>}
             </span>
           </div>
+          {!mobileMode && sensorStep === "bloodPressure" && !bloodPressure && (
+            <ManualBloodPressureEntry onSubmit={onManualBpSubmit} />
+          )}
         </div>
 
-        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get the {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} reading. Retry the sensor or ask clinic staff for help.</p><button type="button" onClick={onRetry}>Retry {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} scan</button>{sensorStep === "bloodPressure" && !mobileMode && <ManualBloodPressureEntry onSubmit={onManualBpSubmit} />}</div>}
+        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get the {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} reading. Retry the sensor or ask clinic staff for help.</p><button type="button" onClick={onRetry}>Retry {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} scan</button></div>}
 
         <button
           className="btn-kiosk btn-kiosk-primary"
