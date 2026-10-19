@@ -1,0 +1,47 @@
+/* Keep kiosk text comfortable to read at a standing distance. */
+#root > div:not(.mobile-checkin-app) {
+  font-size: 18px;
+}
+
+#root > div:not(.mobile-checkin-app) :is(
+  p,
+  li,
+  label,
+  small,
+  input,
+  select,
+  textarea,
+  th,
+  td,
+  button,
+  span,
+  [class*="hint"],
+  [class*="desc"],
+  [class*="subtitle"],
+  [class*="eyebrow"],
+  [class*="label"],
+  [class*="status"],
+  [class*="note"],
+  [class*="instruction"],
+  [class*="helper"],
+  [class*="policy"],
+  [class*="autoclose"]
+):not(.kiosk-header-dot):not(.service-card-icon):not(.wic-done-btn span):not(.qhs-done span):not(.apt-cal-nav):not(.apt-day):not(.apt-actions button):not(.apt-btn--back):not(.apt-btn--end):not(.apt-btn--single):not(.service-grid-back-btn):not(.wic-back-btn) {
+  font-size: max(16px, 1.08em) !important;
+  line-height: 1.45;
+}
+
+#root > div:not(.mobile-checkin-app) .apt-btn--back::after,
+#root > div:not(.mobile-checkin-app) .apt-actions button:last-child::after,
+#root > div:not(.mobile-checkin-app) .apt-btn--end::after,
+#root > div:not(.mobile-checkin-app) .apt-btn--single::after,
+#root > div:not(.mobile-checkin-app) .service-grid-back-btn::after,
+#root > div:not(.mobile-checkin-app) .wic-back-btn::after {
+  font-size: 16px !important;
+}
+
+@media (max-width: 700px) {
+  #root > div:not(.mobile-checkin-app) {
+    font-size: 17px;
+  }
+}
