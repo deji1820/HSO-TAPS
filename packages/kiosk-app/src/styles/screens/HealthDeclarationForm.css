@@ -1,0 +1,32 @@
+.health-declaration-screen { background: #f5f7fb; }
+.health-declaration-content { width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 32px 0 56px; }
+.health-declaration-content h1 { margin: 0 0 10px; color: #0756b5; font-size: clamp(2rem, 4vw, 2.8rem); }
+.health-declaration-content > .document-intro { margin-bottom: 24px; }
+.health-declaration-card { margin: 0 0 20px; padding: 22px 26px; border: 1px solid #dce3ee; border-radius: 12px; background: #fff; box-shadow: 0 3px 14px rgba(16, 30, 60, .05); }
+.health-declaration-card h2 { margin: 0 0 18px; padding-bottom: 10px; border-bottom: 1px solid #dce3ee; color: #163c76; font-size: 1.35rem; }
+.health-declaration-card h3 { margin: 20px 0 8px; color: #243b66; font-size: 1.08rem; }
+.health-declaration-card > p:not(.health-declaration-notice):not(.health-declaration-note) { color: #53627a; }
+.health-declaration-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.health-declaration-field { display: grid; align-content: start; gap: 7px; color: #24334b; font-size: 1rem; font-weight: 700; }
+.health-declaration-field input, .health-declaration-field select, .health-declaration-field textarea { width: 100%; min-height: 48px; box-sizing: border-box; padding: 10px 12px; border: 1px solid #9aa8ba; border-radius: 8px; background: #fff; color: #24334b; font: inherit; font-size: 1rem; }
+.health-declaration-field textarea { resize: vertical; }
+.health-declaration-field input:focus, .health-declaration-field select:focus, .health-declaration-field textarea:focus { outline: 3px solid #c8dcfa; border-color: #0756b5; }
+.health-declaration-wide { grid-column: 1 / -1; }
+.health-declaration-choice { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid #dce3ee; border-radius: 8px; color: #24334b; }
+.health-declaration-choice legend { padding: 0 5px; font-weight: 700; line-height: 1.4; }
+.health-declaration-choice label { display: inline-flex; align-items: center; gap: 8px; margin: 5px 20px 5px 0; font-size: 1rem; }
+.health-declaration-choice input, .health-declaration-check-grid input { width: 20px; height: 20px; accent-color: #0756b5; flex: 0 0 auto; }
+.health-declaration-check-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; }
+.health-declaration-check-grid label { display: flex; align-items: flex-start; gap: 9px; color: #24334b; line-height: 1.4; }
+.health-declaration-indicators { display: grid; gap: 10px; }
+.health-declaration-notice { margin: 0 0 16px; padding: 16px; border-left: 4px solid #d29b18; border-radius: 5px; background: #fff9e8; color: #674d04; font-size: 1rem; line-height: 1.55; white-space: pre-line; }
+.health-declaration-note { margin: 8px 0 0; color: #674d04; }
+.health-declaration-screen .document-actions { justify-content: space-between; gap: 12px; }
+.health-declaration-screen .document-actions button { min-height: 52px; }
+@media (max-width: 700px) {
+  .health-declaration-content { width: min(100% - 28px, 680px); padding-top: 24px; }
+  .health-declaration-card { padding: 17px; }
+  .health-declaration-grid, .health-declaration-check-grid { grid-template-columns: 1fr; }
+  .health-declaration-screen .document-actions { flex-direction: column-reverse; }
+  .health-declaration-screen .document-actions button { width: 100%; }
+}

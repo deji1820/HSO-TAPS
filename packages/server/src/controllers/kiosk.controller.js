@@ -106,8 +106,8 @@ export async function submitDocument(req, res) {
   const bytes = Buffer.from(fileData, "base64");
   if (!bytes.length) return res.status(400).json({ message: "The uploaded file is empty." });
   if (bytes.length > 12 * 1024 * 1024) return res.status(413).json({ message: "Files cannot exceed the current 12 MB server limit." });
-  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]);
-  if (contentType && !allowedTypes.has(contentType)) return res.status(415).json({ message: "Upload a PDF, JPG, PNG, or DOCX file." });
+  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/json"]);
+  if (contentType && !allowedTypes.has(contentType)) return res.status(415).json({ message: "Upload a PDF, JPG, PNG, DOCX, or JSON health declaration file." });
 
   const document = await ExternalDocument.create({
     student: student._id,
