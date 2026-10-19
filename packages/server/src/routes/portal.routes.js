@@ -10,6 +10,7 @@ import MedicalProfile from "../models/MedicalProfile.js";
 import PatientHistory from "../models/PatientHistory.js";
 import Announcement from "../models/Announcement.js";
 import MedicineInventory from "../models/MedicineInventory.js";
+import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -131,9 +132,15 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
 });
 router.get("/documents/:id/file", requireDocumentRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });
-  const document = await ExternalDocument.findById(req.params.id).select("name contentType fileData");
+  const document = await ExternalDocument.findById(req.params.id).select("documentTitle submissionDetails name contentType fileData");
   if (!document?.fileData) return res.status(404).json({ message: "File not found" });
-  res.type(document.contentType || "application/octet-stream").attachment(document.name).send(document.fileData);
+  const isLegacyDeclarationJson = document.contentType === "application/json" && /health status declaration/i.test(document.documentTitle || "");
+  const fileData = isLegacyDeclarationJson
+    ? healthDeclarationToPdf(document.submissionDetails?.healthDeclaration || JSON.parse(document.fileData.toString("utf8")))
+    : document.fileData;
+  const contentType = isLegacyDeclarationJson ? "application/pdf" : (document.contentType || "application/octet-stream");
+  const name = isLegacyDeclarationJson ? document.name.replace(/\.json$/i, ".pdf") : document.name;
+  res.type(contentType).attachment(name).send(fileData);
 });
 router.get("/announcement", async (_req, res) => {
   const announcement = await Announcement.findOneAndUpdate({ key: "dashboard" }, { $setOnInsert: { text: "Health Services Office announcements will appear here." } }, { upsert: true, new: true });

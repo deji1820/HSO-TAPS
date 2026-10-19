@@ -12,7 +12,8 @@ export async function openMedicalDocument(id, name, { print = false } = {}) {
 
     const objectUrl = URL.createObjectURL(blob);
     const doc = viewer.document;
-    doc.title = name || "Medical document";
+    const displayName = blob.type === "application/pdf" && /\.json$/i.test(name || "") ? name.replace(/\.json$/i, ".pdf") : name;
+    doc.title = displayName || "Medical document";
 
     const style = doc.createElement("style");
     style.textContent = "html,body{height:100%;margin:0;font:14px Arial,sans-serif;color:#172033}body{display:flex;flex-direction:column}.toolbar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f4f7fb;border-bottom:1px solid #ccd5e0}.filename{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.toolbar button,.toolbar a{font:inherit;padding:7px 12px;border:1px solid #174ea6;border-radius:5px;background:#fff;color:#174ea6;text-decoration:none;cursor:pointer}.viewer{flex:1;width:100%;border:0}";
@@ -21,10 +22,10 @@ export async function openMedicalDocument(id, name, { print = false } = {}) {
     toolbar.className = "toolbar";
     const label = doc.createElement("strong");
     label.className = "filename";
-    label.textContent = name || "Medical document";
+    label.textContent = displayName || "Medical document";
     const download = doc.createElement("a");
     download.href = objectUrl;
-    download.download = name || "medical-document";
+    download.download = displayName || "medical-document";
     download.textContent = "Download";
     const printButton = doc.createElement("button");
     printButton.type = "button";
@@ -32,7 +33,7 @@ export async function openMedicalDocument(id, name, { print = false } = {}) {
 
     const frame = doc.createElement("iframe");
     frame.className = "viewer";
-    frame.title = name || "Medical document";
+    frame.title = displayName || "Medical document";
     frame.src = objectUrl;
     printButton.addEventListener("click", () => {
       frame.contentWindow?.focus();

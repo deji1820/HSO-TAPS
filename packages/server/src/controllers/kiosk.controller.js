@@ -3,6 +3,7 @@ import VitalsLog from "../models/VitalsLog.js";
 import QueueEntry from "../models/QueueEntry.js";
 import ExternalDocument from "../models/ExternalDocument.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
+import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
 
 // Per HSO-TAP_SYSTEM_NOTES: Hypothermia < 35.5, Normal 35.5-37.5, Fever >= 37.8
 // (37.6-37.7 is undefined in the notes; treated as Normal here)
@@ -109,14 +110,31 @@ export async function submitDocument(req, res) {
   const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/json"]);
   if (contentType && !allowedTypes.has(contentType)) return res.status(415).json({ message: "Upload a PDF, JPG, PNG, DOCX, or JSON health declaration file." });
 
+  let storedBytes = bytes;
+  let storedContentType = contentType;
+  let storedName = name;
+  if (contentType === "application/json") {
+    if (!/health status declaration/i.test(title)) return res.status(415).json({ message: "JSON uploads are only accepted for Health Status Declaration forms." });
+    try {
+      const declaration = JSON.parse(bytes.toString("utf8"));
+      if (!declaration || typeof declaration !== "object" || Array.isArray(declaration)) throw new Error("Invalid form payload");
+      storedBytes = healthDeclarationToPdf(declaration);
+      storedContentType = "application/pdf";
+      storedName = name.replace(/\.json$/i, ".pdf");
+      if (storedName === name) storedName = "Health_Status_Declaration.pdf";
+    } catch {
+      return res.status(400).json({ message: "The health declaration form data is invalid." });
+    }
+  }
+
   const document = await ExternalDocument.create({
     student: student._id,
     documentTitle: title,
     formSource: "Kiosk Document Submission",
     category,
-    name,
-    contentType,
-    fileData: bytes,
+    name: storedName,
+    contentType: storedContentType,
+    fileData: storedBytes,
     examDate: new Date(examDate),
     submissionDetails: submissionDetails || {},
     status: "Pending",

@@ -189,7 +189,7 @@ function flattenFormPayload(payload, prefix = "") {
   });
 }
 
-function HealthStatusDeclarationTab({ submissions, documents, canReviewDocuments, updatingDocumentId, onStatusChange }) {
+function HealthStatusDeclarationTab({ submissions }) {
   return <div className="emr-health-declaration">
     <h2 className="section-title">Health Status Declaration</h2>
     {submissions.length ? submissions.map((submission) => {
@@ -198,8 +198,7 @@ function HealthStatusDeclarationTab({ submissions, documents, canReviewDocuments
         <header><strong>Submitted {formatDate(submission.createdAt)}</strong><span>{submission.rawPayload?.responderName || submission.rawPayload?.name || "Health Status Declaration"}</span></header>
         {answers.length ? <dl>{answers.map(([question, answer]) => <div key={question}><dt>{question.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{answer}</dd></div>)}</dl> : <p>No declaration answers were included in this submission.</p>}
       </article>;
-    }) : <div className="table-empty">No Health Status Declaration responses have been synced for this patient.</div>}
-    {documents?.length > 0 && <><h2 className="section-title">Attached Medical Forms</h2><DocumentsTab documents={documents} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={onStatusChange} /></>}
+    }) : <div className="table-empty">No nurse-verified Health Status Declaration is available for this patient.</div>}
   </div>;
 }
 
@@ -440,18 +439,14 @@ export default function EMRPage() {
       const [full, profiles, histories] = await Promise.all([getFullEmr(id), getMedicalProfiles(id), getPatientHistory(id)]);
       setRecord(full);
       setProfileHistory(profiles.map((profile) => ({ ...profile, id: profile._id })));
-      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission").map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.name, fileUrl: file.fileUrl, status: file.status, details: file.submissionDetails })));
-      const syncedHealthForms = (full.formSubmissions || []).filter((submission) => {
-        const formTitle = `${submission.formName || ""} ${submission.rawPayload?.documentTitle || ""}`.toLowerCase();
-        return /health status|declaration/.test(formTitle);
-      });
-      const kioskHealthForms = (full.documents || []).filter((document) => document.submissionDetails?.healthDeclaration).map((document) => ({
+      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission").map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name, fileUrl: file.fileUrl, status: file.status, details: file.submissionDetails })));
+      const kioskHealthForms = (full.documents || []).filter((document) => document.status === "Verified" && document.submissionDetails?.healthDeclaration).map((document) => ({
         _id: document._id,
         createdAt: document.submittedAt || document.createdAt,
         formName: "Kiosk Health Status Declaration",
         rawPayload: document.submissionDetails.healthDeclaration,
       }));
-      setHealthStatusSubmissions([...kioskHealthForms, ...syncedHealthForms]);
+      setHealthStatusSubmissions(kioskHealthForms);
       setFamilyHistory(histories.familyHistory || { answers: {}, others: "" });
       setMedicalHistory(histories.medicalHistory || { answers: {} });
       setEditingFamilyHistory(false);
@@ -602,7 +597,7 @@ export default function EMRPage() {
             {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
-            {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} documents={record.documents?.filter((document) => /health status|declaration|medical form/i.test(document.documentTitle || "") && !document.submissionDetails?.healthDeclaration)} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />}
+            {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} />}
             {tab === "files" && <><h2 className="section-title">Medical Document Submissions</h2><MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /><h2 className="section-title">Synced Medical Files</h2><DocumentsTab documents={record.documents} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /></>}
           </div>
         </div>
