@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import "../styles/components/Layout.css";
 import { isClinicalProvider, normalizeRole } from "../utils/roles.js";
+import UiScaleControl from "./UiScaleControl.jsx";
 
 /* Small inline icon set — no external icon library needed */
 const icons = {
@@ -130,6 +131,7 @@ export default function Layout({ user, onLogout, children }) {
           <div className="topbar-spacer" />
 
           <div className="topbar-actions">
+            <UiScaleControl />
             <button className="icon-btn" aria-label="Notifications">{icons.bell}</button>
 
             <div className="topbar-user" ref={menuRef}>

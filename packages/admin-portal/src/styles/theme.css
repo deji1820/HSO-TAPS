@@ -34,6 +34,8 @@
 
 * { box-sizing: border-box; }
 html { font-size: 17px; }
+#root { zoom: var(--ui-scale, 1.1); }
+:root { --ui-scale: 1.1; }
 
 body {
   margin: 0;

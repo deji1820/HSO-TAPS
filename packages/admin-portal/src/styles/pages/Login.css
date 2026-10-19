@@ -151,3 +151,7 @@
   .login-card h1 { font-size: 25px; }
   .login-card > p { margin-bottom: 26px; }
 }
+.login-screen { position: relative; }
+.login-screen { overflow: auto; }
+.login-screen > .ui-scale-control { position: absolute; top: 12px; right: 16px; z-index: 3; }
+.login-screen .ui-scale-control { border-color: rgba(255, 255, 255, .6); color: #fff; }

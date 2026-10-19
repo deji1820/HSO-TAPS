@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import UiScaleControl from "./UiScaleControl.jsx";
 import "../styles/components/KioskHeader.css";
 
 // Matches PDF header: NU crest, "NU FAIRVIEW / Health Services Office",
@@ -35,6 +36,7 @@ export default function KioskHeader({ isOnline = true }) {
         <span className="kiosk-header-divider" />
         <span className="kiosk-header-date">{date}</span>
         <span className={"kiosk-header-dot" + (isOnline ? "" : " offline")} />
+        <UiScaleControl />
       </div>
     </header>
   );

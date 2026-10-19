@@ -75,3 +75,32 @@
   background: var(--danger);
   box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.25);
 }
+.ui-scale-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 255, 255, .4);
+}
+.ui-scale-control button {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.ui-scale-control button:disabled { opacity: .45; cursor: not-allowed; }
+.ui-scale-control button:focus-visible { outline: 2px solid var(--nu-gold); outline-offset: 2px; }
+.ui-scale-control span { min-width: 44px; text-align: center; font-size: 13px; font-weight: 700; }
+@media (max-width: 640px) {
+  .ui-scale-control { gap: 2px; margin-left: 3px; padding-left: 3px; }
+  .ui-scale-control button { min-width: 28px; min-height: 28px; font-size: 18px; }
+  .ui-scale-control span { min-width: 36px; font-size: 11px; }
+}

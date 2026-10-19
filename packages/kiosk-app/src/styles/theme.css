@@ -31,6 +31,9 @@ html, body, #root {
   margin: 0;
 }
 
+:root { --ui-scale: 1.1; }
+#root > div { zoom: var(--ui-scale); }
+
 body {
   font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg-page);

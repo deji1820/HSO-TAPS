@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getQueueBoard } from "../services/api.js";
+import UiScaleControl from "../components/UiScaleControl.jsx";
 import "../styles/pages/QueueBoard.css";
 
 export default function QueueBoardPage() {
@@ -41,7 +42,7 @@ export default function QueueBoardPage() {
   return <main className="queue-board">
     <header className="queue-board-header">
       <div className="queue-board-brand"><span className="queue-board-mark">NU</span><div><strong>NU FAIRVIEW</strong><small>Health Services Office</small></div></div>
-      <div className="queue-board-live"><span className={"queue-board-live-dot" + (error ? " queue-board-live-dot--error" : "")} />{error ? "Reconnecting" : "Live queue"}</div>
+      <div className="queue-board-live"><UiScaleControl /><span className={"queue-board-live-dot" + (error ? " queue-board-live-dot--error" : "")} />{error ? "Reconnecting" : "Live queue"}</div>
     </header>
     <section className="queue-board-intro">
       <p>HEALTH SERVICES OFFICE</p>

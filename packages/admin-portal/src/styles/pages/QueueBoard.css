@@ -6,6 +6,8 @@
 .queue-board-brand strong { font-size: 1rem; letter-spacing: .04em; }
 .queue-board-brand small { margin-top: 2px; color: #5d6e89; }
 .queue-board-live { display: flex; align-items: center; gap: 8px; color: #49617f; font-size: .9rem; }
+.queue-board-live .ui-scale-control { border-color: #cbd5e3; color: #173b87; }
+.queue-board-live .ui-scale-control button:hover:not(:disabled) { background: #e8eef9; }
 .queue-board-live-dot { width: 10px; height: 10px; border-radius: 50%; background: #25a76a; box-shadow: 0 0 0 4px #d9f2e5; }
 .queue-board-live-dot--error { background: #cf3f46; box-shadow: 0 0 0 4px #f8dfe0; }
 .queue-board-intro { max-width: 780px; margin: clamp(28px, 5vh, 54px) auto 30px; text-align: center; }

@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../services/api.js";
+import UiScaleControl from "../components/UiScaleControl.jsx";
 import "../styles/pages/Login.css";
 
 const eyeOpen = (
@@ -57,6 +58,7 @@ export default function LoginPage({ onLoggedIn }) {
 
   return (
     <div className="login-screen">
+      <UiScaleControl />
       <section className="login-brand" aria-label="National University">
         <img className="login-brand-crest" src="/assets/nu-crest.png" alt="National University crest" />
         <div className="login-brand-wordmark">
