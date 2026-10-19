@@ -177,14 +177,31 @@ function ProfileValue({ label, value }) {
 }
 
 const OMIT_FORM_FIELDS = new Set(["studentid", "documenttitle", "fileurl", "submittedat"]);
+const HEALTH_INDICATOR_QUESTIONS = [
+  "Do you have any musculo-skeletal injury (e.g., fracture, ligament tear)?",
+  "Do you have any allergies (e.g., food, medication)?",
+  "Do you have any mental or behavioral health problems?",
+  "Have you had any previous surgical procedures?",
+  "Do you have an ongoing medical condition?",
+  "Are you currently taking any medication?",
+  "Have you ever been hospitalized for more than 1 day?",
+  "Has a doctor ever denied or restricted your participation in sports or physical activities?",
+  "Have you ever passed out or felt dizzy during or after exercise?",
+  "Have you ever felt discomfort, pain, or pressure in your chest during exercise?",
+  "Are you a smoker or vape user?",
+  "Do you drink alcoholic beverages?",
+];
 function flattenFormPayload(payload, prefix = "") {
   if (!payload || typeof payload !== "object") return [];
   return Object.entries(payload).flatMap(([key, value]) => {
     if (OMIT_FORM_FIELDS.has(key.toLowerCase())) return [];
-    const label = prefix ? `${prefix} / ${key}` : key;
+    const isHealthIndicator = prefix === "healthIndicators";
+    const label = isHealthIndicator
+      ? (/^\d+$/.test(key) ? HEALTH_INDICATOR_QUESTIONS[Number(key) - 1] || key : key)
+      : prefix ? `${prefix} / ${key}` : key;
     if (value == null || value === "") return [];
     if (Array.isArray(value)) return [[label, value.map((item) => typeof item === "object" ? JSON.stringify(item) : String(item)).join(", ")]];
-    if (typeof value === "object") return flattenFormPayload(value, label);
+    if (typeof value === "object") return flattenFormPayload(value, isHealthIndicator ? "healthIndicators" : label);
     return [[label, String(value)]];
   });
 }
@@ -196,7 +213,7 @@ function HealthStatusDeclarationTab({ submissions }) {
       const answers = flattenFormPayload(submission.rawPayload || {}).filter(([label]) => !/^(id|response id|responder email)$/i.test(label));
       return <article className="emr-health-submission" key={submission._id}>
         <header><strong>Submitted {formatDate(submission.createdAt)}</strong><span>{submission.rawPayload?.responderName || submission.rawPayload?.name || "Health Status Declaration"}</span></header>
-        {answers.length ? <dl>{answers.map(([question, answer]) => <div key={question}><dt>{question.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{answer}</dd></div>)}</dl> : <p>No declaration answers were included in this submission.</p>}
+        {answers.length ? <dl>{answers.map(([question, answer]) => <div key={question}><dt>{question.includes("?") ? question : question.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{answer}</dd></div>)}</dl> : <p>No declaration answers were included in this submission.</p>}
       </article>;
     }) : <div className="table-empty">No nurse-verified Health Status Declaration is available for this patient.</div>}
   </div>;

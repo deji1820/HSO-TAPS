@@ -75,7 +75,7 @@ export default function HealthDeclarationFormScreen({ initialData, onBack, onCom
     hasDisability: "",
     specifiedDisability: "",
     medicalConditions: initialData.medicalConditions || [],
-    healthIndicators: { ...Object.fromEntries(HEALTH_INDICATORS.map((_, index) => [`${index + 1}`, ""])), ...(initialData.healthIndicators || {}) },
+    healthIndicators: Object.fromEntries(HEALTH_INDICATORS.map((question, index) => [question, initialData.healthIndicators?.[question] ?? initialData.healthIndicators?.[String(index + 1)] ?? ""])),
     treatmentConsent: "",
     treatmentSignature: "",
     travelRestrictionsOrIssues: "",
@@ -155,7 +155,7 @@ export default function HealthDeclarationFormScreen({ initialData, onBack, onCom
           <p>Select all that apply.</p>
           <div className="health-declaration-check-grid">{MEDICAL_CONDITIONS.map((condition) => <label key={condition}><input type="checkbox" checked={form.medicalConditions.includes(condition)} onChange={(event) => updateCondition(condition, event.target.checked)} />{condition}</label>)}</div>
           <h3>3.2 Health Screen Indicators</h3>
-          <div className="health-declaration-indicators">{HEALTH_INDICATORS.map((question, index) => <fieldset className="health-declaration-choice" key={question}><legend>{question}</legend>{["Yes", "No"].map((option) => <label key={option}><input type="radio" name={`health-indicator-${index}`} value={option} checked={form.healthIndicators[String(index + 1)] === option} onChange={() => setForm((current) => ({ ...current, healthIndicators: { ...current.healthIndicators, [String(index + 1)]: option } }))} required />{option}</label>)}</fieldset>)}</div>
+          <div className="health-declaration-indicators">{HEALTH_INDICATORS.map((question, index) => <fieldset className="health-declaration-choice" key={question}><legend>{question}</legend>{["Yes", "No"].map((option) => <label key={option}><input type="radio" name={`health-indicator-${index}`} value={option} checked={form.healthIndicators[question] === option} onChange={() => setForm((current) => ({ ...current, healthIndicators: { ...current.healthIndicators, [question]: option } }))} required />{option}</label>)}</fieldset>)}</div>
         </section>
 
         <section className="health-declaration-card">
