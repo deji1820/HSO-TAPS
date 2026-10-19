@@ -35,7 +35,6 @@
 #root > div:not(.mobile-checkin-app) .apt-actions button:last-child::after,
 #root > div:not(.mobile-checkin-app) .apt-btn--end::after,
 #root > div:not(.mobile-checkin-app) .apt-btn--single::after,
-#root > div:not(.mobile-checkin-app) .service-grid-back-btn::after,
 #root > div:not(.mobile-checkin-app) .wic-back-btn::after {
   font-size: 16px !important;
 }
