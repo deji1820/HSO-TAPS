@@ -296,7 +296,8 @@ bool connectToOmron(NimBLEAdvertisedDevice *device) {
   Serial.printf("[OMRON] Connecting to %s (timeout 30 s).\n",
                 device->getAddress().toString().c_str());
   if (!omronClient->connect(device)) {
-    Serial.println("[OMRON] BLE connect failed before service discovery.");
+    Serial.printf("[OMRON] BLE connect failed before service discovery; NimBLE error=%d.\n",
+                  omronClient->getLastError());
     return false;
   }
   Serial.println("[OMRON] BLE connected; discovering service.");
@@ -386,7 +387,17 @@ void setupBLE() {
 
 void processOmronConnectionRequest() {
   if (!omronConnectRequested || !omronAdvertisedDevice) return;
-  if (pBLEScan && pBLEScan->isScanning()) pBLEScan->stop();
+  if (pBLEScan && pBLEScan->isScanning()) {
+    pBLEScan->stop();
+    unsigned long stopStartedAt = millis();
+    while (pBLEScan->isScanning() && millis() - stopStartedAt < 2000) delay(10);
+    if (pBLEScan->isScanning()) {
+      Serial.println("[BLE] Scan did not stop within 2 s; deferring Omron connection.");
+      lastOmronAttemptMs = millis();
+      return;
+    }
+    delay(250); // Let NimBLE finish scan teardown before starting the connection.
+  }
   if (omronAttemptSessionId != activeKioskSessionId) {
     omronAttemptSessionId = activeKioskSessionId;
     omronAttemptsForSession = 0;
