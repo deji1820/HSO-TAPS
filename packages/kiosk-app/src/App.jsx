@@ -365,7 +365,10 @@ export default function App() {
   useEffect(() => {
     const stop = startHealthMonitor((online) => {
       setIsOnline(online);
-      if (!online && !mobileSessionToken) {
+      // BP capture uses Supabase directly for sensor requests/readings. A brief
+      // backend health-check failure must not replace that active screen before
+      // the cuff has time to finish and its reading can arrive.
+      if (!online && !mobileSessionToken && stepRef.current !== "capturing") {
         setStep("offline");
       } else if (online) {
         setStep((curr) => (curr === "offline" ? "welcome" : curr));
