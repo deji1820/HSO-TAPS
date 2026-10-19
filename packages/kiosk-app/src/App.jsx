@@ -1073,6 +1073,7 @@ async function handleScreeningOptionSelect(mode) {
         setBpWaiting(false);
         setBpNoReading(true);
         setSensorFailed(true);
+        cancelPendingSensorRequest("blood-pressure timeout");
       }, BP_READING_TIMEOUT_MS);
     }
     const sensorMode = mode === "bmi" ? "physical" : mode;
@@ -1176,7 +1177,20 @@ async function handleScreeningOptionSelect(mode) {
     captureTimerRef.current = setTimeout(() => {
       console.warn("[triggerHardwareSensors] No sensor data received from hardware within timeout.");
       setSensorFailed(true);
+      cancelPendingSensorRequest("sensor timeout");
     }, timeoutMs);
+  }
+
+  function cancelPendingSensorRequest(reason) {
+    const sessionId = currentSessionIdRef.current;
+    if (!sessionId || !supabase) return;
+    currentSessionIdRef.current = null;
+    void supabase.from("kiosk_sessions").update({ status: "cancelled" })
+      .eq("id", sessionId).eq("status", "pending_sensor")
+      .then(({ error }) => {
+        if (error) console.warn(`[sensor timeout] Could not cancel ${reason} session ${sessionId}:`, error);
+        else console.info(`[sensor timeout] Cancelled ${reason} session ${sessionId}.`);
+      });
   }
 
   serviceSensorRequestRef.current = (mode) => {
