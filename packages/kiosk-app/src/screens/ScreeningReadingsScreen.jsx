@@ -83,6 +83,8 @@ export default function ScreeningReadingsScreen({
   const meters = readings.heightCm != null ? `${(Number(readings.heightCm) > 3 ? Number(readings.heightCm) / 100 : Number(readings.heightCm)).toFixed(2)} m` : "<<height in meters>>";
   const weight = readings.weightKg != null ? `${Number(readings.weightKg).toFixed(2)} kg` : "<<weight in kg>>";
   const bmi = bmiValue(readings.heightCm, readings.weightKg);
+  const hasPressure = readings.bloodPressure != null ||
+    (readings.systolicMmhg != null && readings.diastolicMmhg != null);
   const isComplete = mode === "complete";
   const steps = mode === "complete"
     ? [
