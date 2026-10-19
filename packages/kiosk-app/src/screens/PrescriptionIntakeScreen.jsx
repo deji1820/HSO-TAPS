@@ -16,6 +16,9 @@ export default function PrescriptionIntakeScreen({
   selectedSymptoms,
   safetyAnswers,
   temperatureC,
+  bloodPressure,
+  bloodPressureClassification,
+  sensorStep,
   mobileMode = false,
   onTemperatureChange,
   sensorFailed = false,
@@ -30,7 +33,7 @@ export default function PrescriptionIntakeScreen({
 }) {
   const temperature = temperatureC == null ? null : Number(temperatureC);
   const tempClass = temperature == null ? null : temperature < 35.5 ? "Hypothermia" : temperature >= 37.8 ? "Fever" : "Normal";
-  const canContinue = (mobileMode || temperature != null) && selectedSymptoms.length > 0 && (!selectedSymptoms.includes("Others") || otherText.trim().length > 0) && SAFETY_QUESTIONS.every((question) => safetyAnswers[question.id] != null);
+  const canContinue = (mobileMode || (temperature != null && bloodPressure != null)) && selectedSymptoms.length > 0 && (!selectedSymptoms.includes("Others") || otherText.trim().length > 0) && SAFETY_QUESTIONS.every((question) => safetyAnswers[question.id] != null);
 
   return (
     <div className="kiosk-shell wic-screen med-screen">
@@ -61,7 +64,7 @@ export default function PrescriptionIntakeScreen({
           </label>}
         </section>
 
-        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get a temperature reading. Retry the sensor or go back to service selection.</p><button type="button" onClick={onRetry}>Retry temperature scan</button></div>}
+        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get the {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} reading. Retry the sensor or go back to service selection.</p><button type="button" onClick={onRetry}>Retry {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} scan</button></div>}
 
         <section className="med-panel med-safety-panel">
           <h2>PATIENT SAFETY SCREENING</h2>
@@ -81,7 +84,7 @@ export default function PrescriptionIntakeScreen({
           <h2>MANDATORY VITAL SIGNS INTAKE</h2>
           <p className="med-instruction">Please position your right wrist in front of the temperature sensor and your left arm into the blood pressure cuff to acquire your vital signs</p>
           <div className="med-vital-row"><strong>Temperature:</strong>{mobileMode ? <div className="mobile-optional-reading"><input aria-label="Optional temperature reading in degrees Celsius" type="number" inputMode="decimal" min="25" max="45" step="0.1" value={temperature ?? ""} onChange={(event) => onTemperatureChange?.(event.target.value === "" ? null : Number(event.target.value))} placeholder="Optional °C reading" /><small>Optional — enter a reading provided by clinic staff.</small></div> : <span className={tempClass && tempClass !== "Normal" ? "med-abnormal" : ""}>{temperature == null ? "<<temperature in degrees celcius>>  <<classification>>" : `${temperature.toFixed(1)}°C  ${tempClass}`}</span>}</div>
-          <div className="med-vital-row"><strong>Blood Pressure:</strong><span>&lt;systolic/diastolic pressure in mmHg&gt;  &lt;classification&gt;</span></div>
+          <div className="med-vital-row"><strong>Blood Pressure:</strong><span>{mobileMode ? "Please complete blood pressure at the kiosk." : bloodPressure ? `${bloodPressure} mmHg${bloodPressureClassification ? ` — ${bloodPressureClassification}` : ""}` : sensorStep === "bloodPressure" ? "Waiting for blood pressure reading..." : "Waiting for temperature reading..."}</span></div>
         </section>
 
         <div className="med-actions">

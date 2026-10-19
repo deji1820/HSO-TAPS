@@ -31,6 +31,9 @@ export default function WalkInIntakeScreen({
   otherText = "",
   onOtherTextChange,
   temperatureC,          // number | null, from sensor
+  bloodPressure,
+  bloodPressureClassification,
+  sensorStep,
   mobileMode = false,
   onTemperatureChange,
   sensorFailed = false,
@@ -42,7 +45,7 @@ export default function WalkInIntakeScreen({
 }) {
   const tempClass = classifyTemp(temperatureC);
   const isAbnormal = tempClass != null && tempClass !== "Normal";
-  const canContinue = (mobileMode || temperatureC != null) && selectedComplaints.length > 0 && (!selectedComplaints.includes("others") || otherText.trim().length > 0);
+  const canContinue = (mobileMode || (temperatureC != null && bloodPressure != null)) && selectedComplaints.length > 0 && (!selectedComplaints.includes("others") || otherText.trim().length > 0);
 
   return (
     <div className="kiosk-shell wic-screen wic-screen--intake">
@@ -90,11 +93,15 @@ export default function WalkInIntakeScreen({
             </span>}
 
             <span className="wic-vitals-label">Blood Pressure:</span>
-            <span className="wic-vitals-value--pending">Manual entry required (not yet wired to kiosk)</span>
+            <span className="wic-vitals-value">
+              {mobileMode ? "Please complete blood pressure at the kiosk." : bloodPressure
+                ? `${bloodPressure} mmHg${bloodPressureClassification ? ` — ${bloodPressureClassification}` : ""}`
+                : <span className="wic-vitals-value--pending">{sensorStep === "bloodPressure" ? "Waiting for blood pressure reading..." : "Waiting for temperature reading..."}</span>}
+            </span>
           </div>
         </div>
 
-        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get a temperature reading. Retry the sensor or go back to service selection.</p><button type="button" onClick={onRetry}>Retry temperature scan</button></div>}
+        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get the {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} reading. Retry the sensor or go back to service selection.</p><button type="button" onClick={onRetry}>Retry {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} scan</button></div>}
 
         <button
           className="btn-kiosk btn-kiosk-primary"

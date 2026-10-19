@@ -42,7 +42,7 @@ const standaloneDocumentSubmission = new URLSearchParams(window.location.search)
 
 // Which readings each screening mode needs before we can move to the result screen
 const REQUIRED_FIELDS = {
-  complete: ["temperatureC", "heightCm", "weightKg"],
+  complete: ["temperatureC", "heightCm", "weightKg", "bloodPressure"],
   temperature: ["temperatureC"],
   bloodPressure: ["bloodPressure"],
   physical: ["heightCm", "weightKg"],
@@ -91,6 +91,7 @@ export default function App() {
   const [medicineOtherText, setMedicineOtherText] = useState("");
   const [serviceSessionId, setServiceSessionId] = useState(null);
   const [serviceSessionReady, setServiceSessionReady] = useState(false);
+  const [serviceSensorStep, setServiceSensorStep] = useState(null);
 
   const bridgeRef = useRef(null);
   const deviceEventHandlerRef = useRef(null);
@@ -104,6 +105,9 @@ export default function App() {
   const currentSessionIdRef = useRef(null);
   const mobileSensorSessionIdRef = useRef(null);
   const bpTimeoutRef = useRef(null);
+  const activeSensorModeRef = useRef(null);
+  const serviceSensorFlowRef = useRef(null);
+  const serviceSensorRequestRef = useRef(null);
 
   useEffect(() => {
     if (!mobileSessionToken) return undefined;
@@ -302,7 +306,7 @@ export default function App() {
             if (row.status === "mobile_readings_ready") setStep("mobileSensorReview");
             return;
           }
-          if (stepRef.current !== "capturing") return;
+          if (stepRef.current !== "capturing" && stepRef.current !== "walkInIntake" && stepRef.current !== "medicineIntake") return;
           const { height_m, temp_c, weight_kg, blood_pressure, systolic_mmhg, diastolic_mmhg, pulse_bpm, bp_classification } = payload.new;
           const patch = {};
           if (temp_c != null) patch.temperatureC = temp_c;
@@ -320,18 +324,34 @@ export default function App() {
               : classifyBP(systolic_mmhg, diastolic_mmhg);
           }
 
-          if (pressure != null) {
-            clearTimeout(bpTimeoutRef.current);
-            bpTimeoutRef.current = null;
-            setBpWaiting(false);
-            setBpNoReading(false);
-          }
-
           if (Object.keys(patch).length > 0) {
+            const allowedFields = {
+              temperature: ["temperatureC"],
+              physical: ["heightCm", "weightKg"],
+              bloodPressure: ["bloodPressure", "systolicMmhg", "diastolicMmhg", "pulseBpm", "bloodPressureClassification"],
+              complete: ["temperatureC", "heightCm", "weightKg", "bloodPressure", "systolicMmhg", "diastolicMmhg", "pulseBpm", "bloodPressureClassification"],
+            }[activeSensorModeRef.current] || [];
+            const acceptedPatch = Object.fromEntries(Object.entries(patch).filter(([field]) => allowedFields.includes(field)));
+            if (!Object.keys(acceptedPatch).length) return;
+            if (acceptedPatch.bloodPressure != null) {
+              clearTimeout(bpTimeoutRef.current);
+              bpTimeoutRef.current = null;
+              setBpWaiting(false);
+              setBpNoReading(false);
+            }
             clearTimeout(captureTimerRef.current);
             setSensorFailed(false);
-            setReadings((prev) => ({ ...prev, ...patch }));
-            if (!mobileSessionToken && mobileSensorSessionIdRef.current && String(payload.new?.id) === String(currentSessionIdRef.current)) void publishMobileReadingPatch(patch);
+            setReadings((prev) => ({ ...prev, ...acceptedPatch }));
+            if (acceptedPatch.bloodPressure != null) {
+              clearTimeout(bpTimeoutRef.current);
+              bpTimeoutRef.current = null;
+              setBpWaiting(false);
+              setBpNoReading(false);
+              setServiceSensorStep(null);
+              serviceSensorFlowRef.current = null;
+            }
+            if (acceptedPatch.temperatureC != null && serviceSensorFlowRef.current) serviceSensorRequestRef.current?.("bloodPressure");
+            if (!mobileSessionToken && mobileSensorSessionIdRef.current && String(payload.new?.id) === String(currentSessionIdRef.current)) void publishMobileReadingPatch(acceptedPatch);
           }
         }
       )
@@ -443,6 +463,9 @@ export default function App() {
     setResultQueueNumber(null);
     setFlowType(null);
     setConsultSubType(null);
+    serviceSensorFlowRef.current = null;
+    activeSensorModeRef.current = null;
+    setServiceSensorStep(null);
     setCheckInInfo(null);
     setAppointmentSelection(null);
     setClearanceAppointmentPurpose(null);
@@ -510,7 +533,7 @@ export default function App() {
       return;
     }
 
-    if (stepRef.current !== "capturing" && stepRef.current !== "medicineIntake") return;
+    if (stepRef.current !== "capturing" && stepRef.current !== "medicineIntake" && stepRef.current !== "walkInIntake") return;
 
     const fieldMap = {
       temperature_reading: { temperatureC: evt.celsius },
@@ -527,6 +550,14 @@ export default function App() {
     };
     const patch = fieldMap[evt.type];
     if (!patch || Object.values(patch).every((value) => value == null)) return;
+    const acceptedFields = {
+      temperature: ["temperatureC"],
+      physical: ["heightCm", "weightKg"],
+      bloodPressure: ["bloodPressure", "systolicMmhg", "diastolicMmhg", "pulseBpm", "bloodPressureClassification"],
+      complete: ["temperatureC", "heightCm", "weightKg", "bloodPressure", "systolicMmhg", "diastolicMmhg", "pulseBpm", "bloodPressureClassification"],
+    }[activeSensorModeRef.current] || [];
+    const acceptedPatch = Object.fromEntries(Object.entries(patch).filter(([field, value]) => acceptedFields.includes(field) && value != null));
+    if (!Object.keys(acceptedPatch).length) return;
 
     if (evt.type === "blood_pressure_reading" && patch.bloodPressure != null) {
       clearTimeout(captureTimerRef.current);
@@ -537,8 +568,15 @@ export default function App() {
       setSensorFailed(false);
     }
 
-    setReadings((prev) => ({ ...prev, ...patch }));
-    if (mobileSensorSessionIdRef.current) void publishMobileReadingPatch(patch);
+    setReadings((prev) => ({ ...prev, ...acceptedPatch }));
+    if (acceptedPatch.bloodPressure != null) {
+      setBpWaiting(false);
+      setBpNoReading(false);
+      setServiceSensorStep(null);
+      serviceSensorFlowRef.current = null;
+    }
+    if (acceptedPatch.temperatureC != null && serviceSensorFlowRef.current) serviceSensorRequestRef.current?.("bloodPressure");
+    if (mobileSensorSessionIdRef.current) void publishMobileReadingPatch(acceptedPatch);
   }
 
   deviceEventHandlerRef.current = handleDeviceEvent;
@@ -617,6 +655,7 @@ function handleServiceSelect(value) {
     setMedicineSymptoms([]);
     setMedicineSafetyAnswers({});
     setStep("medicineIntake");
+    serviceSensorFlowRef.current = mobileMode ? null : "medicine";
     if (!mobileMode) triggerHardwareSensors("temperature", "Prescription/OTC Pickup");
   } else if (value === "Medical Clearance") {
     setFlowType("clearance");
@@ -698,7 +737,7 @@ function toggleMedicineSymptom(symptom) {
 }
 
 async function handleMedicineSubmit() {
-  if (submittingRef.current || (!mobileMode && readings.temperatureC == null) || medicineSymptoms.length === 0 || Object.keys(medicineSafetyAnswers).length < 3) return;
+  if (submittingRef.current || (!mobileMode && (readings.temperatureC == null || readings.bloodPressure == null)) || medicineSymptoms.length === 0 || Object.keys(medicineSafetyAnswers).length < 3) return;
   submittingRef.current = true;
   const temperatureC = readings.temperatureC == null ? null : Number(readings.temperatureC);
   const temperatureClass = classifyTemp(temperatureC);
@@ -712,6 +751,11 @@ async function handleMedicineSubmit() {
       source: "kiosk",
       reason: reasonText.length > 60 ? `${reasonText.slice(0, 57)}...` : reasonText,
       temperatureC,
+      bloodPressure: readings.bloodPressure ?? null,
+      systolicMmhg: readings.systolicMmhg ?? null,
+      diastolicMmhg: readings.diastolicMmhg ?? null,
+      pulseRate: readings.pulseBpm ?? null,
+      bloodPressureClassification: readings.bloodPressureClassification ?? null,
       requestDetails: JSON.stringify({ symptoms: medicineSymptoms, safetyAnswers: medicineSafetyAnswers }),
     });
     if (!mobileMode) currentSessionIdRef.current = null;
@@ -770,7 +814,8 @@ async function handleWalkIn() {
   setWalkInComplaints([]);
   setCaptureMode("temperature");
   setStep("walkInIntake");
-  if (!mobileMode) await triggerHardwareSensors("temperature");
+  serviceSensorFlowRef.current = mobileMode ? null : "consultation";
+  if (!mobileMode) await triggerHardwareSensors("temperature", `${consultSubType === "Dental" ? "Dental" : "Medical"} Consultation`);
 }
 
 function handleToggleComplaint(key) {
@@ -792,6 +837,9 @@ async function handleLeaveWalkIn() {
   setCaptureMode(null);
   setFlowType(null);
   setConsultSubType(null);
+  serviceSensorFlowRef.current = null;
+  setServiceSensorStep(null);
+  activeSensorModeRef.current = null;
   setStep("service");
 
   if (sessionId) {
@@ -810,7 +858,7 @@ async function handleLeaveWalkIn() {
 async function handleWalkInSubmit() {
   if (submittingRef.current) return;
   const temperatureC = readings.temperatureC != null ? Number(readings.temperatureC) : null;
-  if ((!mobileMode && temperatureC == null) || walkInComplaints.length === 0) return;
+  if ((!mobileMode && (temperatureC == null || readings.bloodPressure == null)) || walkInComplaints.length === 0) return;
 
   submittingRef.current = true;
   clearTimeout(captureTimerRef.current);
@@ -827,6 +875,11 @@ async function handleWalkInSubmit() {
       serviceType,
       source: "kiosk",
       temperatureC,
+      bloodPressure: readings.bloodPressure ?? null,
+      systolicMmhg: readings.systolicMmhg ?? null,
+      diastolicMmhg: readings.diastolicMmhg ?? null,
+      pulseRate: readings.pulseBpm ?? null,
+      bloodPressureClassification: readings.bloodPressureClassification ?? null,
       reason,
       requestDetails: `Walk-in ${consultSubType} consultation. Chief complaint: ${complaintText}`,
     });
@@ -1004,6 +1057,9 @@ async function handleScreeningOptionSelect(mode) {
     setReadings({});
     setCaptureMode(null);
     setFlowType(null);
+    serviceSensorFlowRef.current = null;
+    setServiceSensorStep(null);
+    activeSensorModeRef.current = null;
     setStep("screeningOptions");
     if (sessionId && supabase) {
       try {
@@ -1040,6 +1096,8 @@ async function handleScreeningOptionSelect(mode) {
   async function triggerHardwareSensors(sensorCmd, selectedService = null) {
     clearTimeout(captureTimerRef.current);
     setSensorFailed(false);
+    activeSensorModeRef.current = sensorCmd;
+    setServiceSensorStep(sensorCmd);
     currentSessionIdRef.current = null;
 
     if (isMock) {
@@ -1073,6 +1131,13 @@ async function handleScreeningOptionSelect(mode) {
       setSensorFailed(true);
     }, timeoutMs);
   }
+
+  serviceSensorRequestRef.current = (mode) => {
+    const target = serviceSensorFlowRef.current;
+    if (!target) return;
+    const service = target === "medicine" ? "Prescription/OTC Pickup" : `${consultSubType === "Dental" ? "Dental" : "Medical"} Consultation`;
+    void triggerHardwareSensors(mode, service);
+  };
 
   async function handleVitalsProceed(enteredReadings) {
     const mode = captureMode || "complete";
@@ -1431,10 +1496,13 @@ async function handleScreeningOptionSelect(mode) {
             otherText={walkInOtherText}
             onOtherTextChange={setWalkInOtherText}
             temperatureC={walkInTemp}
+            bloodPressure={readings.bloodPressure}
+            bloodPressureClassification={readings.bloodPressureClassification}
+            sensorStep={serviceSensorStep}
             mobileMode={mobileMode}
             onTemperatureChange={(value) => setReadings((current) => ({ ...current, temperatureC: value }))}
             sensorFailed={sensorFailed}
-            onRetry={() => triggerHardwareSensors("temperature", "Consultation")}
+            onRetry={() => triggerHardwareSensors(serviceSensorStep === "bloodPressure" ? "bloodPressure" : "temperature", `${consultSubType === "Dental" ? "Dental" : "Medical"} Consultation`)}
     onContinue={handleWalkInSubmit}
     onFaq={openFaq}
     onBack={handleLeaveWalkIn}
@@ -1460,10 +1528,13 @@ async function handleScreeningOptionSelect(mode) {
           selectedSymptoms={medicineSymptoms}
           safetyAnswers={medicineSafetyAnswers}
           temperatureC={readings.temperatureC}
+          bloodPressure={readings.bloodPressure}
+          bloodPressureClassification={readings.bloodPressureClassification}
+          sensorStep={serviceSensorStep}
           mobileMode={mobileMode}
           onTemperatureChange={(value) => setReadings((current) => ({ ...current, temperatureC: value }))}
           sensorFailed={sensorFailed}
-          onRetry={() => triggerHardwareSensors("temperature", "Prescription/OTC Pickup")}
+          onRetry={() => triggerHardwareSensors(serviceSensorStep === "bloodPressure" ? "bloodPressure" : "temperature", "Prescription/OTC Pickup")}
           onToggleSymptom={toggleMedicineSymptom}
           otherText={medicineOtherText}
           onOtherTextChange={setMedicineOtherText}
