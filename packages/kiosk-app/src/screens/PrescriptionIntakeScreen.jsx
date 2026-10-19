@@ -1,4 +1,5 @@
 import KioskHeader from "../components/KioskHeader.jsx";
+import ManualBloodPressureEntry from "../components/ManualBloodPressureEntry.jsx";
 import "../styles/screens/WalkInConsultation.css";
 
 const SYMPTOMS = [
@@ -23,6 +24,7 @@ export default function PrescriptionIntakeScreen({
   onTemperatureChange,
   sensorFailed = false,
   onRetry,
+  onManualBpSubmit,
   onToggleSymptom,
   otherText = "",
   onOtherTextChange,
@@ -64,7 +66,7 @@ export default function PrescriptionIntakeScreen({
           </label>}
         </section>
 
-        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get the {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} reading. Retry the sensor or go back to service selection.</p><button type="button" onClick={onRetry}>Retry {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} scan</button></div>}
+        {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get the {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} reading. Retry the sensor or ask clinic staff for help.</p><button type="button" onClick={onRetry}>Retry {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} scan</button>{sensorStep === "bloodPressure" && !mobileMode && <ManualBloodPressureEntry onSubmit={onManualBpSubmit} />}</div>}
 
         <section className="med-panel med-safety-panel">
           <h2>PATIENT SAFETY SCREENING</h2>

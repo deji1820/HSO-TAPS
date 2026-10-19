@@ -735,6 +735,50 @@ function toggleMedicineSymptom(symptom) {
     : [...current, symptom]);
 }
 
+async function handleManualBpSubmit({ systolicMmhg, diastolicMmhg, pulseBpm }) {
+  const systolic = Number(systolicMmhg);
+  const diastolic = Number(diastolicMmhg);
+  if (!Number.isFinite(systolic) || !Number.isFinite(diastolic) || systolic <= diastolic) return;
+
+  const bloodPressure = `${systolic}/${diastolic}`;
+  const bloodPressureClassification = classifyBP(systolic, diastolic);
+  clearTimeout(captureTimerRef.current);
+  clearTimeout(bpTimeoutRef.current);
+  bpTimeoutRef.current = null;
+  activeSensorModeRef.current = null;
+  setReadings((current) => ({
+    ...current,
+    bloodPressure,
+    systolicMmhg: systolic,
+    diastolicMmhg: diastolic,
+    pulseBpm: pulseBpm == null ? null : Number(pulseBpm),
+    bloodPressureClassification,
+    bloodPressureSource: "manual",
+  }));
+  setManualFields((current) => [...new Set([...current, "bloodPressure", "systolicMmhg", "diastolicMmhg"])]);
+  setSensorFailed(false);
+  setServiceSensorStep(null);
+  setBpWaiting(false);
+  setBpNoReading(false);
+
+  const sessionId = currentSessionIdRef.current;
+  if (sessionId && supabase) {
+    try {
+      const { error } = await supabase.from("kiosk_sessions").update({
+        status: "completed",
+        systolic_mmhg: systolic,
+        diastolic_mmhg: diastolic,
+        pulse_bpm: pulseBpm == null ? null : Number(pulseBpm),
+        bp_classification: bloodPressureClassification,
+      }).eq("id", sessionId).eq("status", "pending_sensor");
+      if (error) console.warn("[handleManualBpSubmit] Could not save manual BP to kiosk session:", error);
+    } catch (error) {
+      console.warn("[handleManualBpSubmit] Could not save manual BP to kiosk session:", error);
+    }
+  }
+  currentSessionIdRef.current = null;
+}
+
 async function handleMedicineSubmit() {
   if (submittingRef.current || (!mobileMode && (readings.temperatureC == null || readings.bloodPressure == null)) || medicineSymptoms.length === 0 || Object.keys(medicineSafetyAnswers).length < 3) return;
   submittingRef.current = true;
@@ -755,7 +799,11 @@ async function handleMedicineSubmit() {
       diastolicMmhg: readings.diastolicMmhg ?? null,
       pulseRate: readings.pulseBpm ?? null,
       bloodPressureClassification: readings.bloodPressureClassification ?? null,
-      requestDetails: JSON.stringify({ symptoms: medicineSymptoms, safetyAnswers: medicineSafetyAnswers }),
+      requestDetails: JSON.stringify({
+        symptoms: medicineSymptoms,
+        safetyAnswers: medicineSafetyAnswers,
+        bloodPressureSource: readings.bloodPressureSource ?? "sensor",
+      }),
     });
     if (!mobileMode) currentSessionIdRef.current = null;
     setResultQueueNumber(result?.queueEntry?.queueNumber ?? null);
@@ -880,7 +928,7 @@ async function handleWalkInSubmit() {
       pulseRate: readings.pulseBpm ?? null,
       bloodPressureClassification: readings.bloodPressureClassification ?? null,
       reason,
-      requestDetails: `Walk-in ${consultSubType} consultation. Chief complaint: ${complaintText}`,
+      requestDetails: `Walk-in ${consultSubType} consultation. Chief complaint: ${complaintText}${readings.bloodPressureSource === "manual" ? " Blood pressure was entered manually from the cuff display." : ""}`,
     });
     if (!mobileMode) currentSessionIdRef.current = null;
     setOverrideTriggered(temperatureC != null && classifyTemp(temperatureC) !== "Normal");
@@ -1499,6 +1547,7 @@ async function handleScreeningOptionSelect(mode) {
             onTemperatureChange={(value) => setReadings((current) => ({ ...current, temperatureC: value }))}
             sensorFailed={sensorFailed}
             onRetry={() => triggerHardwareSensors(serviceSensorStep === "bloodPressure" ? "bloodPressure" : "temperature", `${consultSubType === "Dental" ? "Dental" : "Medical"} Consultation`)}
+            onManualBpSubmit={handleManualBpSubmit}
     onContinue={handleWalkInSubmit}
     onFaq={openFaq}
     onBack={handleLeaveWalkIn}
@@ -1531,6 +1580,7 @@ async function handleScreeningOptionSelect(mode) {
           onTemperatureChange={(value) => setReadings((current) => ({ ...current, temperatureC: value }))}
           sensorFailed={sensorFailed}
           onRetry={() => triggerHardwareSensors(serviceSensorStep === "bloodPressure" ? "bloodPressure" : "temperature", "Prescription/OTC Pickup")}
+          onManualBpSubmit={handleManualBpSubmit}
           onToggleSymptom={toggleMedicineSymptom}
           otherText={medicineOtherText}
           onOtherTextChange={setMedicineOtherText}
