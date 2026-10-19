@@ -295,16 +295,44 @@ bool connectToOmron(NimBLEAdvertisedDevice *device) {
 #endif
   Serial.printf("[OMRON] Connecting to %s (timeout 30 s).\n",
                 device->getAddress().toString().c_str());
+  Serial.printf("[OMRON] Advertisement: name=\"%s\", RSSI=%d dBm.\n",
+                device->haveName() ? device->getName().c_str() : "(none)",
+                device->getRSSI());
   if (!omronClient->connect(device)) {
     Serial.printf("[OMRON] BLE connect failed before service discovery; NimBLE error=%d.\n",
                   omronClient->getLastError());
     return false;
   }
-  Serial.println("[OMRON] BLE connected; discovering service.");
+  Serial.println("[OMRON] BLE connected; discovering all GATT services.");
   delay(1500);
+#if defined(NIMBLE_CPP_VERSION_MAJOR) && NIMBLE_CPP_VERSION_MAJOR >= 2
+  const auto &discoveredServices = omronClient->getServices(true);
+  Serial.printf("[OMRON] GATT discovery complete: %u service(s), NimBLE error=%d.\n",
+                static_cast<unsigned>(discoveredServices.size()),
+                omronClient->getLastError());
+  for (const auto *discoveredService : discoveredServices) {
+    if (discoveredService != nullptr) {
+      Serial.printf("[OMRON] GATT service UUID: %s\n",
+                    discoveredService->getUUID().toString().c_str());
+    }
+  }
+#else
+  std::vector<NimBLERemoteService *> *discoveredServices = omronClient->getServices(true);
+  Serial.printf("[OMRON] GATT discovery complete: %u service(s), NimBLE error=%d.\n",
+                discoveredServices ? static_cast<unsigned>(discoveredServices->size()) : 0U,
+                omronClient->getLastError());
+  if (discoveredServices != nullptr) {
+    for (const auto *discoveredService : *discoveredServices) {
+      if (discoveredService != nullptr) {
+        Serial.printf("[OMRON] GATT service UUID: %s\n",
+                      discoveredService->getUUID().toString().c_str());
+      }
+    }
+  }
+#endif
   NimBLERemoteService *service = omronClient->getService(OMRON_SERVICE_UUID);
   if (!service) {
-    Serial.println("[OMRON] Expected FE4A service was not found.");
+    Serial.println("[OMRON] Expected FE4A service was not found in discovered GATT services.");
     omronClient->disconnect();
     return false;
   }
