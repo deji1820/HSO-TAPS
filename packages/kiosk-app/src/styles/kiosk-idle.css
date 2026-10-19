@@ -1,0 +1,74 @@
+.kiosk-idle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 24, 50, 0.68);
+  backdrop-filter: blur(5px);
+}
+
+.kiosk-idle-dialog {
+  width: min(520px, 100%);
+  padding: 34px 32px 30px;
+  border-radius: 18px;
+  background: #fff;
+  color: #17345b;
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+}
+
+.kiosk-idle-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: #e8edf8;
+  color: var(--nu-blue, #0f3f96);
+  font-size: 28px;
+}
+
+.kiosk-idle-dialog h2 {
+  margin: 0 0 12px;
+  color: var(--nu-blue-dark, #0a2a63);
+  font-size: clamp(24px, 3vw, 32px);
+}
+
+.kiosk-idle-dialog p {
+  margin: 0 auto 24px;
+  color: #46566f;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.kiosk-idle-dialog p strong {
+  color: var(--nu-blue, #0f3f96);
+  font-size: 1.25em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kiosk-idle-continue {
+  min-width: 180px;
+  min-height: 52px;
+  padding: 12px 24px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--nu-blue, #0f3f96);
+  color: #fff;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.kiosk-idle-continue:focus-visible {
+  outline: 3px solid #f3c64e;
+  outline-offset: 3px;
+}
+
+@media (max-width: 520px) {
+  .kiosk-idle-dialog { padding: 28px 22px 24px; }
+}

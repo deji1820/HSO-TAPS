@@ -31,9 +31,12 @@ import ClearanceResultScreen from "./screens/ClearanceResultScreen.jsx";
 import PrescriptionIntakeScreen from "./screens/PrescriptionIntakeScreen.jsx";
 import ScreeningReadingsScreen from "./screens/ScreeningReadingsScreen.jsx";
 import { classifyBP } from "./utils/bp.js";
+import "./styles/kiosk-idle.css";
 
 // Leave time for non-BP sensors and BLE connection before the cuff's 120s wait ends.
 const BP_READING_TIMEOUT_MS = 180_000;
+const KIOSK_IDLE_TIMEOUT_MS = 2 * 60_000;
+const KIOSK_IDLE_PROMPT_MS = 60_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
 const standaloneDocumentSubmission = new URLSearchParams(window.location.search).get("documentSubmission") === "1";
 
@@ -53,6 +56,8 @@ export default function App() {
   const [mobileFlowComplete, setMobileFlowComplete] = useState(false);
   const mobileMode = Boolean(mobileSessionToken && mobileSessionStatus === "ready");
   const [step, setStep] = useState("welcome");
+  const [showIdlePrompt, setShowIdlePrompt] = useState(false);
+  const [idleCountdown, setIdleCountdown] = useState(60);
   const [faqReturnStep, setFaqReturnStep] = useState("service");
   const openFaq = () => { setFaqReturnStep(step); setStep("faq"); };
   useEffect(() => {
@@ -90,6 +95,9 @@ export default function App() {
   const bridgeRef = useRef(null);
   const deviceEventHandlerRef = useRef(null);
   const idleTimer = useRef(null);
+  const idlePromptTimer = useRef(null);
+  const idleCountdownInterval = useRef(null);
+  const resetIdleTimerRef = useRef(null);
   const captureTimerRef = useRef(null);
   const stepRef = useRef(step);
   const submittingRef = useRef(false); // guards against double-submit
@@ -157,13 +165,6 @@ export default function App() {
   }, [mobileSessionToken]);
 
   useEffect(() => { stepRef.current = step; }, [step]);
-
-  useEffect(() => {
-    if (step === "capturing") {
-      clearTimeout(idleTimer.current);
-      idleTimer.current = null;
-    }
-  }, [step]);
 
   useEffect(() => {
     bridgeRef.current = connectDeviceBridge((event) => deviceEventHandlerRef.current?.(event));
@@ -374,12 +375,57 @@ export default function App() {
 
   function resetIdleTimer() {
     clearTimeout(idleTimer.current);
-    idleTimer.current = null;
+    clearTimeout(idlePromptTimer.current);
+    clearInterval(idleCountdownInterval.current);
+    idlePromptTimer.current = null;
+    idleCountdownInterval.current = null;
+    setShowIdlePrompt(false);
+    setIdleCountdown(60);
+
+    if (mobileSessionToken || standaloneDocumentSubmission) {
+      idleTimer.current = null;
+      return;
+    }
+
+    idleTimer.current = setTimeout(() => {
+      idleTimer.current = null;
+      setShowIdlePrompt(true);
+      setIdleCountdown(60);
+      idleCountdownInterval.current = setInterval(() => {
+        setIdleCountdown((seconds) => Math.max(0, seconds - 1));
+      }, 1000);
+      idlePromptTimer.current = setTimeout(() => {
+        clearInterval(idleCountdownInterval.current);
+        idleCountdownInterval.current = null;
+        setShowIdlePrompt(false);
+        resetSession("cancelled");
+      }, KIOSK_IDLE_PROMPT_MS);
+    }, KIOSK_IDLE_TIMEOUT_MS);
   }
 
+  resetIdleTimerRef.current = resetIdleTimer;
+
+  useEffect(() => {
+    if (mobileSessionToken || standaloneDocumentSubmission) return undefined;
+    const events = ["pointerdown", "keydown", "mousemove", "wheel", "touchstart", "input", "change"];
+    const handleActivity = () => resetIdleTimerRef.current?.();
+    events.forEach((eventName) => window.addEventListener(eventName, handleActivity, { passive: true }));
+    resetIdleTimer();
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
+      clearTimeout(idleTimer.current);
+      clearTimeout(idlePromptTimer.current);
+      clearInterval(idleCountdownInterval.current);
+    };
+  }, [mobileSessionToken]);
+
   async function resetSession(statusReason = "cancelled") {
-    clearTimeout(idleTimer.current);
-    idleTimer.current = null;
+    clearTimeout(idlePromptTimer.current);
+    clearInterval(idleCountdownInterval.current);
+    idlePromptTimer.current = null;
+    idleCountdownInterval.current = null;
+    setShowIdlePrompt(false);
+    setIdleCountdown(60);
     clearTimeout(captureTimerRef.current);
     clearTimeout(bpTimeoutRef.current);
     bpTimeoutRef.current = null;
@@ -1207,7 +1253,7 @@ async function handleScreeningOptionSelect(mode) {
   }
 
   return (
-    <div className={mobileSessionToken ? "mobile-checkin-app" : undefined} onClick={isOnline ? resetIdleTimer : undefined}>
+    <div className={mobileSessionToken ? "mobile-checkin-app" : undefined}>
       {mobileSessionToken && mobileSessionStatus === "loading" && <main className="mobile-session-status"><h1>Starting mobile check-in</h1><p>Verifying your student record…</p></main>}
       {mobileSessionToken && mobileSessionStatus === "error" && <main className="mobile-session-status"><h1>Unable to start check-in</h1><p>{mobileSessionError}</p><button onClick={() => window.location.assign(window.location.pathname)}>Return to kiosk</button></main>}
       {mobileSessionToken && mobileSessionStatus === "cancelled" && <main className="mobile-session-status"><h1>Check-in cancelled</h1><p>Your kiosk session is ready again. Scan the QR code to restart or continue at the kiosk.</p><button onClick={() => window.location.assign(window.location.pathname)}>Done</button></main>}
@@ -1522,6 +1568,18 @@ async function handleScreeningOptionSelect(mode) {
       )}
       {step === "faq" && <KioskFaqScreen onBack={() => setStep(faqReturnStep)} isOnline={isOnline} />}
       </>}
+      {showIdlePrompt && !mobileSessionToken && !standaloneDocumentSubmission && (
+        <div className="kiosk-idle-overlay">
+          <section className="kiosk-idle-dialog" role="dialog" aria-modal="true" aria-labelledby="kiosk-idle-title" aria-describedby="kiosk-idle-description">
+            <div className="kiosk-idle-icon" aria-hidden="true">2 min</div>
+            <h2 id="kiosk-idle-title">Would you like to continue?</h2>
+            <p id="kiosk-idle-description">
+              We will return to the RFID tap screen in <strong aria-live="polite">{idleCountdown}</strong> seconds if there is no activity.
+            </p>
+            <button className="kiosk-idle-continue" onClick={resetIdleTimer} autoFocus>Continue</button>
+          </section>
+        </div>
+      )}
 
     </div>
   );
