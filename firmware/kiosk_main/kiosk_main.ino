@@ -342,6 +342,13 @@ void processOmronConnectionRequest() {
   bool ok = connectToOmron(device);
   delete device;
   Serial.printf("[OMRON] Connection flow returned: %s\n", ok ? "success" : "failure");
+  if (!ok) {
+    // Do not reconnect on every advertisement after a failed/expired reading.
+    // Each BLE attempt blocks the main loop while the cuff is measured; a
+    // repeated retry loop would also starve RFID card polling indefinitely.
+    activeSessionNeedsBP = false;
+    Serial.println("[OMRON] BP attempt failed; automatic reconnect paused. Retry BP from the kiosk.");
+  }
   // Keep BLE teardown and RFID recovery ahead of the HTTPS upload.
   if (omronClient && omronClient->isConnected()) omronClient->disconnect();
   Serial.println("[OMRON] BLE disconnect finished.");
