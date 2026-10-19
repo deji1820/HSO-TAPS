@@ -311,12 +311,18 @@ class ScaleScanCallbacks : public NimBLEScanCallbacks {
         Serial.printf("[BLE] Omron advertisement seen; BP request=%s, session=%d\n",
                       activeSessionNeedsBP ? "yes" : "no", activeKioskSessionId);
       }
-      if (activeSessionNeedsBP && activeKioskSessionId >= 0 && !omronConnectRequested && (!omronClient || !omronClient->isConnected()) &&
+      if (activeSessionNeedsBP && activeKioskSessionId >= 0 && !omronConnectRequested &&
           millis() - lastOmronAttemptMs >= OMRON_RECONNECT_COOLDOWN_MS) {
-        NimBLEDevice::getScan()->stop();
-        if (omronAdvertisedDevice) delete omronAdvertisedDevice;
-        omronAdvertisedDevice = new NimBLEAdvertisedDevice(*device);
-        omronConnectRequested = true;
+        NimBLEAdvertisedDevice *copy = new (std::nothrow) NimBLEAdvertisedDevice(*device);
+        if (copy) {
+          omronAdvertisedDevice = copy;
+          activeSessionNeedsBP = false;
+          // Keep the scan callback lightweight: stop scanning and connect from
+          // loop(), not from NimBLE's host task, to avoid re-entrant BLE calls.
+          omronConnectRequested = true;
+        } else {
+          Serial.println("[BLE] Could not copy Omron advertisement; will keep scanning.");
+        }
       }
       return;
     }
@@ -348,6 +354,7 @@ void setupBLE() {
 
 void processOmronConnectionRequest() {
   if (!omronConnectRequested || !omronAdvertisedDevice) return;
+  if (pBLEScan && pBLEScan->isScanning()) pBLEScan->stop();
   if (omronAttemptSessionId != activeKioskSessionId) {
     omronAttemptSessionId = activeKioskSessionId;
     omronAttemptsForSession = 0;
