@@ -133,7 +133,12 @@ void addSupabaseHeaders(HTTPClient &http) {
 }
 
 bool updateOmronBPForSession(int sessionId, const OmronBPReading &reading) {
-  if (sessionId < 0 || !reading.valid || WiFi.status() != WL_CONNECTED) return false;
+  if (sessionId < 0 || !reading.valid) return false;
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.printf("[Supabase] BP PATCH skipped: WiFi status=%d, IP=%s, RSSI=%d dBm.\n",
+                  WiFi.status(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    return false;
+  }
   HTTPClient http;
   http.setTimeout(5000);
   http.begin(String(SUPABASE_URL) + "?id=eq." + String(sessionId) + "&status=eq.pending_sensor");
@@ -145,7 +150,8 @@ bool updateOmronBPForSession(int sessionId, const OmronBPReading &reading) {
   int code = http.sendRequest("PATCH", payload);
   String response = http.getString();
   http.end();
-  Serial.printf("[Supabase] BP PATCH response: %d %s\n", code, response.c_str());
+  Serial.printf("[Supabase] BP PATCH response: %d %s (WiFi status=%d, IP=%s, RSSI=%d dBm)\n",
+                code, response.c_str(), WiFi.status(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
   if (code >= 200 && code < 300 && response.indexOf("\"id\"") >= 0) {
     pendingOmronBP = false;
     activeSessionNeedsBP = false;
@@ -157,7 +163,17 @@ bool updateOmronBPForSession(int sessionId, const OmronBPReading &reading) {
 
 void omronBPUploadTask(void *parameter) {
   OmronBPUploadTaskData *taskData = static_cast<OmronBPUploadTaskData *>(parameter);
-  bool saved = updateOmronBPForSession(taskData->sessionId, taskData->reading);
+  bool saved = false;
+  const uint8_t maxUploadAttempts = 5;
+  for (uint8_t attempt = 1; attempt <= maxUploadAttempts && !saved; ++attempt) {
+    Serial.printf("[Supabase] BP upload attempt %u/%u for session=%d.\n",
+                  attempt, maxUploadAttempts, taskData->sessionId);
+    saved = updateOmronBPForSession(taskData->sessionId, taskData->reading);
+    if (!saved && attempt < maxUploadAttempts) {
+      Serial.println("[Supabase] BP upload did not complete; retrying in 2 seconds.");
+      vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+  }
   if (!saved) {
     pendingOmronBP = true;
     Serial.println("[OMRON] BP upload failed in background; RFID polling remains active.");
