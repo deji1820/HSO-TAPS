@@ -53,8 +53,7 @@ static const char *TARGET_SCALE_MAC = "78:66:a5:e0:5e:77";
 static const unsigned long SCALE_SIGNAL_TIMEOUT_MS = 6000;
 static const char *TARGET_OMRON_MAC = "c9:33:c0:ef:a2:e5";
 static const char *TARGET_OMRON_NAME = "BLESmart_0000047EC933C0EFA2E5";
-static const unsigned long OMRON_RECONNECT_COOLDOWN_MS = 8000;
-static const unsigned long OMRON_RETRY_WINDOW_MS = 160000;
+static const unsigned long OMRON_RECONNECT_COOLDOWN_MS = 10000;
 static NimBLEUUID OMRON_SERVICE_UUID("0000FE4A-0000-1000-8000-00805F9B34FB");
 static NimBLEUUID OMRON_B305_UUID("b305b680-aee7-11e1-a730-0002a5d5c51b");
 static NimBLEUUID OMRON_DB5B_UUID("db5b55e0-aee7-11e1-965e-0002a5d5c51b");
@@ -79,7 +78,6 @@ unsigned long lastOmronAttemptMs = 0;
 unsigned long lastRfidDiagnosticMs = 0;
 unsigned long lastOmronAdvertisementLogMs = 0;
 unsigned long lastNoPendingRequestLogMs = 0;
-bool sensorRequestWatermarkReady = false;
 volatile bool omronConnectRequested = false;
 NimBLEAdvertisedDevice *omronAdvertisedDevice = nullptr;
 volatile bool omronSessionAcknowledged = false;
@@ -90,11 +88,10 @@ volatile bool bpUploadTaskRunning = false;
 uint32_t lastOmronReadingSignature = 0;
 int activeKioskSessionId = -1;
 volatile bool activeSessionNeedsBP = false;
-int highestSeenSensorRequestId = -1;
-unsigned long activeSensorRequestStartedMs = 0;
+int lastHandledSensorRequestId = -1;
 int omronAttemptSessionId = -1;
 uint8_t omronAttemptsForSession = 0;
-static const uint8_t MAX_OMRON_ATTEMPTS_PER_SESSION = 12;
+static const uint8_t MAX_OMRON_ATTEMPTS_PER_SESSION = 2;
 
 struct OmronBPReading {
   int systolic = 0, diastolic = 0, pulse = 0;
@@ -283,69 +280,13 @@ bool runOmronSync() {
   return omronBpDataReceived && latestOmronBP.valid;
 }
 
-size_t discoverOmronServices() {
-#if defined(NIMBLE_CPP_VERSION_MAJOR) && NIMBLE_CPP_VERSION_MAJOR >= 2
-  const auto &services = omronClient->getServices(true);
-  Serial.printf("[OMRON] GATT discovery complete: %u service(s), NimBLE error=%d.\n",
-                static_cast<unsigned>(services.size()), omronClient->getLastError());
-  for (const auto *service : services) {
-    if (service != nullptr) Serial.printf("[OMRON] GATT service UUID: %s\n", service->getUUID().toString().c_str());
-  }
-  return services.size();
-#else
-  std::vector<NimBLERemoteService *> *services = omronClient->getServices(true);
-  size_t count = services ? services->size() : 0;
-  Serial.printf("[OMRON] GATT discovery complete: %u service(s), NimBLE error=%d.\n",
-                static_cast<unsigned>(count), omronClient->getLastError());
-  if (services != nullptr) {
-    for (const auto *service : *services) {
-      if (service != nullptr) Serial.printf("[OMRON] GATT service UUID: %s\n", service->getUUID().toString().c_str());
-    }
-  }
-  return count;
-#endif
-}
-
-void resetOmronClient() {
-  omronB305Char = nullptr;
-  omronDb5bChar = nullptr;
-  omronDataChar = nullptr;
-  if (!omronClient) return;
-  if (omronClient->isConnected()) omronClient->disconnect();
-  NimBLEDevice::deleteClient(omronClient);
-  omronClient = nullptr;
-}
-
-bool sensorRequestIsPending(int sessionId) {
-  if (sessionId < 0 || WiFi.status() != WL_CONNECTED) return true;
-  HTTPClient http;
-  http.setTimeout(5000);
-  http.begin(String(SUPABASE_URL) + "?select=id&id=eq." + String(sessionId) + "&status=eq.pending_sensor&limit=1");
-  http.addHeader("apikey", SUPABASE_KEY);
-  int code = http.GET();
-  String body = code == 200 ? http.getString() : "";
-  http.end();
-  if (code != 200) {
-    Serial.printf("[Supabase] Could not check BP request %d status: HTTP %d; keeping retry eligible.\n", sessionId, code);
-    return true;
-  }
-  return body.indexOf("\"id\"") >= 0;
-}
-
 bool connectToOmron(NimBLEAdvertisedDevice *device) {
   if (!device) {
     Serial.println("[OMRON] Connect aborted: advertised device is missing.");
     return false;
   }
   lastOmronAttemptMs = millis();
-  // Always start with a fresh client. Reusing one after a failed discovery can
-  // leave NimBLE's GATT cache empty for the retry.
-  resetOmronClient();
-  omronClient = NimBLEDevice::createClient();
-  if (!omronClient) {
-    Serial.println("[OMRON] Could not create a fresh BLE client.");
-    return false;
-  }
+  if (!omronClient) omronClient = NimBLEDevice::createClient();
   // NimBLE-Arduino 1.x uses seconds while 2.x uses milliseconds.
 #if defined(NIMBLE_CPP_VERSION_MAJOR) && NIMBLE_CPP_VERSION_MAJOR >= 2
   omronClient->setConnectTimeout(30000);
@@ -354,29 +295,16 @@ bool connectToOmron(NimBLEAdvertisedDevice *device) {
 #endif
   Serial.printf("[OMRON] Connecting to %s (timeout 30 s).\n",
                 device->getAddress().toString().c_str());
-  Serial.printf("[OMRON] Advertisement: name=\"%s\", RSSI=%d dBm.\n",
-                device->haveName() ? device->getName().c_str() : "(none)",
-                device->getRSSI());
   if (!omronClient->connect(device)) {
     Serial.printf("[OMRON] BLE connect failed before service discovery; NimBLE error=%d.\n",
                   omronClient->getLastError());
     return false;
   }
-  Serial.println("[OMRON] BLE connected; discovering all GATT services.");
-  size_t serviceCount = 0;
-  for (uint8_t discoveryAttempt = 1; discoveryAttempt <= 2; ++discoveryAttempt) {
-    delay(discoveryAttempt == 1 ? 1500 : 800);
-    serviceCount = discoverOmronServices();
-    if (serviceCount > 0 && omronClient->getService(OMRON_SERVICE_UUID)) break;
-    if (discoveryAttempt < 2) {
-      Serial.println("[OMRON] GATT discovery was empty/incomplete; retrying once on this connection.");
-      delay(500);
-    }
-  }
+  Serial.println("[OMRON] BLE connected; discovering service.");
+  delay(1500);
   NimBLERemoteService *service = omronClient->getService(OMRON_SERVICE_UUID);
   if (!service) {
-    Serial.printf("[OMRON] Expected FE4A service was not found after discovery (%u service(s)).\n",
-                  static_cast<unsigned>(serviceCount));
+    Serial.println("[OMRON] Expected FE4A service was not found.");
     omronClient->disconnect();
     return false;
   }
@@ -474,15 +402,6 @@ void processOmronConnectionRequest() {
     omronAttemptSessionId = activeKioskSessionId;
     omronAttemptsForSession = 0;
   }
-  if (!sensorRequestIsPending(activeKioskSessionId)) {
-    Serial.printf("[OMRON] BP session %d is no longer pending; stopping retries.\n", activeKioskSessionId);
-    delete omronAdvertisedDevice;
-    omronAdvertisedDevice = nullptr;
-    omronConnectRequested = false;
-    activeSessionNeedsBP = false;
-    if (pBLEScan && !pBLEScan->isScanning()) pBLEScan->start(0, false, true);
-    return;
-  }
   omronAttemptsForSession++;
   NimBLEAdvertisedDevice *device = omronAdvertisedDevice;
   omronAdvertisedDevice = nullptr;
@@ -493,13 +412,7 @@ void processOmronConnectionRequest() {
   if (!ok) {
     // Permit one automatic retry for this request, but cap attempts so a
     // missing cuff packet cannot repeatedly block RFID polling indefinitely.
-    bool inRetryWindow = millis() - activeSensorRequestStartedMs < OMRON_RETRY_WINDOW_MS;
-    bool retryAllowed = omronAttemptsForSession < MAX_OMRON_ATTEMPTS_PER_SESSION && inRetryWindow;
-    if (!inRetryWindow) Serial.printf("[OMRON] BP retry window expired for session=%d.\n", activeKioskSessionId);
-    if (retryAllowed && !sensorRequestIsPending(activeKioskSessionId)) {
-      retryAllowed = false;
-      Serial.printf("[OMRON] BP session %d was cancelled while connecting.\n", activeKioskSessionId);
-    }
+    bool retryAllowed = omronAttemptsForSession < MAX_OMRON_ATTEMPTS_PER_SESSION;
     activeSessionNeedsBP = retryAllowed;
     lastOmronAttemptMs = millis();
     Serial.printf("[OMRON] BP attempt %u/%u failed for session=%d; %s.\n",
@@ -508,8 +421,9 @@ void processOmronConnectionRequest() {
                   retryAllowed ? "one retry remains" : "retry from kiosk to start a new request");
   }
   // Keep BLE teardown and RFID recovery ahead of the HTTPS upload.
-  resetOmronClient();
+  if (omronClient && omronClient->isConnected()) omronClient->disconnect();
   Serial.println("[OMRON] BLE disconnect finished.");
+  omronB305Char = nullptr; omronDb5bChar = nullptr; omronDataChar = nullptr;
   delay(250);
   // Reset the RC522 after the long BLE measurement so it is ready for
   // the next card even if its field/crypto state was left active.
@@ -639,33 +553,10 @@ void updateSupabaseVitals(int id, const String &sensorRequired) {
   Serial.printf("[Supabase] Vitals PATCH: %d\n", code); updateStatusLED();
 }
 
-bool initializeSensorRequestWatermark() {
-  if (WiFi.status() != WL_CONNECTED) return false;
-  HTTPClient http;
-  http.setTimeout(5000);
-  http.begin(String(SUPABASE_URL) + "?select=id&order=id.desc&limit=1");
-  http.addHeader("apikey", SUPABASE_KEY);
-  int code = http.GET();
-  String body = code == 200 ? http.getString() : "";
-  http.end();
-  if (code != 200) {
-    Serial.printf("[Supabase] Could not establish sensor session watermark: HTTP %d\n", code);
-    return false;
-  }
-  int idAt = body.indexOf("\"id\":");
-  highestSeenSensorRequestId = idAt >= 0 ? body.substring(idAt + 5).toInt() : 0;
-  sensorRequestWatermarkReady = true;
-  Serial.printf("[Supabase] Sensor session watermark initialized at id=%d; pre-boot requests will be ignored.\n",
-                highestSeenSensorRequestId);
-  return true;
-}
-
 void pollSupabaseForSensorRequests() {
   if (WiFi.status() != WL_CONNECTED || millis() - lastPollTime < 2000) return;
   lastPollTime = millis();
-  if (!sensorRequestWatermarkReady && !initializeSensorRequestWatermark()) return;
-  HTTPClient http; http.setTimeout(5000);
-  http.begin(String(SUPABASE_URL) + "?status=eq.pending_sensor&id=gt." + String(highestSeenSensorRequestId) + "&order=id.desc&limit=1");
+  HTTPClient http; http.setTimeout(5000); http.begin(String(SUPABASE_URL) + "?status=eq.pending_sensor&order=id.desc&limit=1");
   http.addHeader("apikey", SUPABASE_KEY);
   int code = http.GET();
   if (code == 200) {
@@ -677,27 +568,20 @@ void pollSupabaseForSensorRequests() {
       if (idEnd > idAt && end > start) {
         int requestedSessionId = body.substring(idAt + 5, idEnd).toInt();
         String sensorRequired = body.substring(start, end);
-        // IDs are monotonic. Advancing the watermark prevents abandoned older
-        // pending rows from resurfacing after a newer request is completed.
-        if (requestedSessionId <= highestSeenSensorRequestId) {
+        // Keep a BP request pending until a valid cuff result is uploaded.
+        // Don't re-run temperature/height capture for the same database row.
+        if (requestedSessionId == lastHandledSensorRequestId) {
           http.end();
           return;
         }
-        highestSeenSensorRequestId = requestedSessionId;
-        int serviceAt = body.indexOf("\"service_selected\":\"");
-        String serviceSelected = "unknown";
-        if (serviceAt >= 0) {
-          int start = serviceAt + 20, end = body.indexOf('"', start);
-          if (end > start) serviceSelected = body.substring(start, end);
-        }
-        Serial.printf("[Supabase] Pending sensor request: id=%d, service=%s, sensor_required=%s\n",
-                      requestedSessionId, serviceSelected.c_str(), sensorRequired.c_str());
+        Serial.printf("[Supabase] Pending sensor request: id=%d, sensor_required=%s\n",
+                      requestedSessionId, sensorRequired.c_str());
         activeKioskSessionId = requestedSessionId;
         activeSessionNeedsBP = sensorRequired == "complete" || sensorRequired == "bloodPressure";
-        activeSensorRequestStartedMs = millis();
         omronAttemptSessionId = requestedSessionId;
         omronAttemptsForSession = 0;
         lastOmronReadingSignature = 0;
+        lastHandledSensorRequestId = requestedSessionId;
         updateSupabaseVitals(requestedSessionId, sensorRequired);
       }
     } else if (millis() - lastNoPendingRequestLogMs >= 10000) {
@@ -735,11 +619,9 @@ void setup() {
   pinMode(RFID_RST_PIN, OUTPUT); digitalWrite(RFID_RST_PIN, LOW); delay(20);
   digitalWrite(RFID_RST_PIN, HIGH); delay(50); rfid.PCD_Init(); rfid.PCD_AntennaOn(); rfid.PCD_SetAntennaGain(rfid.RxGain_max);
   pinMode(US_TRIG_PIN, OUTPUT); pinMode(US_ECHO_PIN, INPUT); digitalWrite(US_TRIG_PIN, LOW);
-  setupWiFiMulti();
-  initializeSensorRequestWatermark();
-  setupBLE();
+  setupWiFiMulti(); setupBLE();
   Serial.println("ESP32 KIOSK READY: BLE SCALE + OMRON HEM-7140T1");
-  Serial.println("FIRMWARE BUILD: 2026-10-20-BP-READY-RETRY");
+  Serial.println("FIRMWARE BUILD: 2026-10-20-BP-PENDING-FIX");
 }
 
 void loop() {
