@@ -1580,6 +1580,8 @@ async function handleScreeningOptionSelect(mode) {
     queueCode={resultQueueNumber}
     temperatureC={walkInTemp}
     temperatureClassification={classifyTemp(walkInTemp)}
+    bloodPressure={readings.bloodPressure}
+    bloodPressureClassification={readings.bloodPressureClassification}
     onTimeout={onFlowDone}
     onFaq={openFaq}
     isOnline={isOnline}
@@ -1617,6 +1619,8 @@ async function handleScreeningOptionSelect(mode) {
           queueCode={resultQueueNumber}
           temperatureC={walkInTemp}
           temperatureClassification={classifyTemp(walkInTemp)}
+          bloodPressure={readings.bloodPressure}
+          bloodPressureClassification={readings.bloodPressureClassification}
           onTimeout={onFlowDone}
           onFaq={openFaq}
           isOnline={isOnline}

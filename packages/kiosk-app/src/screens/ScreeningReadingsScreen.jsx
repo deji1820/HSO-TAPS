@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
+import BloodPressureInstructions from "../components/BloodPressureInstructions.jsx";
 import ManualBloodPressureEntry from "../components/ManualBloodPressureEntry.jsx";
 import { classifyBP } from "../utils/bp.js";
 import "../styles/screens/Screening.css";
@@ -148,17 +149,7 @@ export default function ScreeningReadingsScreen({
           {sensorFailed && !isResult && !bpWaiting && !bpNoReading && <p className="qhs-sensor-error">Sensor readings are unavailable. Please ask clinic staff for assistance.</p>}
         </section>
         {showBpInstructions && (
-          <aside className="qhs-bp-help" aria-label="Blood pressure monitor instructions">
-            <h2>How to send your blood pressure reading</h2>
-            <ol>
-              <li>Wrap the cuff snugly around your upper arm. Align its arrow with the pulse point on the inside of your arm.</li>
-              <li>Press <strong>Start</strong> and keep your arm still until the measurement finishes.</li>
-              <li>Wait 3 seconds, then press the <strong>Bluetooth</strong> button. Wait for its indicator to blink.</li>
-              <li>Press <strong>Start</strong> once to turn the blinking indicator off.</li>
-              <li>Press and hold the <strong>Bluetooth</strong> button until the monitor displays <strong>P</strong>.</li>
-              <li>Wait for your blood pressure result to appear on the kiosk.</li>
-            </ol>
-          </aside>
+          <BloodPressureInstructions />
         )}
         {isResult ? (
           <div className="qhs-result-actions">

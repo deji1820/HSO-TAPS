@@ -65,13 +65,14 @@
 .identity-actions { display: flex; flex-wrap: wrap; gap: 13px; margin-top: 28px; }
 .identity-actions button { min-height: 54px; font-size: 16px; }
 .identity-actions button {
-  min-width: 104px;
-  height: 24px;
-  padding: 0 14px;
+  min-width: 160px;
+  min-height: 52px;
+  height: auto;
+  padding: 12px 18px;
   border: 1px solid #1d2638;
-  border-radius: 0;
+  border-radius: 8px;
   color: #fff;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
 }

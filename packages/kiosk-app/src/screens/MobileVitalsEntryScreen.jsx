@@ -1,5 +1,6 @@
 import { useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
+import BloodPressureInstructions from "../components/BloodPressureInstructions.jsx";
 import "../styles/screens/MobileVitalsEntry.css";
 
 const SCREENING_FIELDS = {
@@ -46,6 +47,7 @@ export default function MobileVitalsEntryScreen({ mode, onSubmit, onBack, isOnli
       <p className="mobile-vitals-eyebrow">QUICK HEALTH SCREENING</p>
       <h1>Enter your screening readings</h1>
       <p className="mobile-vitals-help">Enter readings provided by clinic staff or a measurement device. The phone cannot operate the kiosk sensors.</p>
+      {fields.some((field) => field === "systolicMmhg" || field === "diastolicMmhg") && <BloodPressureInstructions />}
       <form onSubmit={submit}>
         {fields.map((field) => <label className="mobile-vitals-field" key={field}>
           <span>{LABELS[field][0]} <small>({LABELS[field][1]})</small></span>

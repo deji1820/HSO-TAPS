@@ -361,32 +361,39 @@
 .wic-vitals-value, .wic-vitals-value--pending { text-align: right; font-style: normal; color: var(--nu-blue-dark); }
 .wic-panel-hint--danger, .wic-vitals-value--danger { color: var(--danger); }
 .wic-screen--intake .btn-kiosk-primary {
-  display: inline-block;
-  width: 104px;
-  min-width: 104px;
-  height: 24px;
-  margin: 0 0 0 12px;
-  padding: 2px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 170px;
+  min-height: 52px;
+  height: auto;
+  margin: 0;
+  padding: 12px 20px;
   border: 1px solid #164b27;
-  border-radius: 0;
+  border-radius: 8px;
   background: var(--success);
-  font-size: 12px;
+  font-size: 16px;
 }
-.wic-screen--intake .wic-back-btn { display: inline-block; margin: 20px 0 0 12px; }
-.wic-screen--intake .wic-faq-link { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
-.wic-screen--intake .wic-back-btn, .wic-screen--entry .wic-back-btn {
-  min-width: 110px;
-  width: 110px;
-  height: 24px;
-  padding: 2px 8px;
+.wic-intake-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 12px 0; }
+.wic-screen--intake .wic-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 190px;
+  width: auto;
+  min-height: 52px;
+  height: auto;
+  margin: 0;
+  padding: 12px 18px;
   border: 1px solid #17345b;
-  border-radius: 0;
+  border-radius: 8px;
   background: var(--nu-blue);
   color: #fff;
-  font-size: 0;
+  font-size: 16px;
 }
+.wic-screen--intake .wic-faq-link { position: static; display: block; width: fit-content; max-width: 100%; margin: 24px auto 8px; transform: none; white-space: normal; }
 .wic-screen--entry .wic-back-btn { margin: 24px 0 0 max(12px, calc((100% - 645px) / 2)); }
-.wic-screen--intake .wic-back-btn::after, .wic-screen--entry .wic-back-btn::after { content: "<< Back"; font-size: 12px; font-weight: 700; }
 
 .wic-screen--result .wic-heading-block { margin-top: 20px; margin-bottom: 24px; }
 .wic-screen--result .wic-result-box {
@@ -408,6 +415,7 @@
 .wic-result-box--vitals .wic-result-box-title,
 .wic-result-box--urgent-summary .wic-result-box-title { text-align: left; }
 .wic-screen--result .wic-vitals-summary { max-width: none; margin: 10px 8px 0; }
+.wic-screen--result .wic-content > .qhs-bp-help { width: min(755px, calc(100% - 24px)); margin: 0 auto 20px; }
 .wic-screen--result .wic-vitals-row { margin: 0; }
 .wic-screen--result .wic-queue-code { margin: 8px 0 0; text-align: center; font-size: 26px; }
 .wic-screen--urgent .wic-vitals-value--danger,
@@ -527,39 +535,47 @@
 .med-abnormal { color: var(--danger); }
 .med-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 13px;
   width: min(747px, 100%);
   margin: 0 auto;
 }
 .med-actions .wic-back-btn,
 .med-proceed {
-  width: 104px;
-  min-width: 104px;
-  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 170px;
+  min-height: 52px;
+  height: auto;
   margin: 0;
-  padding: 2px 8px;
+  padding: 12px 18px;
   border: 1px solid #17345b;
-  border-radius: 0;
+  border-radius: 8px;
   color: white;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
 }
 .med-actions .wic-back-btn { background: var(--nu-blue); }
 .med-proceed { border-color: #18532e; background: var(--success); }
 .med-proceed:disabled { opacity: .55; cursor: not-allowed; }
+.med-content > .qhs-bp-help { width: min(747px, 100%); margin: 0 auto 20px; }
 
 .wic-done-btn {
   display: block;
-  width: 104px;
-  height: 23px;
+  width: auto;
+  min-width: 150px;
+  min-height: 52px;
+  height: auto;
   margin: 24px 0 0 max(12px, calc((100% - 755px) / 2));
-  padding: 1px 12px;
+  padding: 12px 18px;
   border: 1px solid #18532e;
-  border-radius: 0;
+  border-radius: 8px;
   background: var(--success);
   color: #fff;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -567,7 +583,7 @@
 .wic-done-btn span::after { content: "✓"; display: block; font-size: 10px; line-height: 14px; }
 .wic-done-btn--urgent { margin-top: 18px; }
 .wic-autoclose { margin: 8px 0 0 max(12px, calc((100% - 755px) / 2)); color: var(--text-secondary); font-size: 12px; font-style: italic; }
-.wic-screen--result .wic-faq-link { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.wic-screen--result .wic-faq-link { position: static; display: block; width: fit-content; max-width: 100%; margin: 24px auto 8px; transform: none; white-space: normal; }
 
 @media (max-width: 700px) {
   .wic-screen--entry .wic-content, .wic-screen--result .wic-content { padding-left: 16px; padding-right: 16px; }

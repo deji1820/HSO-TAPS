@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
+import BloodPressureInstructions from "../components/BloodPressureInstructions.jsx";
 import "../styles/screens/WalkInConsultation.css";
 
 export default function WalkInResultScreen({
@@ -9,6 +10,8 @@ export default function WalkInResultScreen({
   queueCode,           // e.g. "M0014"
   temperatureC,
   temperatureClassification,
+  bloodPressure,
+  bloodPressureClassification,
   onTimeout,           // called when countdown hits 0
   onFaq,
   isOnline,
@@ -58,7 +61,7 @@ export default function WalkInResultScreen({
                     {temperatureC?.toFixed(1)}°C - {temperatureClassification}
                   </span>
                   <span className="wic-vitals-label">Blood Pressure:</span>
-                  <span className="wic-vitals-value--pending">Manual entry required</span>
+                  <span className="wic-vitals-value--pending">{bloodPressure ? `${bloodPressure} mmHg${bloodPressureClassification ? ` — ${bloodPressureClassification}` : ""}` : "No reading available"}</span>
                 </div>
               </div>
             </div>
@@ -84,7 +87,7 @@ export default function WalkInResultScreen({
                     {temperatureC?.toFixed(1)}°C - {temperatureClassification}
                   </span>
                   <span className="wic-vitals-label">Blood Pressure:</span>
-                  <span className="wic-vitals-value--pending">Manual entry required</span>
+                  <span className="wic-vitals-value--pending">{bloodPressure ? `${bloodPressure} mmHg${bloodPressureClassification ? ` — ${bloodPressureClassification}` : ""}` : "No reading available"}</span>
                 </div>
               </div>
             </div>
@@ -94,6 +97,8 @@ export default function WalkInResultScreen({
             </p>
           </>
         )}
+
+        {bloodPressure && <BloodPressureInstructions />}
 
         <button className={`wic-done-btn${overrideTriggered ? " wic-done-btn--urgent" : ""}`} onClick={() => onTimeout?.()}>
           Done <span aria-hidden="true">✓</span>

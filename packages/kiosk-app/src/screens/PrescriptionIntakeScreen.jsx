@@ -1,4 +1,5 @@
 import KioskHeader from "../components/KioskHeader.jsx";
+import BloodPressureInstructions from "../components/BloodPressureInstructions.jsx";
 import ManualBloodPressureEntry from "../components/ManualBloodPressureEntry.jsx";
 import "../styles/screens/WalkInConsultation.css";
 
@@ -91,6 +92,8 @@ export default function PrescriptionIntakeScreen({
             <ManualBloodPressureEntry onSubmit={onManualBpSubmit} />
           )}
         </section>
+
+        {!mobileMode && <BloodPressureInstructions />}
 
         <div className="med-actions">
           <button className="wic-back-btn" onClick={onBack}>&lt;&lt; Back</button>

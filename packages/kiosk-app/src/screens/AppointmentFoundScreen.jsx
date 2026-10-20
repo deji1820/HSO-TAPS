@@ -1,4 +1,5 @@
 import KioskHeader from "../components/KioskHeader.jsx";
+import BloodPressureInstructions from "../components/BloodPressureInstructions.jsx";
 import VitalsRows from "../components/VitalsRows.jsx";
 import "../styles/screens/Appointment.css";
 
@@ -48,6 +49,7 @@ export default function AppointmentFoundScreen({
             bloodPressure={bloodPressure}
             bpClass={bpClass}
           />
+          <BloodPressureInstructions />
         </div>
 
         <button className="apt-btn apt-btn--single" onClick={onBack}>⬅ Back to service selection</button>

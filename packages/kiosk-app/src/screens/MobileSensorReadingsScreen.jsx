@@ -1,4 +1,5 @@
 import KioskHeader from "../components/KioskHeader.jsx";
+import BloodPressureInstructions from "../components/BloodPressureInstructions.jsx";
 import "../styles/screens/MobileVitalsEntry.css";
 
 const FIELDS = [
@@ -26,6 +27,7 @@ export default function MobileSensorReadingsScreen({ mode, readings = {}, waitin
       <p className="mobile-vitals-eyebrow">QUICK HEALTH SCREENING</p>
       <h1>{waiting ? "Reading from the kiosk" : "Your screening readings"}</h1>
       <p className="mobile-vitals-help">{waiting ? "The kiosk sensors are taking your measurements. Follow the instructions shown at the kiosk; readings will appear here as they arrive." : "Review the readings captured by the kiosk before submitting your screening."}</p>
+      {waiting && (mode === "bloodPressure" || mode === "complete") && <BloodPressureInstructions />}
       <section className="mobile-sensor-readings" aria-live="polite">
         {fields.map(([key, label, unit]) => <div className="mobile-sensor-reading" key={key}>
           <strong>{label}</strong>

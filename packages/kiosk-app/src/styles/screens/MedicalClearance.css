@@ -83,13 +83,15 @@
 .clearance-choice strong { margin-bottom: 7px; font-size: 21px; }
 .clearance-choice > span:last-child { color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
 .clearance-back, .clearance-proceed, .clearance-done {
-  width: 104px;
-  height: 24px;
-  padding: 2px 8px;
+  width: auto;
+  min-width: 160px;
+  min-height: 52px;
+  height: auto;
+  padding: 12px 18px;
   border: 1px solid #17345b;
-  border-radius: 0;
+  border-radius: 8px;
   color: #fff;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
 }

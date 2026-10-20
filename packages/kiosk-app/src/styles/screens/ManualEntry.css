@@ -25,8 +25,9 @@
   color: #fff;
   font-size: 1.1rem;
   cursor: pointer;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  min-height: 44px;
+  height: 44px;
   border-radius: 50%;
   display: flex;
   align-items: center;

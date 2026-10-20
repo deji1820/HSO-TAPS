@@ -1,4 +1,5 @@
 import KioskHeader from "../components/KioskHeader.jsx";
+import BloodPressureInstructions from "../components/BloodPressureInstructions.jsx";
 import VitalsRows from "../components/VitalsRows.jsx";
 import useCountdown from "../hooks/useCountdown.js";
 import "../styles/screens/Appointment.css";
@@ -34,6 +35,7 @@ export default function AppointmentSummaryScreen({
             bpClass={bpClass}
           />
         </div>
+        {bloodPressure && <BloodPressureInstructions />}
 
         <button className="apt-btn apt-btn--end" onClick={onDone}>
           End — returning to welcome screen in {remaining}s

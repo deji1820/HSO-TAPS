@@ -1,4 +1,5 @@
 import KioskHeader from "../components/KioskHeader.jsx";
+import BloodPressureInstructions from "../components/BloodPressureInstructions.jsx";
 import ManualBloodPressureEntry from "../components/ManualBloodPressureEntry.jsx";
 import "../styles/screens/WalkInConsultation.css";
 
@@ -106,8 +107,11 @@ export default function WalkInIntakeScreen({
           )}
         </div>
 
+        {!mobileMode && <BloodPressureInstructions />}
+
         {sensorFailed && <div className="wic-sensor-recovery" role="alert"><p>We couldn't get the {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} reading. Retry the sensor or ask clinic staff for help.</p><button type="button" onClick={onRetry}>Retry {sensorStep === "bloodPressure" ? "blood pressure" : "temperature"} scan</button></div>}
 
+        <div className="wic-intake-actions">
         <button
           className="btn-kiosk btn-kiosk-primary"
           onClick={onContinue}
@@ -119,6 +123,7 @@ export default function WalkInIntakeScreen({
         <button className="wic-back-btn" onClick={onBack}>
           ⬅ Back to service selection
         </button>
+        </div>
         <a className="wic-faq-link" onClick={onFaq}>
           Frequently Asked Questions (FAQ's)
         </a>
