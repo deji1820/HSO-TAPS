@@ -1,3 +1,5 @@
+import nodemailer from "nodemailer";
+
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 function escapeHtml(value) {
@@ -8,10 +10,19 @@ function escapeHtml(value) {
 
 export async function sendDocumentStatusNotification(document, status, recipient = document.notificationEmail) {
   const email = String(recipient || "").trim().toLowerCase();
+  const provider = String(process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!email) return { sent: false, reason: "No student email address is on file." };
-  if (!apiKey || !from) return { sent: false, reason: "Email notifications are not configured on the server." };
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+  if (provider === "gmail" && (!gmailUser || !gmailAppPassword)) {
+    return { sent: false, reason: "Gmail email settings are not configured on the server." };
+  }
+  if (provider === "resend" && (!apiKey || !from)) {
+    return { sent: false, reason: "Resend email settings are not configured on the server." };
+  }
+  if (!["gmail", "resend"].includes(provider)) return { sent: false, reason: "Unsupported email provider." };
 
   const firstName = document.student?.firstName || "student";
   const descriptions = {
@@ -27,20 +38,28 @@ export async function sendDocumentStatusNotification(document, status, recipient
   if (!subject || !descriptions[status]) return { sent: false, reason: "Unsupported document status." };
 
   try {
-    const response = await fetch(RESEND_ENDPOINT, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from,
-        to: [email],
-        subject,
-        text: `Hello ${firstName},\n\n${descriptions[status]}\n\nIf you have questions, please contact the Health Services Office.`,
-        html: `<p>Hello ${escapeHtml(firstName)},</p><p>${escapeHtml(descriptions[status])}</p><p>If you have questions, please contact the Health Services Office.</p>`,
-      }),
-    });
-    if (!response.ok) {
-      console.error(`[Email] Document ${status.toLowerCase()} notice failed (HTTP ${response.status}).`);
-      return { sent: false, reason: "The email provider could not send the notification." };
+    const message = {
+      to: email,
+      subject,
+      text: `Hello ${firstName},\n\n${descriptions[status]}\n\nIf you have questions, please contact the Health Services Office.`,
+      html: `<p>Hello ${escapeHtml(firstName)},</p><p>${escapeHtml(descriptions[status])}</p><p>If you have questions, please contact the Health Services Office.</p>`,
+    };
+    if (provider === "gmail") {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: gmailUser, pass: gmailAppPassword.replace(/\s/g, "") },
+      });
+      await transporter.sendMail({ ...message, from: `HSO Health Services <${gmailUser}>` });
+    } else {
+      const response = await fetch(RESEND_ENDPOINT, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...message, from, to: [email] }),
+      });
+      if (!response.ok) {
+        console.error(`[Email] Document ${status.toLowerCase()} notice failed (HTTP ${response.status}).`);
+        return { sent: false, reason: "The email provider could not send the notification." };
+      }
     }
     document.notificationEmail = email;
     document.lastNotifiedStatus = status;
@@ -49,6 +68,6 @@ export async function sendDocumentStatusNotification(document, status, recipient
     return { sent: true };
   } catch (error) {
     console.error(`[Email] Document ${status.toLowerCase()} notice failed: ${error.message}`);
-    return { sent: false, reason: "The email provider could not be reached." };
+    return { sent: false, reason: "The email provider could not send the notification. Check its server settings." };
   }
 }
