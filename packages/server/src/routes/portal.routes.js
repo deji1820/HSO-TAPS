@@ -82,7 +82,10 @@ router.put("/medical-profiles/:id", requireClinicalRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid medical profile ID" });
   const fields = req.body?.fields;
   if (!fields || typeof fields !== "object" || Array.isArray(fields)) return res.status(400).json({ message: "Medical profile fields are required" });
-  const profile = await MedicalProfile.findByIdAndUpdate(req.params.id, { $set: { fields } }, { new: true, runValidators: true });
+  const updates = { fields };
+  if (typeof req.body.purpose === "string" && req.body.purpose.trim()) updates.purpose = req.body.purpose.trim();
+  if (typeof req.body.provider === "string") updates.provider = req.body.provider.trim();
+  const profile = await MedicalProfile.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true, runValidators: true });
   if (!profile) return res.status(404).json({ message: "Medical profile not found" });
   res.json(profile);
 });

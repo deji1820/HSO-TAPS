@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, updateMedicalDocumentStatus, updateMedicalProfile } from "../services/api.js";
+import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, saveMedicalProfile, updateMedicalDocumentStatus, updateMedicalProfile } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/components/ActiveSessionModal.css";
@@ -281,24 +281,32 @@ function MedicalProfileSections({ entry, vitals = [], editable = false, onFieldC
   </div>;
 }
 
-function MedicalProfileHistory({ entries, vitals, onSaved }) {
+function MedicalProfileHistory({ entries, vitals, studentMongoId, onSaved }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
+  const [profileMeta, setProfileMeta] = useState({ purpose: "", provider: "" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const latest = entries[0];
   const previous = entries.slice(1);
   function startEditing() {
     setDraft({ ...(latest?.fields || {}) });
+    setProfileMeta({ purpose: latest?.purpose || "Medical Examination", provider: latest?.provider || "" });
     setSaveError("");
     setEditing(true);
   }
   async function saveEdits() {
-    if (!latest?._id) return;
+    if (!studentMongoId || !profileMeta.purpose.trim()) {
+      setSaveError("Enter a purpose before saving the medical profile.");
+      return;
+    }
     setSaving(true);
     setSaveError("");
     try {
-      const updated = await updateMedicalProfile(latest._id, { fields: draft });
+      const payload = { ...profileMeta, fields: draft };
+      const updated = latest?._id
+        ? await updateMedicalProfile(latest._id, payload)
+        : await saveMedicalProfile(studentMongoId, { ...payload, examinedAt: new Date().toISOString() });
       onSaved(updated);
       setEditing(false);
     } catch (error) {
@@ -308,7 +316,8 @@ function MedicalProfileHistory({ entries, vitals, onSaved }) {
     }
   }
   return <>
-    <div className="emr-profile-toolbar"><div className="emr-profile-meta">{latest ? <>Last examined: {new Date(latest.examinedAt).toLocaleString()} · {latest.purpose} · {latest.provider}</> : "No medical profile has been saved for this patient."}</div>{latest && <div className="emr-profile-edit-actions">{editing ? <><button className="btn btn-success btn-sm" type="button" disabled={saving} onClick={saveEdits}>{saving ? "Saving…" : "Save changes"}</button><button className="btn btn-outline btn-sm" type="button" disabled={saving} onClick={() => setEditing(false)}>Cancel</button></> : <button className="btn btn-outline btn-sm" type="button" onClick={startEditing}>Edit medical profile</button>}</div>}</div>
+    <div className="emr-profile-toolbar"><div className="emr-profile-meta">{latest ? <>Last examined: {new Date(latest.examinedAt).toLocaleString()} · {latest.purpose} · {latest.provider}</> : "No medical profile has been saved for this patient."}</div><div className="emr-profile-edit-actions">{editing ? <><button className="btn btn-success" type="button" disabled={saving} onClick={saveEdits}>{saving ? "Saving…" : "Save medical profile"}</button><button className="btn btn-outline" type="button" disabled={saving} onClick={() => setEditing(false)}>Cancel</button></> : <button className="btn btn-primary" type="button" onClick={startEditing}>{latest ? "Edit medical profile" : "Create medical profile"}</button>}</div></div>
+    {editing && <div className="emr-profile-meta-edit"><label>Purpose<input value={profileMeta.purpose} onChange={(event) => setProfileMeta((current) => ({ ...current, purpose: event.target.value }))} /></label><label>Provider<input value={profileMeta.provider} onChange={(event) => setProfileMeta((current) => ({ ...current, provider: event.target.value }))} /></label></div>}
     {saveError && <p className="error-text" role="alert">{saveError}</p>}
     <MedicalProfileSections entry={editing ? { ...latest, fields: draft } : latest} vitals={vitals} editable={editing} onFieldChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} />
     <h2 className="section-title emr-history-title">Previous Medical Profile History</h2>
@@ -506,7 +515,10 @@ export default function EMRPage() {
   }
 
   function replaceLatestMedicalProfile(updated) {
-    setProfileHistory((current) => current.map((profile, index) => index === 0 ? { ...updated, id: updated._id } : profile));
+    setProfileHistory((current) => [
+      { ...updated, id: updated._id },
+      ...current.filter((profile) => profile._id !== updated._id),
+    ].sort((left, right) => new Date(right.examinedAt) - new Date(left.examinedAt)));
   }
 
   async function toggleFamilyHistoryEdit() {
@@ -631,7 +643,7 @@ export default function EMRPage() {
               <div><span className="field-label-inline">Sex:</span> {record.student.sex || "—"}</div>
               <div><span className="field-label-inline">Guardian Contact:</span> {record.student.guardianContact || "—"}</div>
             </div><p className="page-subtitle">Profile data is sourced from the student master-data import.</p></div>}
-            {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} onSaved={replaceLatestMedicalProfile} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
+            {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} studentMongoId={record.student._id} onSaved={replaceLatestMedicalProfile} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
             {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} />}

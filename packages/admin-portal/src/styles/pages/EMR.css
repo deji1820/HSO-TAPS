@@ -150,6 +150,10 @@
 .emr-profile-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .emr-profile-toolbar .emr-profile-meta { margin: 0; text-align: left; }
 .emr-profile-edit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.emr-profile-edit-actions .btn { min-height: 38px; padding: 8px 14px; font-size: .82rem; }
+.emr-profile-meta-edit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 0 0 14px; }
+.emr-profile-meta-edit label { display: grid; gap: 4px; color: #4f5f75; font-size: .75rem; font-weight: 700; }
+.emr-profile-meta-edit input { min-width: 0; min-height: 36px; padding: 6px 8px; border: 1px solid #8798ad; border-radius: 4px; font: inherit; }
 .emr-profile-edit-input { width: 100%; min-width: 0; min-height: 30px; padding: 4px 6px; border: 1px solid #8798ad; border-radius: 4px; background: #fff; color: #26384f; font: inherit; }
 .emr-profile-bp-edit > div { display: flex; align-items: center; gap: 5px; }
 .emr-profile-bp-edit > div span { flex: 0 0 auto; }
@@ -221,6 +225,7 @@
   .emr-document-card > header > span { text-align: left; }
   .emr-document-card-grid { grid-template-columns: 1fr; gap: 9px; }
   .emr-document-details dl > div { grid-template-columns: 1fr; gap: 2px; }
+  .emr-profile-meta-edit { grid-template-columns: 1fr; }
 }
 
 /* ---------- Consultation History accordion ---------- */
