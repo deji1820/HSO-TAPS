@@ -151,13 +151,19 @@ export async function sendAppointmentDecisionNotification(appointment, decisionS
   if (!email || !areDocumentNotificationsConfigured()) {
     return { sent: false, reason: "Appointment email settings or the student's school email are missing." };
   }
-  const accepted = decisionStatus === "accepted";
-  if (!accepted && decisionStatus !== "rejected") return { sent: false, reason: "Unsupported appointment decision." };
-
-  const description = accepted
-    ? "Your appointment request has been accepted by the Health Services Office."
-    : "Your appointment request was rejected by the Health Services Office. Please contact the office to arrange another time.";
-  const subject = accepted ? "Health Services appointment accepted" : "Health Services appointment update";
+  const descriptions = {
+    pending: "Your appointment request has been received and is pending review by the Health Services Office. Please wait for an email with the decision before coming to the clinic.",
+    accepted: "Your appointment request has been accepted by the Health Services Office.",
+    rejected: "Your appointment request was rejected by the Health Services Office. Please contact the office to arrange another time.",
+  };
+  const subjects = {
+    pending: "Health Services appointment request received",
+    accepted: "Health Services appointment accepted",
+    rejected: "Health Services appointment update",
+  };
+  const description = descriptions[decisionStatus];
+  const subject = subjects[decisionStatus];
+  if (!description || !subject) return { sent: false, reason: "Unsupported appointment notification." };
   const firstName = appointment.student?.firstName || "student";
   const purpose = appointment.purpose ? "\nPurpose: " + appointment.purpose : "";
   const text = "Hello " + firstName + ",\n\n" + description + "\n\nService: " + appointment.serviceType + "\nDate: " + appointment.dateKey + "\nTime: " + appointment.timeSlot + purpose + "\n\nIf you have questions, please contact the Health Services Office.";

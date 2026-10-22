@@ -74,8 +74,14 @@ export async function createAppointment(req, res) {
     });
     student.email = notificationEmail;
     await student.save();
+    await appointment.populate("student", "firstName lastName email");
+    const notification = await sendAppointmentDecisionNotification(appointment, "pending", notificationEmail);
     req.app.get("io")?.emit("appointment:new", appointment);
-    return res.status(201).json({ appointment });
+    return res.status(201).json({
+      appointment,
+      notificationSent: Boolean(notification.sent),
+      notificationMessage: notification.sent ? undefined : notification.reason || "Appointment saved, but the pending email could not be sent.",
+    });
   } catch (error) {
     if (error?.code === 11000) {
       return res.status(409).json({ message: "That appointment time was just booked. Please choose another available time." });

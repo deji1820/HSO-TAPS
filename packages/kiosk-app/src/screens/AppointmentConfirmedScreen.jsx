@@ -8,6 +8,8 @@ export default function AppointmentConfirmedScreen({
   purposeLabel,
   dateLabel,     // e.g. "Friday, October 2, 2026"
   timeLabel,     // e.g. "9:30 AM"
+  pendingEmailSent,
+  notificationEmail,
   onDone,        // called by the End button and when the countdown hits 0
   onFaq,
   isOnline,
@@ -35,7 +37,9 @@ export default function AppointmentConfirmedScreen({
 
         <div className="apt-reminders">
           <p className="apt-reminders-title">PENDING HEALTH SERVICES OFFICE REVIEW</p>
-          <p>We’ll email your school Outlook address when your appointment is accepted or rejected. Please wait for the decision before coming to the clinic.</p>
+          <p>{pendingEmailSent
+            ? `A pending request confirmation was emailed to ${notificationEmail}. We’ll email you again when the appointment is accepted or rejected.`
+            : `We could not send the pending confirmation email to ${notificationEmail || "your school address"}. The request is saved; please contact the Health Services Office if you need confirmation.`} Please wait for the decision before coming to the clinic.</p>
           <p className="apt-reminders-title">IF ACCEPTED:</p>
           <p>Take a picture of the appointment details before you leave the kiosk.</p>
           <p>Arrive on or before the appointment time and check in at the kiosk before entering the clinic{purposeLabel ? " with the complete requirements." : "."}</p>

@@ -841,7 +841,7 @@ async function handleAppointmentProceed(selection) {
   const serviceType = clearanceAppointmentPurpose
     ? "Medical Clearance"
     : consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation";
-  const { appointment } = await createAppointment({
+  const result = await createAppointment({
     studentId: student?.studentId || student?.rfidTagUid,
     serviceType,
     purpose: clearanceAppointmentPurpose || undefined,
@@ -849,7 +849,7 @@ async function handleAppointmentProceed(selection) {
     timeSlot: selection.time,
     notificationEmail: selection.notificationEmail,
   });
-  setAppointmentSelection({ ...selection, appointmentId: appointment._id });
+  setAppointmentSelection({ ...selection, appointmentId: result.appointment._id, pendingEmailSent: result.notificationSent });
   setStep("appointmentConfirmed");
 }
 
@@ -1542,6 +1542,8 @@ async function handleScreeningOptionSelect(mode) {
       year: "numeric",
     })}
     timeLabel={appointmentSelection.time}
+    pendingEmailSent={appointmentSelection.pendingEmailSent}
+    notificationEmail={appointmentSelection.notificationEmail}
     onDone={onFlowDone}
     onFaq={openFaq}
     isOnline={isOnline}
@@ -1554,6 +1556,8 @@ async function handleScreeningOptionSelect(mode) {
     purposeLabel={clearanceAppointmentPurpose}
     dateLabel={appointmentSelection.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
     timeLabel={appointmentSelection.time}
+    pendingEmailSent={appointmentSelection.pendingEmailSent}
+    notificationEmail={appointmentSelection.notificationEmail}
     onDone={onFlowDone}
     onFaq={openFaq}
     isOnline={isOnline}
