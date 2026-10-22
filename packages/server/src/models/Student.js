@@ -16,6 +16,7 @@ const studentSchema = new mongoose.Schema(
     program: String, // e.g. "BS Information Technology"
     yearLevel: String, // e.g. "2nd Year"
     guardianContact: String,
+    email: { type: String, trim: true, lowercase: true },
     healthFlags: [{ type: String }], // e.g. ["Asthma", "Peanut Allergy"]
     schoolYear: String, // e.g. "2026-2027"
     isActive: { type: Boolean, default: true },

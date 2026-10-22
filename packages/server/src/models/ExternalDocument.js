@@ -18,6 +18,9 @@ const externalDocumentSchema = new mongoose.Schema(
     contentType: String,
     fileData: Buffer,
     status: { type: String, enum: ["Pending", "Verified", "Rejected"], default: "Pending" },
+    notificationEmail: { type: String, trim: true, lowercase: true },
+    lastNotifiedStatus: { type: String, enum: ["Pending", "Verified", "Rejected"] },
+    notificationSentAt: Date,
     submittedAt: Date,
   },
   { timestamps: true }

@@ -45,7 +45,7 @@ function parseCsv(text) {
 // Student.js fields the bulk-upsert route can actually use.
 const EXPECTED_COLUMNS = [
   "studentId", "firstName", "lastName", "age", "sex",
-  "program", "yearLevel", "guardianContact", "schoolYear",
+  "program", "yearLevel", "guardianContact", "schoolYear", "email",
 ];
 
 const MODE_OPTIONS = [

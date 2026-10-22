@@ -4,6 +4,7 @@ import QueueEntry from "../models/QueueEntry.js";
 import ExternalDocument from "../models/ExternalDocument.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
+import { sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
 
 // Per HSO-TAP_SYSTEM_NOTES: Hypothermia < 35.5, Normal 35.5-37.5, Fever >= 37.8
 // (37.6-37.7 is undefined in the notes; treated as Normal here)
@@ -95,8 +96,9 @@ export async function submitIntake(req, res) {
 
 export async function submitDocument(req, res) {
   const { studentId, title, category, examDate, submissionDetails, name, contentType, fileData } = req.body || {};
-  if (!studentId || !title || !category || !examDate || !name || !fileData) {
-    return res.status(400).json({ message: "ID, purpose, category, examination date, and file are required." });
+  const notificationEmail = String(req.body?.notificationEmail || "").trim().toLowerCase();
+  if (!studentId || !title || !category || !examDate || !name || !fileData || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {
+    return res.status(400).json({ message: "ID, purpose, category, examination date, a valid email address, and file are required." });
   }
   if (typeof fileData !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(fileData)) {
     return res.status(400).json({ message: "The uploaded file is invalid." });
@@ -138,7 +140,11 @@ export async function submitDocument(req, res) {
     examDate: new Date(examDate),
     submissionDetails: submissionDetails || {},
     status: "Pending",
+    notificationEmail,
     submittedAt: new Date(),
   });
-  res.status(201).json({ id: document._id, name: document.name, category: document.category, status: document.status });
+  student.email = notificationEmail;
+  await student.save();
+  const notification = await sendDocumentStatusNotification(document, "Pending", notificationEmail);
+  res.status(201).json({ id: document._id, name: document.name, category: document.category, status: document.status, notificationSent: notification.sent, notificationMessage: notification.reason });
 }

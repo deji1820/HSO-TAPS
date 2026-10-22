@@ -40,6 +40,7 @@ function localDateInputValue(date = new Date()) {
 export default function DocumentSubmissionScreen({ initialStudent = null, onBack, onDone, isOnline = true }) {
   const [student, setStudent] = useState(initialStudent);
   const [studentId, setStudentId] = useState(initialStudent?.studentId || "");
+  const [notificationEmail, setNotificationEmail] = useState(initialStudent?.email || "");
   const [affiliation, setAffiliation] = useState("Student");
   const [fullName, setFullName] = useState(initialStudent ? [initialStudent.lastName, initialStudent.firstName, initialStudent.middleName].filter(Boolean).join(", ") : "");
   const [sex, setSex] = useState(initialStudent?.sex || "");
@@ -60,6 +61,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [completed, setCompleted] = useState(false);
+  const [emailNoticeSent, setEmailNoticeSent] = useState(false);
   const latestAllowedDateOfBirth = localDateInputValue();
 
   async function verifyIdentity(event) {
@@ -69,6 +71,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     try {
       const found = await lookupStudent(studentId.trim());
       setStudent(found);
+      setNotificationEmail(found.email || "");
       setFullName([found.lastName, found.firstName, found.middleName].filter(Boolean).join(", "));
       setSex(found.sex || "");
       setDateOfBirth(found.dateOfBirth?.slice?.(0, 10) || "");
@@ -119,6 +122,10 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       setError("Date of birth cannot be in the future.");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail.trim())) {
+      setError("Enter a valid email address so we can send your submission status.");
+      return;
+    }
     if (!fullName.trim() || !sex || !dateOfBirth || !institutionalAffiliation.trim() || !purpose || !documentType || (!isHealthDeclaration && !examDate) || (documentType === "Other" && !otherType.trim())) {
       setError("Complete all required identity and document details.");
       return;
@@ -127,6 +134,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     setLoading(true);
     setError("");
     let uploaded = 0;
+    let allNotificationsSent = true;
     const submissionDetails = {
       fullName: fullName.trim(), sex, dateOfBirth, affiliation,
       institutionalAffiliation: institutionalAffiliation.trim(),
@@ -137,8 +145,9 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       if (isHealthDeclaration) {
         const file = new File([JSON.stringify(healthDeclaration, null, 2)], "Health_Status_Declaration.json", { type: "application/json" });
         setProgress("Saving your health declaration...");
-        await submitKioskDocument({
+        const result = await submitKioskDocument({
           studentId: student.studentId || studentId.trim(),
+          notificationEmail: notificationEmail.trim(),
           title: HEALTH_DECLARATION_TYPE,
           category: HEALTH_DECLARATION_TYPE,
           examDate: localDateInputValue(),
@@ -147,12 +156,14 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           contentType: "application/json",
           fileData: await encodeFile(file),
         });
+        allNotificationsSent = allNotificationsSent && result.notificationSent;
         uploaded += 1;
       } else {
       for (const file of files) {
         setProgress(`Uploading ${uploaded + 1} of ${files.length}: ${file.name}`);
-        await submitKioskDocument({
+        const result = await submitKioskDocument({
           studentId: student.studentId || studentId.trim(),
+          notificationEmail: notificationEmail.trim(),
           title: `Medical Document Submission — ${purpose}`,
           category: documentType === "Other" ? `Other: ${otherType.trim()}` : documentType,
           examDate,
@@ -161,10 +172,12 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           contentType: fileContentType(file),
           fileData: await encodeFile(file),
         });
+        allNotificationsSent = allNotificationsSent && result.notificationSent;
         uploaded += 1;
       }
       }
       setProgress(isHealthDeclaration ? "Health declaration submitted." : `${uploaded} file${uploaded === 1 ? "" : "s"} submitted.`);
+      setEmailNoticeSent(allNotificationsSent);
       setCompleted(true);
     } catch (uploadError) {
       const message = uploadError?.response?.data?.message || uploadError?.message || "Upload failed.";
@@ -181,7 +194,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     isOnline={isOnline}
   />;
 
-  if (completed) return <div className="kiosk-shell document-submission-screen"><KioskHeader isOnline={isOnline} /><main className="document-submission-content document-submission-success"><p className="document-eyebrow">DOCUMENT SUBMISSION</p><h1>Submission received</h1><p>{progress} Your documents have been added to your health record for clinic review.</p><button type="button" onClick={onDone}>Done</button></main></div>;
+  if (completed) return <div className="kiosk-shell document-submission-screen"><KioskHeader isOnline={isOnline} /><main className="document-submission-content document-submission-success"><p className="document-eyebrow">DOCUMENT SUBMISSION</p><h1>Submission received</h1><p>{progress} Your documents have been added to your health record for clinic review.</p><p>{emailNoticeSent ? `A pending status email was sent to ${notificationEmail}.` : "Your documents were saved, but the pending email could not be sent. Please contact the Health Services Office."}</p><button type="button" onClick={onDone}>Done</button></main></div>;
 
   return <div className="kiosk-shell document-submission-screen">
     <KioskHeader isOnline={isOnline} />
@@ -205,6 +218,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
             <label>Affiliation<select value={affiliation} onChange={(event) => { setAffiliation(event.target.value); setPurpose(""); setInstitutionalAffiliation(""); setDocumentType(""); setHealthDeclaration(null); setFiles([]); }}><option>Student</option><option>Employee</option></select></label>
             <label>Student ID / Employee ID<input required value={studentId} onChange={(event) => { setStudentId(event.target.value); setVerified(false); }} /></label>
             <label className="document-field-wide">Full name (Last Name, First Name, Middle Initial)<input required value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
+            <label className="document-field-wide">School email address<input required type="email" autoComplete="email" value={notificationEmail} onChange={(event) => setNotificationEmail(event.target.value)} /><small>Status notices will be sent to this address and delivered to your Outlook inbox. We’ll save it for your next document submission.</small></label>
             <label>Sex assigned at birth<select required value={sex} onChange={(event) => setSex(event.target.value)}><option value="">Select</option><option>Male</option><option>Female</option></select></label>
             <label>Date of birth<input required type="date" max={latestAllowedDateOfBirth} value={dateOfBirth} onChange={(event) => { setDateOfBirth(event.target.value); setError(""); }} /></label>
             <label>{affiliation === "Student" ? "Academic program / grade level" : "Department"}<input required value={institutionalAffiliation} onChange={(event) => setInstitutionalAffiliation(event.target.value)} /></label>

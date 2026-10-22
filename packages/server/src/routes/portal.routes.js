@@ -11,6 +11,7 @@ import PatientHistory from "../models/PatientHistory.js";
 import Announcement from "../models/Announcement.js";
 import MedicineInventory from "../models/MedicineInventory.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
+import { sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -96,17 +97,22 @@ router.post("/students/:id/documents", requireDocumentRole, async (req, res) => 
   const student = await Student.findById(req.params.id);
   if (!student) return res.status(404).json({ message: "Student not found" });
   const { title, category, name, contentType, fileData } = req.body;
+  const notificationEmail = String(req.body.notificationEmail || student.email || "").trim().toLowerCase();
   if (!title || !name || !fileData) return res.status(400).json({ message: "Title and file are required" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) return res.status(400).json({ message: "Enter a valid student email address to send the submission notice." });
   const bytes = Buffer.from(fileData, "base64");
   if (bytes.length > 12 * 1024 * 1024) return res.status(413).json({ message: "File exceeds the 12 MB limit" });
   const document = await ExternalDocument.create({
     student: student._id, documentTitle: title, category, name, contentType,
-    fileData: bytes, formSource: "Admin Portal", status: "Pending", submittedAt: new Date(),
+    fileData: bytes, formSource: "Admin Portal", status: "Pending", notificationEmail, submittedAt: new Date(),
   });
+  student.email = notificationEmail;
+  await student.save();
+  const notification = await sendDocumentStatusNotification(document, "Pending", notificationEmail);
   const result = document.toObject();
   delete result.fileData;
   result.fileUrl = `/api/documents/${document._id}/file`;
-  res.status(201).json(result);
+  res.status(201).json({ ...result, notificationSent: notification.sent, notificationMessage: notification.reason });
 });
 router.get("/documents", requireDocumentRole, async (_req, res) => {
   const documents = await ExternalDocument.find().select("-fileData").populate("student", "studentId firstName lastName").sort({ submittedAt: -1, createdAt: -1 });
@@ -120,15 +126,20 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });
   const allowedStatuses = ["Pending", "Verified", "Rejected"];
   if (!allowedStatuses.includes(req.body.status)) return res.status(400).json({ message: "Invalid document status" });
-  const document = await ExternalDocument.findByIdAndUpdate(
-    req.params.id,
-    { $set: { status: req.body.status } },
-    { new: true, runValidators: true }
-  ).select("-fileData").populate("student", "studentId firstName lastName");
+  const document = await ExternalDocument.findById(req.params.id).select("-fileData").populate("student", "studentId firstName lastName email");
   if (!document) return res.status(404).json({ message: "Document not found" });
+  const statusChanged = document.status !== req.body.status;
+  document.status = req.body.status;
+  await document.save();
+  let notification = { sent: document.lastNotifiedStatus === document.status };
+  if (statusChanged || document.lastNotifiedStatus !== document.status) {
+    notification = await sendDocumentStatusNotification(document, document.status, document.notificationEmail || document.student?.email);
+  }
+  await document.populate("student", "studentId firstName lastName");
+  document.fileData = undefined;
   const result = document.toObject();
   if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
-  res.json(result);
+  res.json({ ...result, notificationSent: notification.sent, notificationMessage: notification.reason });
 });
 router.get("/documents/:id/file", requireDocumentRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });

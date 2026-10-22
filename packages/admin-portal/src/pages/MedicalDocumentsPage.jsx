@@ -36,12 +36,12 @@ export default function MedicalDocumentsPage() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = "";
       for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      const created = await uploadMedicalDocument(patient._id, { title: form.get("title"), category: form.get("category"), name: file.name, contentType: file.type || "application/octet-stream", fileData: btoa(binary) });
+      const created = await uploadMedicalDocument(patient._id, { title: form.get("title"), category: form.get("category"), notificationEmail: form.get("notificationEmail"), name: file.name, contentType: file.type || "application/octet-stream", fileData: btoa(binary) });
       setFiles((current) => [created, ...current]);
       formElement.reset();
       setPatient(null);
       setPatientQuery("");
-      setNotice("Document uploaded and saved to the server.");
+      setNotice(created.notificationSent ? "Document saved as pending. The student was emailed." : `Document saved as pending, but the email was not sent. ${created.notificationMessage || "Check the backend email settings."}`);
     } catch (error) {
       setNotice(error?.response?.data?.message || "Could not upload the document. Check the server connection and file size.");
     } finally { setSaving(false); }
@@ -53,7 +53,7 @@ export default function MedicalDocumentsPage() {
     try {
       const updated = await updateMedicalDocumentStatus(file._id, status);
       setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated } : item));
-      setNotice(`Document status changed to ${status}.`);
+      setNotice(updated.notificationSent ? `Document status changed to ${status}. The student was emailed.` : `Document status changed to ${status}, but the email was not sent. ${updated.notificationMessage || "Check the backend email settings."}`);
     } catch (error) {
       setNotice(error?.response?.data?.message || "Could not update this document status.");
     } finally {
@@ -67,6 +67,7 @@ export default function MedicalDocumentsPage() {
     <form className="card medical-documents-form" onSubmit={submit}>
       <label className="field-label">Patient Name<input className="text-input" value={patient ? `${patient.firstName} ${patient.lastName}` : patientQuery} onChange={(event) => { setPatient(null); setPatientQuery(event.target.value); setNotice(""); }} placeholder="Search by student name or ID" required /></label>
       {matches.length > 0 && <div className="student-suggestions">{matches.map((match) => <button type="button" key={match._id} onClick={() => { setPatient(match); setPatientQuery(`${match.firstName} ${match.lastName}`); setMatches([]); }}>{match.firstName} {match.lastName} <small>({match.studentId})</small></button>)}</div>}
+      <label className="field-label">Student school email (Outlook)<input className="text-input" name="notificationEmail" type="email" autoComplete="email" value={patient?.email || ""} onChange={(event) => setPatient((current) => current ? { ...current, email: event.target.value } : current)} required placeholder="student@school.edu" /></label>
       <label className="field-label">Document category<select className="text-input" name="category" required><option value="">Select a category</option><option>Medical certificate</option><option>Diagnostic test</option><option>Laboratory result</option><option>Other</option></select></label>
       <label className="field-label">Document title<input className="text-input" name="title" placeholder="Enter a short document title" required /></label>
       <label className="field-label">File<input className="text-input" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png" required /></label>
