@@ -1,10 +1,13 @@
-import nodemailer from "nodemailer";
-
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
+const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+const GMAIL_SEND_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 
 export function areDocumentNotificationsConfigured() {
   const provider = String(process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
   if (provider === "gmail") return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
+  if (provider === "gmail-api") {
+    return Boolean(process.env.GMAIL_USER && process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN);
+  }
   if (provider === "resend") return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
   return false;
 }
@@ -13,6 +16,55 @@ function escapeHtml(value) {
   return String(value || "").replace(/[&<>"']/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[character]);
+}
+
+function encodeMimeMessage({ from, to, subject, text }) {
+  const safeHeader = (value) => String(value).replace(/[\r\n]+/g, " ");
+  const mime = [
+    `From: ${safeHeader(from)}`,
+    `To: ${safeHeader(to)}`,
+    `Subject: ${safeHeader(subject)}`,
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    text,
+  ].join("\r\n");
+  return Buffer.from(mime, "utf8").toString("base64url");
+}
+
+async function sendWithGmailApi(message) {
+  const tokenResponse = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GMAIL_CLIENT_ID,
+      client_secret: process.env.GMAIL_CLIENT_SECRET,
+      refresh_token: process.env.GMAIL_REFRESH_TOKEN,
+      grant_type: "refresh_token",
+    }),
+  });
+  if (!tokenResponse.ok) {
+    console.error(`[Email] Gmail API access token refresh failed (HTTP ${tokenResponse.status}).`);
+    return false;
+  }
+  const { access_token: accessToken } = await tokenResponse.json();
+  if (!accessToken) return false;
+
+  const raw = encodeMimeMessage({
+    ...message,
+    from: `HSO Health Services <${process.env.GMAIL_USER}>`,
+  });
+  const sendResponse = await fetch(GMAIL_SEND_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw }),
+  });
+  if (!sendResponse.ok) {
+    console.error(`[Email] Gmail API send failed (HTTP ${sendResponse.status}).`);
+    return false;
+  }
+  return true;
 }
 
 export async function sendDocumentStatusNotification(document, status, recipient = document.notificationEmail) {
@@ -26,10 +78,13 @@ export async function sendDocumentStatusNotification(document, status, recipient
   if (provider === "gmail" && (!gmailUser || !gmailAppPassword)) {
     return { sent: false, reason: "Gmail email settings are not configured on the server." };
   }
+  if (provider === "gmail-api" && !areDocumentNotificationsConfigured()) {
+    return { sent: false, reason: "Gmail API settings are not configured on the server." };
+  }
   if (provider === "resend" && (!apiKey || !from)) {
     return { sent: false, reason: "Resend email settings are not configured on the server." };
   }
-  if (!["gmail", "resend"].includes(provider)) return { sent: false, reason: "Unsupported email provider." };
+  if (!["gmail", "gmail-api", "resend"].includes(provider)) return { sent: false, reason: "Unsupported email provider." };
 
   const firstName = document.student?.firstName || "student";
   const descriptions = {
@@ -52,7 +107,8 @@ export async function sendDocumentStatusNotification(document, status, recipient
       html: `<p>Hello ${escapeHtml(firstName)},</p><p>${escapeHtml(descriptions[status])}</p><p>If you have questions, please contact the Health Services Office.</p>`,
     };
     if (provider === "gmail") {
-      const transporter = nodemailer.createTransport({
+      const nodemailer = await import("nodemailer");
+      const transporter = nodemailer.default.createTransport({
         service: "gmail",
         connectionTimeout: 10000,
         greetingTimeout: 10000,
@@ -60,6 +116,9 @@ export async function sendDocumentStatusNotification(document, status, recipient
         auth: { user: gmailUser, pass: gmailAppPassword.replace(/\s/g, "") },
       });
       await transporter.sendMail({ ...message, from: `HSO Health Services <${gmailUser}>` });
+    } else if (provider === "gmail-api") {
+      const sent = await sendWithGmailApi(message);
+      if (!sent) return { sent: false, reason: "The email provider could not send the notification." };
     } else {
       const response = await fetch(RESEND_ENDPOINT, {
         method: "POST",
