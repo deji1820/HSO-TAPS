@@ -171,6 +171,9 @@ export default function App() {
   useEffect(() => { stepRef.current = step; }, [step]);
 
   useEffect(() => {
+    // A phone session is tied to the QR token in its URL. It must never act
+    // as another kiosk's RFID listener or read the shared hardware bridge.
+    if (mobileSessionToken) return undefined;
     bridgeRef.current = connectDeviceBridge((event) => deviceEventHandlerRef.current?.(event));
     return () => {
       bridgeRef.current?.close();
@@ -190,6 +193,9 @@ export default function App() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "kiosk_sessions" },
         async (payload) => {
+          // Phone clients only follow their own session's UPDATE events below.
+          // New RFID sessions belong to the physical kiosk, never this phone.
+          if (mobileSessionToken) return;
           console.log("[Supabase Realtime] Session inserted:", payload.new);
           if (payload.new?.rfid_uid && payload.new?.status === "tap_logged") {
             if (payload.new?.id) {
