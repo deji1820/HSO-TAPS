@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, updateMedicalDocumentStatus } from "../services/api.js";
+import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, updateMedicalDocumentStatus, updateMedicalProfile } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/components/ActiveSessionModal.css";
@@ -144,8 +144,8 @@ function ConsultationsTab({ consultations }) {
 function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentId, onStatusChange }) {
   if (!documents?.length) return <div className="table-empty">No external documents synced yet.</div>;
   return (
-    <div className="table-wrap">
-      <table className="data-table">
+    <div className="table-wrap emr-files-table-wrap emr-synced-files-wrap">
+      <table className="data-table emr-synced-files-table">
         <thead>
           <tr>
             <th>Document Title</th>
@@ -172,8 +172,10 @@ function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentI
   );
 }
 
-function ProfileValue({ label, value }) {
-  return <div className="emr-profile-field"><span>{label}</span><div>{value || "—"}</div></div>;
+function ProfileValue({ label, value, editable = false, name, onChange }) {
+  return <div className="emr-profile-field"><span>{label}</span>{editable
+    ? <input className="emr-profile-edit-input" name={name} value={value ?? ""} onChange={(event) => onChange(name, event.target.value)} />
+    : <div>{value || "—"}</div>}</div>;
 }
 
 const OMIT_FORM_FIELDS = new Set(["studentid", "documenttitle", "fileurl", "submittedat"]);
@@ -221,7 +223,7 @@ function HealthStatusDeclarationTab({ submissions }) {
 
 function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumentId, onStatusChange }) {
   if (!files.length) return <div className="table-empty">No documents have been submitted for this patient.</div>;
-  return <div className="table-wrap"><table className="data-table">
+  return <div className="table-wrap emr-files-table-wrap"><table className="data-table emr-submissions-table">
     <thead><tr><th>Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Submitted Details</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>{files.map((file) => <tr key={file.id}><td>{file.category || "N/A"}</td><td>{file.title || "N/A"}</td><td>{file.purpose || "N/A"}</td><td>{file.examDate ? formatDate(file.examDate) : "N/A"}</td><td>{formatDate(file.date)}</td><td>{file.name || "N/A"}</td><td><details><summary>View details</summary><dl>{flattenFormPayload(file.details || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{value}</dd></div>)}</dl></details></td><td>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${file.title || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingDocumentId === file.id} onChange={(event) => onStatusChange(file.id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <span className={"badge " + (file.status === "Verified" ? "badge-routine" : file.status === "Rejected" ? "badge-high" : "badge-standard")}>{file.status || "Pending"}</span>}</td><td>{file.name ? <div className="document-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}</tbody>
   </table></div>;
@@ -249,52 +251,77 @@ function KioskRequestsTab({ requests = [] }) {
   </table></div>;
 }
 
-function MedicalProfileSections({ entry, vitals = [] }) {
+function MedicalProfileSections({ entry, vitals = [], editable = false, onFieldChange }) {
   const fields = entry?.fields || {};
   const latestVitals = vitals[0] || {};
+  const profileField = (key, label, fallback = "") => <ProfileValue key={key} label={label} value={fields[key] ?? fallback} editable={editable} name={key} onChange={onFieldChange} />;
   return <div className="emr-profile-sections">
     <section className="emr-profile-section">
       <h3>Physical Examination</h3>
       <div className="emr-physical-layout">
         <div className="emr-profile-fields">
-          <ProfileValue label="Blood Pressure (mmHg)" value={fields.blood_pressure_systolic || fields.blood_pressure_diastolic ? `${fields.blood_pressure_systolic || "—"} / ${fields.blood_pressure_diastolic || "—"}` : latestVitals.bloodPressure} />
-          {["height_cm", "weight_kg", "abdomen", "ears", "eyes_pupils", "heart", "lungs", "nose", "skin", "thorax", "extremities", "deformities"].map((key) => <ProfileValue key={key} label={key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())} value={fields[key] || (key === "height_cm" ? latestVitals.heightCm : key === "weight_kg" ? latestVitals.weightKg : "")} />)}
+          {editable ? <div className="emr-profile-field emr-profile-bp-edit"><span>Blood Pressure (mmHg)</span><div><input className="emr-profile-edit-input" aria-label="Systolic blood pressure" placeholder="Systolic" value={fields.blood_pressure_systolic ?? ""} onChange={(event) => onFieldChange("blood_pressure_systolic", event.target.value)} /><span>/</span><input className="emr-profile-edit-input" aria-label="Diastolic blood pressure" placeholder="Diastolic" value={fields.blood_pressure_diastolic ?? ""} onChange={(event) => onFieldChange("blood_pressure_diastolic", event.target.value)} /></div></div> : <ProfileValue label="Blood Pressure (mmHg)" value={fields.blood_pressure_systolic || fields.blood_pressure_diastolic ? `${fields.blood_pressure_systolic || "—"} / ${fields.blood_pressure_diastolic || "—"}` : latestVitals.bloodPressure} />}
+          {["height_cm", "weight_kg", "abdomen", "ears", "eyes_pupils", "heart", "lungs", "nose", "skin", "thorax", "extremities", "deformities"].map((key) => profileField(key, key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()), key === "height_cm" ? latestVitals.heightCm : key === "weight_kg" ? latestVitals.weightKg : ""))}
         </div>
         <div className="emr-profile-aside">
           <div className="emr-kiosk-intake"><strong>Kiosk Intake:</strong><span>{latestVitals.temperatureC != null ? `${latestVitals.temperatureC}°C` : "—"} · last captured at {latestVitals.capturedAt ? formatDate(latestVitals.capturedAt) : "—"}</span></div>
           <ProfileValue label="BP Status" value={latestVitals.bloodPressureStatus || latestVitals.bloodPressureClassification} />
           <ProfileValue label="BMI / Classification" value={latestVitals.bmi != null ? `${latestVitals.bmi} · ${latestVitals.bmiCategory || "Unclassified"}` : ""} />
-          <ProfileValue label="Other Pertinent Findings" value={fields.physical_other_findings} />
+          {profileField("physical_other_findings", "Other Pertinent Findings")}
         </div>
       </div>
     </section>
     <section className="emr-profile-section">
       <h3>Laboratory Examination</h3>
       <div className="emr-profile-fields emr-lab-fields">
-        <ProfileValue label="Chest X-Ray" value={fields.chest_xray} />
-        <ProfileValue label="Significant Findings" value={fields.lab_significant_findings} />
-        <ProfileValue label="Cardio Clearance" value={fields.cardio_clearance} />
-        <ProfileValue label="Remarks" value={fields.lab_remarks} />
+        {profileField("chest_xray", "Chest X-Ray")}
+        {profileField("lab_significant_findings", "Significant Findings")}
+        {profileField("cardio_clearance", "Cardio Clearance")}
+        {profileField("lab_remarks", "Remarks")}
       </div>
     </section>
     <section className="emr-profile-section">
       <h3>Medical Results</h3>
       <div className="emr-profile-fields emr-result-fields">
-        <ProfileValue label="Findings" value={fields.medical_findings} />
-        <ProfileValue label="Diagnosis" value={fields.diagnosis} />
-        <ProfileValue label="Treatment / Remarks" value={fields.treatment_remarks} />
-        <ProfileValue label="Medicine Issued" value={fields.medicine_issued} />
+        {profileField("medical_findings", "Findings")}
+        {profileField("diagnosis", "Diagnosis")}
+        {profileField("treatment_remarks", "Treatment / Remarks")}
+        {profileField("medicine_issued", "Medicine Issued")}
       </div>
     </section>
   </div>;
 }
 
-function MedicalProfileHistory({ entries, vitals }) {
+function MedicalProfileHistory({ entries, vitals, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const latest = entries[0];
   const previous = entries.slice(1);
+  function startEditing() {
+    setDraft({ ...(latest?.fields || {}) });
+    setSaveError("");
+    setEditing(true);
+  }
+  async function saveEdits() {
+    if (!latest?._id) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const updated = await updateMedicalProfile(latest._id, { fields: draft });
+      onSaved(updated);
+      setEditing(false);
+    } catch (error) {
+      setSaveError(error.response?.data?.message || "Could not save the medical profile. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
   return <>
-    <div className="emr-profile-meta">{latest ? <>Last examined: {new Date(latest.examinedAt).toLocaleString()} · {latest.purpose} · {latest.provider}</> : "No medical profile has been saved for this patient."}</div>
-    <MedicalProfileSections entry={latest} vitals={vitals} />
+    <div className="emr-profile-toolbar"><div className="emr-profile-meta">{latest ? <>Last examined: {new Date(latest.examinedAt).toLocaleString()} · {latest.purpose} · {latest.provider}</> : "No medical profile has been saved for this patient."}</div>{latest && <div className="emr-profile-edit-actions">{editing ? <><button className="btn btn-success btn-sm" type="button" disabled={saving} onClick={saveEdits}>{saving ? "Saving…" : "Save changes"}</button><button className="btn btn-outline btn-sm" type="button" disabled={saving} onClick={() => setEditing(false)}>Cancel</button></> : <button className="btn btn-outline btn-sm" type="button" onClick={startEditing}>Edit medical profile</button>}</div>}</div>
+    {saveError && <p className="error-text" role="alert">{saveError}</p>}
+    <MedicalProfileSections entry={editing ? { ...latest, fields: draft } : latest} vitals={vitals} editable={editing} onFieldChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} />
     <h2 className="section-title emr-history-title">Previous Medical Profile History</h2>
     {previous.length ? <div className="emr-profile-previous">{previous.map((entry) => <details key={entry.id}>
       <summary>{new Date(entry.examinedAt).toLocaleString()} · {entry.purpose} · {entry.provider}</summary>
@@ -489,6 +516,10 @@ export default function EMRPage() {
     }
   }
 
+  function replaceLatestMedicalProfile(updated) {
+    setProfileHistory((current) => current.map((profile, index) => index === 0 ? { ...updated, id: updated._id } : profile));
+  }
+
   async function toggleFamilyHistoryEdit() {
     if (editingFamilyHistory && record?.student?._id) {
       try { await savePatientHistory(record.student._id, { familyHistory, medicalHistory }); }
@@ -611,7 +642,7 @@ export default function EMRPage() {
               <div><span className="field-label-inline">Sex:</span> {record.student.sex || "—"}</div>
               <div><span className="field-label-inline">Guardian Contact:</span> {record.student.guardianContact || "—"}</div>
             </div><p className="page-subtitle">Profile data is sourced from the student master-data import.</p></div>}
-            {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
+            {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} onSaved={replaceLatestMedicalProfile} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
             {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} />}

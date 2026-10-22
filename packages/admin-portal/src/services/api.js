@@ -22,6 +22,7 @@ export const updateQueueStatus = (id, status) => api.patch(`/queue/${id}/status`
 export const completeSession = (payload) => api.post("/consultations", payload).then((r) => r.data);
 export const saveMedicalProfile = (id, payload) => api.post(`/students/${id}/medical-profiles`, payload).then((r) => r.data);
 export const getMedicalProfiles = (id) => api.get(`/students/${id}/medical-profiles`).then((r) => r.data);
+export const updateMedicalProfile = (id, payload) => api.put(`/medical-profiles/${id}`, payload).then((r) => r.data);
 export const getPatientHistory = (id) => api.get(`/students/${id}/history`).then((r) => r.data);
 export const savePatientHistory = (id, payload) => api.put(`/students/${id}/history`, payload).then((r) => r.data);
 export const uploadMedicalDocument = (id, payload) => api.post(`/students/${id}/documents`, payload).then((r) => r.data);

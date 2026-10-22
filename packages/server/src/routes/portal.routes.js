@@ -78,6 +78,14 @@ router.post("/students/:id/medical-profiles", requireClinicalRole, async (req, r
   const profile = await MedicalProfile.create({ ...req.body, student: student._id, studentId: student.studentId });
   res.status(201).json(profile);
 });
+router.put("/medical-profiles/:id", requireClinicalRole, async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid medical profile ID" });
+  const fields = req.body?.fields;
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) return res.status(400).json({ message: "Medical profile fields are required" });
+  const profile = await MedicalProfile.findByIdAndUpdate(req.params.id, { $set: { fields } }, { new: true, runValidators: true });
+  if (!profile) return res.status(404).json({ message: "Medical profile not found" });
+  res.json(profile);
+});
 router.get("/students/:id/history", requireClinicalRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid student ID" });
   const history = await PatientHistory.findOne({ student: req.params.id });
