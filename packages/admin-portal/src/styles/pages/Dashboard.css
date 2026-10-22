@@ -14,6 +14,11 @@
 .dashboard-grid > .card { border-radius: 0; box-shadow: none; padding: 0; background: transparent; }
 .queue-list-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
 .queue-list-header h2, .patient-snapshot h2 { color: #4b4b4b; font-size: 1rem; margin: 0; }
+.queue-view-tabs { display: flex; gap: 8px; margin: 0 0 14px; border-bottom: 1px solid #d8d8d8; }
+.queue-view-tabs button { border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; background: transparent; color: #596579; font: inherit; font-weight: 700; cursor: pointer; }
+.queue-view-tabs button.active { border-bottom-color: #337fb5; color: #1f5f91; }
+.snapshot-archive-vitals { display: grid; gap: 5px; margin-top: 14px; padding: 12px; border: 1px solid #d8e0e8; background: #f8fafc; color: #4b4b4b; font-size: .88rem; }
+.snapshot-archive-vitals strong { margin-bottom: 3px; }
 .filter-select { width: 125px; padding: 5px 8px !important; font-size: .75rem !important; }
 .dashboard-queue-table-wrap { border-radius: 0; box-shadow: none; }
 .dashboard-queue-table { font-size: .9rem !important; }
