@@ -11,7 +11,10 @@ const appointmentSchema = new mongoose.Schema(
     purpose: { type: String, trim: true, maxlength: 200 },
     dateKey: { type: String, required: true }, // YYYY-MM-DD in the kiosk's local calendar
     timeSlot: { type: String, required: true },
+    notificationEmail: { type: String, trim: true, lowercase: true },
     status: { type: String, enum: ["scheduled", "checked_in", "cancelled", "completed"], default: "scheduled", index: true },
+    decisionStatus: { type: String, enum: ["pending", "accepted", "rejected"], default: "pending", index: true },
+    decisionAt: Date,
     queueEntry: { type: mongoose.Schema.Types.ObjectId, ref: "QueueEntry" },
   },
   { timestamps: true }

@@ -1,5 +1,6 @@
 import Student from "../models/Student.js";
 import Appointment from "../models/Appointment.js";
+import { sendAppointmentDecisionNotification } from "../services/documentNotifications.service.js";
 
 const SERVICES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance"]);
 const TIMES = new Set([
@@ -45,8 +46,12 @@ export async function getAvailability(req, res) {
 
 export async function createAppointment(req, res) {
   const { studentId, serviceType, purpose, date, timeSlot } = req.body;
+  const notificationEmail = String(req.body.notificationEmail || "").trim().toLowerCase();
   if (!SERVICES.has(serviceType) || !validDateKey(date) || date < todayInManila() || !TIMES.has(timeSlot) || !slotIsInFuture(date, timeSlot)) {
     return res.status(400).json({ message: "The selected service, date, or time is invalid." });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {
+    return res.status(400).json({ message: "Enter a valid school email address to receive the appointment decision." });
   }
   if (serviceType === "Medical Clearance" && (!purpose || typeof purpose !== "string" || !purpose.trim())) {
     return res.status(400).json({ message: "Select a medical clearance purpose before booking." });
@@ -65,7 +70,10 @@ export async function createAppointment(req, res) {
       purpose: purpose?.trim(),
       dateKey: date,
       timeSlot,
+      notificationEmail,
     });
+    student.email = notificationEmail;
+    await student.save();
     req.app.get("io")?.emit("appointment:new", appointment);
     return res.status(201).json({ appointment });
   } catch (error) {
@@ -77,8 +85,59 @@ export async function createAppointment(req, res) {
 }
 
 export async function listAppointments(_req, res) {
-  const appointments = await Appointment.find({ status: "scheduled", dateKey: { $gte: todayInManila() } })
-    .populate("student", "studentId firstName lastName program")
+  const appointments = await Appointment.find({
+    dateKey: { $gte: todayInManila() },
+    $or: [
+      { status: "scheduled" },
+      { status: "cancelled", decisionStatus: "rejected" },
+    ],
+  })
+    .populate("student", "studentId firstName lastName program email")
     .sort({ dateKey: 1, timeSlot: 1 });
   res.json(appointments);
+}
+
+export async function updateAppointmentDecision(req, res) {
+  const { decisionStatus } = req.body;
+  if (!["accepted", "rejected"].includes(decisionStatus)) {
+    return res.status(400).json({ message: "Choose accept or reject for this appointment." });
+  }
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) {
+    return res.status(400).json({ message: "Invalid appointment ID." });
+  }
+
+  const appointmentUpdate = {
+    $set: {
+      decisionStatus,
+      decisionAt: new Date(),
+      ...(decisionStatus === "rejected" ? { status: "cancelled" } : {}),
+    },
+  };
+  const appointment = await Appointment.findOneAndUpdate(
+    {
+      _id: req.params.id,
+      status: "scheduled",
+      $or: [{ decisionStatus: "pending" }, { decisionStatus: { $exists: false } }],
+    },
+    appointmentUpdate,
+    { new: true, runValidators: true }
+  ).populate("student", "studentId firstName lastName email");
+  if (!appointment) {
+    const exists = await Appointment.exists({ _id: req.params.id });
+    return exists
+      ? res.status(409).json({ message: "This appointment has already been decided or is no longer active." })
+      : res.status(404).json({ message: "Appointment not found." });
+  }
+
+  const notificationEmail = appointment.notificationEmail || appointment.student?.email;
+  const notification = notificationEmail
+    ? await sendAppointmentDecisionNotification(appointment, decisionStatus, notificationEmail)
+    : { sent: false, reason: "The student has no school email address on file." };
+  req.app.get("io")?.emit("appointment:update", { _id: appointment._id, decisionStatus, status: appointment.status });
+
+  return res.json({
+    appointment,
+    notificationSent: Boolean(notification.sent),
+    notificationMessage: notification.sent ? undefined : notification.reason || "Decision saved, but the email could not be sent.",
+  });
 }

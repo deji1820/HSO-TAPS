@@ -430,6 +430,29 @@
   max-width: none;
   align-items: start;
 }
+.apt-email-field {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 560px);
+  margin: 22px 8px 0;
+  color: var(--nu-blue-dark);
+  font-size: 15px;
+  font-weight: 700;
+}
+.apt-email-field input {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #9aaec8;
+  border-radius: 6px;
+  color: #18345b;
+  font: inherit;
+}
+.apt-email-field p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 400;
+}
 .apt-page--booking .apt-card {
   min-height: 244px;
   padding: 20px 22px;

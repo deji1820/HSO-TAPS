@@ -37,7 +37,7 @@ function localDateInputValue(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-export default function DocumentSubmissionScreen({ initialStudent = null, onBack, onDone, isOnline = true }) {
+export default function DocumentSubmissionScreen({ initialStudent = null, onBack, onDone, onEmailSaved, isOnline = true }) {
   const [student, setStudent] = useState(initialStudent);
   const [studentId, setStudentId] = useState(initialStudent?.studentId || "");
   const [notificationEmail, setNotificationEmail] = useState(initialStudent?.email || "");
@@ -157,6 +157,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           fileData: await encodeFile(file),
         });
         allNotificationsQueued = allNotificationsQueued && Boolean(result.notificationQueued);
+        onEmailSaved?.(notificationEmail.trim().toLowerCase());
         uploaded += 1;
       } else {
       for (const file of files) {
@@ -173,6 +174,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           fileData: await encodeFile(file),
         });
         allNotificationsQueued = allNotificationsQueued && Boolean(result.notificationQueued);
+        onEmailSaved?.(notificationEmail.trim().toLowerCase());
         uploaded += 1;
       }
       }
@@ -218,7 +220,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
             <label>Affiliation<select value={affiliation} onChange={(event) => { setAffiliation(event.target.value); setPurpose(""); setInstitutionalAffiliation(""); setDocumentType(""); setHealthDeclaration(null); setFiles([]); }}><option>Student</option><option>Employee</option></select></label>
             <label>Student ID / Employee ID<input required value={studentId} onChange={(event) => { setStudentId(event.target.value); setVerified(false); }} /></label>
             <label className="document-field-wide">Full name (Last Name, First Name, Middle Initial)<input required value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
-            <label className="document-field-wide">School email address<input required type="email" autoComplete="email" value={notificationEmail} onChange={(event) => setNotificationEmail(event.target.value)} /><small>Status notices will be sent to this address and delivered to your Outlook inbox. We’ll save it for your next document submission.</small></label>
+            {notificationEmail ? <div className="document-field-wide document-saved-email"><strong>Saved school email (Outlook)</strong><p>Status notices will be sent to {notificationEmail}. This address is saved for appointments and future document submissions.</p></div> : <label className="document-field-wide">School email address<input required type="email" autoComplete="email" value={notificationEmail} onChange={(event) => setNotificationEmail(event.target.value)} /><small>We’ll save this address for appointments and future document submissions. Status notices will be delivered to your Outlook inbox.</small></label>}
             <label>Sex assigned at birth<select required value={sex} onChange={(event) => setSex(event.target.value)}><option value="">Select</option><option>Male</option><option>Female</option></select></label>
             <label>Date of birth<input required type="date" max={latestAllowedDateOfBirth} value={dateOfBirth} onChange={(event) => { setDateOfBirth(event.target.value); setError(""); }} /></label>
             <label>{affiliation === "Student" ? "Academic program / grade level" : "Department"}<input required value={institutionalAffiliation} onChange={(event) => setInstitutionalAffiliation(event.target.value)} /></label>

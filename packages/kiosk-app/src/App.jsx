@@ -847,6 +847,7 @@ async function handleAppointmentProceed(selection) {
     purpose: clearanceAppointmentPurpose || undefined,
     date: selection.dateKey,
     timeSlot: selection.time,
+    notificationEmail: selection.notificationEmail,
   });
   setAppointmentSelection({ ...selection, appointmentId: appointment._id });
   setStep("appointmentConfirmed");
@@ -1434,6 +1435,7 @@ async function handleScreeningOptionSelect(mode) {
       />}
       {step === "documentSubmission" && <DocumentSubmissionScreen
         initialStudent={student}
+        onEmailSaved={(email) => setStudent((current) => current ? { ...current, email } : current)}
         onBack={() => setStep("service")}
         onDone={onFlowDone}
         isOnline={isOnline}
@@ -1509,6 +1511,7 @@ async function handleScreeningOptionSelect(mode) {
   <AppointmentBookingScreen
     consultSubType={consultSubType}
     serviceType={consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation"}
+    schoolEmail={student?.email || ""}
     onProceed={handleAppointmentProceed}
     onFaq={openFaq}
     onBack={() => setStep("consultationEntry")}
@@ -1521,6 +1524,7 @@ async function handleScreeningOptionSelect(mode) {
     serviceLabel="MEDICAL CLEARANCE"
     serviceType="Medical Clearance"
     purpose={clearanceAppointmentPurpose}
+    schoolEmail={student?.email || ""}
     onProceed={handleAppointmentProceed}
     onFaq={openFaq}
     onBack={() => setStep("clearanceAppointmentPurpose")}

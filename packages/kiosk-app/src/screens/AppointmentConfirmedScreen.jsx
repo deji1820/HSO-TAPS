@@ -19,7 +19,7 @@ export default function AppointmentConfirmedScreen({
       <KioskHeader isOnline={isOnline} />
       <main className="kiosk-content apt-page apt-page--confirmed">
         <p className="apt-eyebrow">SERVICE: {serviceLabel || `${consultSubType?.toUpperCase()} CONSULTATION`}{serviceLabel ? " > BOOK AN APPOINTMENT" : ""}</p>
-        <h1 className="apt-heading">Please save your appointment details</h1>
+        <h1 className="apt-heading">Appointment request submitted</h1>
 
         <div className="apt-details-card">
           <p className="apt-details-title">APPOINTMENT DETAILS</p>
@@ -34,10 +34,11 @@ export default function AppointmentConfirmedScreen({
         </div>
 
         <div className="apt-reminders">
-          <p className="apt-reminders-title">IMPORTANT REMINDERS:</p>
+          <p className="apt-reminders-title">PENDING HEALTH SERVICES OFFICE REVIEW</p>
+          <p>We’ll email your school Outlook address when your appointment is accepted or rejected. Please wait for the decision before coming to the clinic.</p>
+          <p className="apt-reminders-title">IF ACCEPTED:</p>
           <p>Take a picture of the appointment details before you leave the kiosk.</p>
-          <p>Please arrive on or before your appointment schedule.</p>
-          <p>Don't forget to check-in with the kiosk before entering the clinic on your appointment schedule{purposeLabel ? " with the complete requirements." : "."}</p>
+          <p>Arrive on or before the appointment time and check in at the kiosk before entering the clinic{purposeLabel ? " with the complete requirements." : "."}</p>
         </div>
 
         <button className="apt-btn apt-btn--end" onClick={onDone}>

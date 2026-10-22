@@ -44,6 +44,7 @@ export default function AppointmentBookingScreen({
   serviceLabel,
   serviceType,
   purpose,
+  schoolEmail = "",
   unavailableTimes = [],     // e.g. ["9:00 AM"] for the selected date
   isDateDisabled = defaultDisabled,
   qrSrc,                     // optional image URL for the booking QR code
@@ -59,6 +60,7 @@ export default function AppointmentBookingScreen({
   const [serverUnavailable, setServerUnavailable] = useState([]);
   const [availabilityError, setAvailabilityError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [email, setEmail] = useState(schoolEmail);
 
   const cells = buildMonthCells(viewMonth);
   const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase();
@@ -142,6 +144,22 @@ export default function AppointmentBookingScreen({
 
         </div>
 
+        <div className="apt-email-field">
+          {schoolEmail ? <p>Appointment updates will be sent to your saved school email: <strong>{schoolEmail}</strong>.</p> : <>
+            <label htmlFor="appointment-school-email">School email (Outlook)</label>
+            <input
+              id="appointment-school-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="name@school.edu"
+              required
+            />
+            <p>We’ll save this for future document submissions and email you when the Health Services Office accepts or rejects this appointment.</p>
+          </>}
+        </div>
+
         <div className="apt-actions">
           <button className="apt-btn apt-btn--back" onClick={onBack}>&lt;&lt; Back</button>
           <button
@@ -151,7 +169,12 @@ export default function AppointmentBookingScreen({
               setSaving(true);
               setAvailabilityError("");
               try {
-                await onProceed?.({ date: selectedDate, time: selectedTime, dateKey: selectedDateKey, purpose });
+                const recipientEmail = schoolEmail || email.trim();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+                  setAvailabilityError("Enter a valid school email address to receive your appointment decision.");
+                  return;
+                }
+                await onProceed?.({ date: selectedDate, time: selectedTime, dateKey: selectedDateKey, purpose, notificationEmail: recipientEmail });
               } catch (error) {
                 setSelectedTime(null);
                 setAvailabilityError(error?.response?.data?.message || "Could not save this appointment. Please try again.");
