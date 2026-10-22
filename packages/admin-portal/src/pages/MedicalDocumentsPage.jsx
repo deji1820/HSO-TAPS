@@ -41,7 +41,7 @@ export default function MedicalDocumentsPage() {
       formElement.reset();
       setPatient(null);
       setPatientQuery("");
-      setNotice(created.notificationSent ? "Document saved as pending. The student was emailed." : `Document saved as pending, but the email was not sent. ${created.notificationMessage || "Check the backend email settings."}`);
+      setNotice(created.notificationQueued ? "Document saved as pending. The email send was started." : `Document saved as pending, but the email could not be started. ${created.notificationMessage || "Check the backend email settings."}`);
     } catch (error) {
       setNotice(error?.response?.data?.message || "Could not upload the document. Check the server connection and file size.");
     } finally { setSaving(false); }
@@ -53,7 +53,7 @@ export default function MedicalDocumentsPage() {
     try {
       const updated = await updateMedicalDocumentStatus(file._id, status);
       setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated } : item));
-      setNotice(updated.notificationSent ? `Document status changed to ${status}. The student was emailed.` : `Document status changed to ${status}, but the email was not sent. ${updated.notificationMessage || "Check the backend email settings."}`);
+      setNotice(updated.notificationQueued ? `Document status changed to ${status}. The email send was started.` : `Document status changed to ${status}, but the email could not be started. ${updated.notificationMessage || "Check the backend email settings."}`);
     } catch (error) {
       setNotice(error?.response?.data?.message || "Could not update this document status.");
     } finally {

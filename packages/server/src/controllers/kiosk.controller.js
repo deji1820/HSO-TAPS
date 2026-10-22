@@ -4,7 +4,7 @@ import QueueEntry from "../models/QueueEntry.js";
 import ExternalDocument from "../models/ExternalDocument.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
-import { sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
+import { areDocumentNotificationsConfigured, sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
 
 // Per HSO-TAP_SYSTEM_NOTES: Hypothermia < 35.5, Normal 35.5-37.5, Fever >= 37.8
 // (37.6-37.7 is undefined in the notes; treated as Normal here)
@@ -145,6 +145,11 @@ export async function submitDocument(req, res) {
   });
   student.email = notificationEmail;
   await student.save();
-  const notification = await sendDocumentStatusNotification(document, "Pending", notificationEmail);
-  res.status(201).json({ id: document._id, name: document.name, category: document.category, status: document.status, notificationSent: notification.sent, notificationMessage: notification.reason });
+  const notificationQueued = areDocumentNotificationsConfigured();
+  if (notificationQueued) {
+    void sendDocumentStatusNotification(document, "Pending", notificationEmail);
+  } else {
+    console.warn(`[Email] Pending notice not started for document ${document._id}: email settings are incomplete.`);
+  }
+  res.status(201).json({ id: document._id, name: document.name, category: document.category, status: document.status, notificationQueued, notificationMessage: notificationQueued ? undefined : "Email settings are incomplete on the server." });
 }

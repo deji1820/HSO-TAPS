@@ -11,7 +11,7 @@ import PatientHistory from "../models/PatientHistory.js";
 import Announcement from "../models/Announcement.js";
 import MedicineInventory from "../models/MedicineInventory.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
-import { sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
+import { areDocumentNotificationsConfigured, sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -108,11 +108,12 @@ router.post("/students/:id/documents", requireDocumentRole, async (req, res) => 
   });
   student.email = notificationEmail;
   await student.save();
-  const notification = await sendDocumentStatusNotification(document, "Pending", notificationEmail);
+  const notificationQueued = areDocumentNotificationsConfigured();
+  if (notificationQueued) void sendDocumentStatusNotification(document, "Pending", notificationEmail);
   const result = document.toObject();
   delete result.fileData;
   result.fileUrl = `/api/documents/${document._id}/file`;
-  res.status(201).json({ ...result, notificationSent: notification.sent, notificationMessage: notification.reason });
+  res.status(201).json({ ...result, notificationQueued, notificationMessage: notificationQueued ? undefined : "Email settings are incomplete on the server." });
 });
 router.get("/documents", requireDocumentRole, async (_req, res) => {
   const documents = await ExternalDocument.find().select("-fileData").populate("student", "studentId firstName lastName").sort({ submittedAt: -1, createdAt: -1 });
@@ -131,15 +132,18 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
   const statusChanged = document.status !== req.body.status;
   document.status = req.body.status;
   await document.save();
-  let notification = { sent: document.lastNotifiedStatus === document.status };
+  let notificationQueued = false;
   if (statusChanged || document.lastNotifiedStatus !== document.status) {
-    notification = await sendDocumentStatusNotification(document, document.status, document.notificationEmail || document.student?.email);
+    notificationQueued = Boolean(document.notificationEmail || document.student?.email) && areDocumentNotificationsConfigured();
+    if (notificationQueued) {
+      void sendDocumentStatusNotification(document, document.status, document.notificationEmail || document.student?.email);
+    }
   }
   await document.populate("student", "studentId firstName lastName");
   document.fileData = undefined;
   const result = document.toObject();
   if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
-  res.json({ ...result, notificationSent: notification.sent, notificationMessage: notification.reason });
+  res.json({ ...result, notificationQueued, notificationMessage: notificationQueued ? undefined : "Email was not queued. Check the student's email and server email settings." });
 });
 router.get("/documents/:id/file", requireDocumentRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });

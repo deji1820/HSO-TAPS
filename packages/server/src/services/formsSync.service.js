@@ -1,7 +1,7 @@
 import Student from "../models/Student.js";
 import ExternalDocument from "../models/ExternalDocument.js";
 import { SyncLog } from "../models/FormPipeline.js";
-import { sendDocumentStatusNotification } from "./documentNotifications.service.js";
+import { areDocumentNotificationsConfigured, sendDocumentStatusNotification } from "./documentNotifications.service.js";
 
 /**
  * Handles inbound Power Automate webhook payloads from Microsoft Forms
@@ -27,8 +27,11 @@ export async function handleFormSubmission({ pipelineId, formName, payload }) {
       status: "Pending",
       notificationEmail: payload.notificationEmail || payload.email || payload.studentEmail || payload.respondentEmail || student.email,
     });
-    const notification = await sendDocumentStatusNotification(doc, "Pending", doc.notificationEmail);
-    if (!notification.sent) console.warn(`[Forms] Pending email notice not sent for document ${doc._id}: ${notification.reason}`);
+    if (doc.notificationEmail && areDocumentNotificationsConfigured()) {
+      void sendDocumentStatusNotification(doc, "Pending", doc.notificationEmail);
+    } else {
+      console.warn(`[Forms] Pending email notice not started for document ${doc._id}: missing email or email settings.`);
+    }
     await SyncLog.create({
       formName,
       studentIdRaw,

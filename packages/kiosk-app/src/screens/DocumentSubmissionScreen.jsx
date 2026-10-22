@@ -134,7 +134,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     setLoading(true);
     setError("");
     let uploaded = 0;
-    let allNotificationsSent = true;
+    let allNotificationsQueued = true;
     const submissionDetails = {
       fullName: fullName.trim(), sex, dateOfBirth, affiliation,
       institutionalAffiliation: institutionalAffiliation.trim(),
@@ -156,7 +156,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           contentType: "application/json",
           fileData: await encodeFile(file),
         });
-        allNotificationsSent = allNotificationsSent && result.notificationSent;
+        allNotificationsQueued = allNotificationsQueued && Boolean(result.notificationQueued);
         uploaded += 1;
       } else {
       for (const file of files) {
@@ -172,12 +172,12 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           contentType: fileContentType(file),
           fileData: await encodeFile(file),
         });
-        allNotificationsSent = allNotificationsSent && result.notificationSent;
+        allNotificationsQueued = allNotificationsQueued && Boolean(result.notificationQueued);
         uploaded += 1;
       }
       }
       setProgress(isHealthDeclaration ? "Health declaration submitted." : `${uploaded} file${uploaded === 1 ? "" : "s"} submitted.`);
-      setEmailNoticeSent(allNotificationsSent);
+      setEmailNoticeSent(allNotificationsQueued);
       setCompleted(true);
     } catch (uploadError) {
       const message = uploadError?.response?.data?.message || uploadError?.message || "Upload failed.";
@@ -194,7 +194,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     isOnline={isOnline}
   />;
 
-  if (completed) return <div className="kiosk-shell document-submission-screen"><KioskHeader isOnline={isOnline} /><main className="document-submission-content document-submission-success"><p className="document-eyebrow">DOCUMENT SUBMISSION</p><h1>Submission received</h1><p>{progress} Your documents have been added to your health record for clinic review.</p><p>{emailNoticeSent ? `A pending status email was sent to ${notificationEmail}.` : "Your documents were saved, but the pending email could not be sent. Please contact the Health Services Office."}</p><button type="button" onClick={onDone}>Done</button></main></div>;
+  if (completed) return <div className="kiosk-shell document-submission-screen"><KioskHeader isOnline={isOnline} /><main className="document-submission-content document-submission-success"><p className="document-eyebrow">DOCUMENT SUBMISSION</p><h1>Submission received</h1><p>{progress} Your documents have been added to your health record for clinic review.</p><p>{emailNoticeSent ? `A pending status email send was started for ${notificationEmail}.` : "Your documents were saved, but the pending email could not be started. Please contact the Health Services Office."}</p><button type="button" onClick={onDone}>Done</button></main></div>;
 
   return <div className="kiosk-shell document-submission-screen">
     <KioskHeader isOnline={isOnline} />

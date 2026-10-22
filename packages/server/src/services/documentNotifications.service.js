@@ -2,6 +2,13 @@ import nodemailer from "nodemailer";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
+export function areDocumentNotificationsConfigured() {
+  const provider = String(process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
+  if (provider === "gmail") return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
+  if (provider === "resend") return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return false;
+}
+
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>"']/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -47,6 +54,9 @@ export async function sendDocumentStatusNotification(document, status, recipient
     if (provider === "gmail") {
       const transporter = nodemailer.createTransport({
         service: "gmail",
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
         auth: { user: gmailUser, pass: gmailAppPassword.replace(/\s/g, "") },
       });
       await transporter.sendMail({ ...message, from: `HSO Health Services <${gmailUser}>` });
