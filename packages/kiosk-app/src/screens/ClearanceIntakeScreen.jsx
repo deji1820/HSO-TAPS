@@ -4,7 +4,7 @@ import { DOCUMENT_PURPOSES, DOCUMENT_PURPOSE_REQUIREMENTS } from "../data/docume
 import "../styles/screens/MedicalClearance.css";
 
 export const CLEARANCE_PURPOSES = Object.entries(DOCUMENT_PURPOSES).flatMap(([affiliation, purposes]) =>
-  purposes.map((label) => ({ id: `${affiliation}:${label}`, affiliation, label }))
+  purposes.filter((label) => label !== "Health Status Declaration Form").map((label) => ({ id: `${affiliation}:${label}`, affiliation, label }))
 );
 
 export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnline, isAppointment = false }) {

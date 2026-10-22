@@ -109,7 +109,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       setError("Verify your student or employee ID before submitting.");
       return;
     }
-    const isHealthDeclaration = documentType === HEALTH_DECLARATION_TYPE;
+    const isHealthDeclaration = purpose === HEALTH_DECLARATION_TYPE;
     if (!privacyAccepted || !declarationAccepted || (!isHealthDeclaration && files.length === 0)) {
       setError(isHealthDeclaration ? "Confirm the privacy and declaration notices." : "Confirm the privacy notice and document declaration, and attach at least one file.");
       return;
@@ -126,7 +126,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       setError("Enter a valid email address so we can send your submission status.");
       return;
     }
-    if (!fullName.trim() || !sex || !dateOfBirth || !institutionalAffiliation.trim() || !purpose || !documentType || (!isHealthDeclaration && !examDate) || (documentType === "Other" && !otherType.trim())) {
+    if (!fullName.trim() || !sex || !dateOfBirth || !institutionalAffiliation.trim() || !purpose || (!isHealthDeclaration && !documentType) || (!isHealthDeclaration && !examDate) || (documentType === "Other" && !otherType.trim())) {
       setError("Complete all required identity and document details.");
       return;
     }
@@ -203,7 +203,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     <main className="document-submission-content">
       <p className="document-eyebrow">HEALTH SERVICES OFFICE</p>
       <h1>Medical document submission</h1>
-      <p className="document-intro">Submit medical certificates, clearance records, diagnostic results, laboratory results, or other medical files for your EMR.</p>
+      <p className="document-intro">Submit medical certificates, clearance records, diagnostic results, laboratory results, or a Health Status Declaration Form for your EMR.</p>
 
       <section className="document-card">
         <h2>1. Identify yourself</h2>
@@ -224,18 +224,20 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
             <label>Sex assigned at birth<select required value={sex} onChange={(event) => setSex(event.target.value)}><option value="">Select</option><option>Male</option><option>Female</option></select></label>
             <label>Date of birth<input required type="date" max={latestAllowedDateOfBirth} value={dateOfBirth} onChange={(event) => { setDateOfBirth(event.target.value); setError(""); }} /></label>
             <label>{affiliation === "Student" ? "Academic program / grade level" : "Department"}<input required value={institutionalAffiliation} onChange={(event) => setInstitutionalAffiliation(event.target.value)} /></label>
-            <label className="document-field-wide">Purpose<select required value={purpose} onChange={(event) => setPurpose(event.target.value)}><option value="">Select the reason for submitting</option>{DOCUMENT_PURPOSES[affiliation].map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="document-field-wide">Purpose<select required value={purpose} onChange={(event) => { const nextPurpose = event.target.value; setPurpose(nextPurpose); setDocumentType(""); setOtherType(""); setExamDate(""); setFiles([]); setHealthDeclaration(null); }}><option value="">Select the reason for submitting</option>{DOCUMENT_PURPOSES[affiliation].map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
           {purpose && <div className="document-requirements"><h3>Requirements for this purpose</h3><ul>{(DOCUMENT_PURPOSE_REQUIREMENTS[purpose] || []).map((item) => <li key={item}>{item}</li>)}</ul></div>}
         </fieldset>
 
         <fieldset className="document-card" disabled={!verified || loading}>
-          <legend>2. Medical document details</legend>
+          <legend>2. {purpose === HEALTH_DECLARATION_TYPE ? "Health Status Declaration" : "Medical document details"}</legend>
           <div className="document-form-grid">
-            <label>Document type<select required value={documentType} onChange={(event) => { setDocumentType(event.target.value); setHealthDeclaration(null); }}><option value="">Select type</option>{DOCUMENT_TYPES.map((item) => <option key={item}>{item}</option>)}{affiliation === "Student" && <option>{HEALTH_DECLARATION_TYPE}</option>}</select></label>
-            {documentType === "Other" && <label>Specify document type<input required value={otherType} onChange={(event) => setOtherType(event.target.value)} /></label>}
-            {documentType !== HEALTH_DECLARATION_TYPE && <label>Date of examination, test, or issuance<input required type="date" value={examDate} onChange={(event) => setExamDate(event.target.value)} /></label>}
-            {documentType === HEALTH_DECLARATION_TYPE ? <div className="document-field-wide"><p>Complete the health information on a separate page, then return here to submit it to your health record.</p><button type="button" onClick={() => setShowHealthDeclaration(true)}>{healthDeclaration ? "Review or edit health declaration" : "Proceed to Health Status Declaration Form"}</button>{healthDeclaration && <span className="document-verified">Form completed and ready to submit</span>}</div> : <label className="document-field-wide">Upload medical document(s)<input required type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={updateFiles} /><small>PDF, JPG, PNG, or DOCX. Name files LastName_FirstName. Up to 10 files. Current system limit: 12 MB per file.</small>{files.length > 0 && <span>{files.length} file(s) selected</span>}</label>}
+            {purpose === HEALTH_DECLARATION_TYPE ? <div className="document-field-wide"><p>Complete the health information on a separate page, then return here to submit it to your health record.</p><button type="button" onClick={() => setShowHealthDeclaration(true)}>{healthDeclaration ? "Review or edit health declaration" : "Proceed to Health Status Declaration Form"}</button>{healthDeclaration && <span className="document-verified">Form completed and ready to submit</span>}</div> : <>
+              <label>Document type<select required value={documentType} onChange={(event) => { setDocumentType(event.target.value); setHealthDeclaration(null); }}><option value="">Select type</option>{DOCUMENT_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label>
+              {documentType === "Other" && <label>Specify document type<input required value={otherType} onChange={(event) => setOtherType(event.target.value)} /></label>}
+              <label>Date of examination, test, or issuance<input required type="date" value={examDate} onChange={(event) => setExamDate(event.target.value)} /></label>
+              <label className="document-field-wide">Upload medical document(s)<input required type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={updateFiles} /><small>PDF, JPG, PNG, or DOCX. Name files LastName_FirstName. Up to 10 files. Current system limit: 12 MB per file.</small>{files.length > 0 && <span>{files.length} file(s) selected</span>}</label>
+            </>}
           </div>
         </fieldset>
 
@@ -244,7 +246,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           <p className="document-privacy-note">Your information is used by the Health Services Office to support health and safety. The system notes state five-year retention in AWS; this system currently saves uploads in MongoDB Atlas. Please contact HSO if you need clarification about the storage or retention policy.</p>
           <label className="document-check"><input type="checkbox" checked={privacyAccepted} onChange={(event) => setPrivacyAccepted(event.target.checked)} /> I confirm I have read the data privacy notice and agree to proceed.</label>
           <label className="document-consent">Optional media consent<select value={mediaConsent} onChange={(event) => setMediaConsent(event.target.value)}><option>I consent to both internal reporting and public use (social media/newsletters)</option><option>I consent to internal reporting only (do not use my identifiable image publicly)</option></select></label>
-          <label className="document-check"><input type="checkbox" checked={declarationAccepted} onChange={(event) => setDeclarationAccepted(event.target.checked)} /> {documentType === HEALTH_DECLARATION_TYPE ? "I confirm the health declaration is complete and the information provided is accurate." : "I confirm these details are accurate and the uploaded documents are genuine and unmodified."}</label>
+          <label className="document-check"><input type="checkbox" checked={declarationAccepted} onChange={(event) => setDeclarationAccepted(event.target.checked)} /> {purpose === HEALTH_DECLARATION_TYPE ? "I confirm the health declaration is complete and the information provided is accurate." : "I confirm these details are accurate and the uploaded documents are genuine and unmodified."}</label>
         </fieldset>
 
         {error && <p className="document-error" role="alert">{error}</p>}
