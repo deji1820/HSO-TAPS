@@ -143,33 +143,14 @@ function ConsultationsTab({ consultations }) {
 
 function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentId, onStatusChange }) {
   if (!documents?.length) return <div className="table-empty">No external documents synced yet.</div>;
-  return (
-    <div className="table-wrap emr-files-table-wrap emr-synced-files-wrap">
-      <table className="data-table emr-synced-files-table">
-        <thead>
-          <tr>
-            <th>Document Title</th>
-            <th>Form Source</th>
-            <th>Date Submitted</th>
-            <th>Status</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {documents.map((d) => (
-            <tr key={d._id}>
-              <td>{d.documentTitle}</td>
-              <td>{d.formSource}</td>
-              <td>{formatDate(d.submittedAt)}</td>
-              <td>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${d.documentTitle || d.name || "document"}`} value={d.status || "Pending"} disabled={updatingDocumentId === d._id} onChange={(event) => onStatusChange(d._id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> :
-                <span className={"badge " + (d.status === "Verified" ? "badge-routine" : d.status === "Rejected" ? "badge-high" : "badge-standard")}>{d.status || "Pending"}</span>}</td>
-              <td>{d.fileUrl ? (d.name ? <div className="document-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(d._id, d.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(d._id, d.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : <a href={d.fileUrl} target="_blank" rel="noreferrer">View</a>) : "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  return <div className="emr-document-list">{documents.map((document) => <article className="emr-document-card" key={document._id}>
+    <header><h3>{document.documentTitle || document.name || "Medical document"}</h3><span>{formatDate(document.submittedAt)}</span></header>
+    <div className="emr-document-card-grid">
+      <div><span>Form source</span><strong>{document.formSource || "—"}</strong></div>
+      <div><span>Status</span>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${document.documentTitle || document.name || "document"}`} value={document.status || "Pending"} disabled={updatingDocumentId === document._id} onChange={(event) => onStatusChange(document._id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <strong>{document.status || "Pending"}</strong>}</div>
     </div>
-  );
+    <div className="document-actions">{document.fileUrl ? document.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(document._id, document.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <a href={document.fileUrl} target="_blank" rel="noreferrer">View file</a> : <span>No file attached</span>}</div>
+  </article>)}</div>;
 }
 
 function ProfileValue({ label, value, editable = false, name, onChange }) {
@@ -223,10 +204,18 @@ function HealthStatusDeclarationTab({ submissions }) {
 
 function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumentId, onStatusChange }) {
   if (!files.length) return <div className="table-empty">No documents have been submitted for this patient.</div>;
-  return <div className="table-wrap emr-files-table-wrap"><table className="data-table emr-submissions-table">
-    <thead><tr><th>Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Submitted Details</th><th>Status</th><th>Actions</th></tr></thead>
-    <tbody>{files.map((file) => <tr key={file.id}><td>{file.category || "N/A"}</td><td>{file.title || "N/A"}</td><td>{file.purpose || "N/A"}</td><td>{file.examDate ? formatDate(file.examDate) : "N/A"}</td><td>{formatDate(file.date)}</td><td>{file.name || "N/A"}</td><td><details><summary>View details</summary><dl>{flattenFormPayload(file.details || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{value}</dd></div>)}</dl></details></td><td>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${file.title || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingDocumentId === file.id} onChange={(event) => onStatusChange(file.id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <span className={"badge " + (file.status === "Verified" ? "badge-routine" : file.status === "Rejected" ? "badge-high" : "badge-standard")}>{file.status || "Pending"}</span>}</td><td>{file.name ? <div className="document-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}</tbody>
-  </table></div>;
+  return <div className="emr-document-list">{files.map((file) => <article className="emr-document-card" key={file.id}>
+    <header><h3>{file.title || file.name || "Medical document submission"}</h3><span>Submitted {formatDate(file.date)}</span></header>
+    <div className="emr-document-card-grid">
+      <div><span>Category</span><strong>{file.category || "N/A"}</strong></div>
+      <div><span>Purpose</span><strong>{file.purpose || "N/A"}</strong></div>
+      <div><span>Exam / issue date</span><strong>{file.examDate ? formatDate(file.examDate) : "N/A"}</strong></div>
+      <div><span>File name</span><strong>{file.name || "N/A"}</strong></div>
+      <div><span>Status</span>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${file.title || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingDocumentId === file.id} onChange={(event) => onStatusChange(file.id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <strong>{file.status || "Pending"}</strong>}</div>
+    </div>
+    {Object.keys(file.details || {}).length > 0 && <details className="emr-document-details"><summary>View submitted details</summary><dl>{flattenFormPayload(file.details || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{value}</dd></div>)}</dl></details>}
+    <div className="document-actions">{file.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <span>No file attached</span>}</div>
+  </article>)}</div>;
 }
 
 function KioskRequestsTab({ requests = [] }) {
