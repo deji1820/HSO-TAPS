@@ -42,13 +42,13 @@ const SERVICES = [
   },
 ];
 
-export default function ServiceSelectScreen({ onSelect, onBack, onFaq, isOnline, mobileMode = false }) {
+export default function ServiceSelectScreen({ onSelect, onBack, onFaq, isOnline, mobileMode = false, profileRequired = false }) {
   return (
     <div className="kiosk-shell ss">
       <KioskHeader isOnline={isOnline} />
 
       <div className="ss-content">
-        <p className="ss-eyebrow">{mobileMode ? "SERVICE SELECTION" : "Step 2 of 2: Service Selection"}</p>
+        <p className="ss-eyebrow">{mobileMode ? "SERVICE SELECTION" : profileRequired ? "Step 3 of 3: Service Selection" : "Step 2 of 2: Service Selection"}</p>
         <h1 className="ss-title">What is the purpose of your visit?</h1>
 
         <div className="ss-grid">

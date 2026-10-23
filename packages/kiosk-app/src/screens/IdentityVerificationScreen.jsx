@@ -1,7 +1,7 @@
 ﻿import KioskHeader from "../components/KioskHeader.jsx";
 import "../styles/screens/IdentityVerification.css";
 
-export default function IdentityVerificationScreen({ student, onProceed, onBack, onRescan, onFaq, isOnline, rfidRegistrationError }) {
+export default function IdentityVerificationScreen({ student, profileRequired = false, onProceed, onBack, onRescan, onFaq, isOnline, rfidRegistrationError }) {
   const fullName = [student?.lastName, student?.firstName, student?.middleName || student?.middleInitial]
     .filter(Boolean)
     .join(", ") || "Unknown Student";
@@ -11,7 +11,7 @@ export default function IdentityVerificationScreen({ student, onProceed, onBack,
       <KioskHeader isOnline={isOnline} />
       <main className="identity-content">
         <section className="identity-heading" aria-labelledby="identity-title">
-          <p className="identity-eyebrow">Step 1 of 2: Identity Verification</p>
+          <p className="identity-eyebrow">{profileRequired ? "Step 1 of 3: Identity Verification" : "Step 1 of 2: Identity Verification"}</p>
           <h1 id="identity-title">Is this your profile?</h1>
         </section>
 

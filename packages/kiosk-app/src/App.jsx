@@ -68,6 +68,7 @@ export default function App() {
   const [mobileFlowComplete, setMobileFlowComplete] = useState(false);
   const mobileMode = Boolean(mobileSessionToken && mobileSessionStatus === "ready");
   const [step, setStep] = useState("welcome");
+  const [profileCompletionRequired, setProfileCompletionRequired] = useState(false);
   const [showIdlePrompt, setShowIdlePrompt] = useState(false);
   const [idleCountdown, setIdleCountdown] = useState(60);
   const [faqReturnStep, setFaqReturnStep] = useState("service");
@@ -597,6 +598,7 @@ export default function App() {
     setClearanceAppointmentPurpose(null);
     setClearanceQueueNumber(null);
     setStep("welcome");
+    setProfileCompletionRequired(false);
     setWalkInComplaints([]);
     setMedicineSymptoms([]);
     setMedicineSafetyAnswers({});
@@ -722,6 +724,7 @@ export default function App() {
   async function handleConfirmYes() {
     const needsRfidRegistration = Boolean(unrecognizedRfid && unrecognizedRfidUid);
     let confirmedPerson = student;
+    setProfileCompletionRequired(!hasCompleteProfile(confirmedPerson));
     setRfidRegistrationError("");
     setServiceSessionReady(false);
     if (needsRfidRegistration) {
@@ -1652,7 +1655,7 @@ async function handleScreeningOptionSelect(mode) {
       )}
 
       {step === "confirm" && (
-        <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} onRescan={handleRescanId} onFaq={openFaq} isOnline={isOnline} rfidRegistrationError={rfidRegistrationError} />
+        <IdentityVerificationScreen student={student} profileRequired={!hasCompleteProfile(student)} onProceed={handleConfirmYes} onBack={handleConfirmNo} onRescan={handleRescanId} onFaq={openFaq} isOnline={isOnline} rfidRegistrationError={rfidRegistrationError} />
       )}
 
       {step === "profileAccess" && <ProfileCompletionAccessScreen
@@ -1673,7 +1676,7 @@ async function handleScreeningOptionSelect(mode) {
       />}
 
       {step === "service" && (
-        <ServiceSelectScreen onSelect={handleKioskServiceSelect} onBack={() => setStep("confirm")} onFaq={openFaq} isOnline={isOnline} mobileMode={mobileMode} />
+        <ServiceSelectScreen onSelect={handleKioskServiceSelect} onBack={() => setStep("confirm")} onFaq={openFaq} isOnline={isOnline} mobileMode={mobileMode} profileRequired={profileCompletionRequired} />
       )}
 
       {step === "mobileVitalsEntry" && <MobileVitalsEntryScreen mode={captureMode} onSubmit={handleMobileVitalsSubmit} onBack={() => setStep("screeningOptions")} isOnline={isOnline} />}

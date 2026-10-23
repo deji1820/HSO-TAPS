@@ -34,7 +34,7 @@ export default function ProfileCompletionScreen({ student, mobile = false, isOnl
     <div className={`profile-completion-shell${mobile ? " profile-completion-mobile" : " kiosk-shell"}`}>
       {!mobile && <KioskHeader isOnline={isOnline} />}
       <main className="profile-completion-content">
-        <p className="profile-completion-eyebrow">PROFILE SETUP · {employee ? "EMPLOYEE" : "STUDENT"}</p>
+        <p className="profile-completion-eyebrow">{mobile ? "REQUIRED PROFILE SETUP" : "STEP 2 OF 3 · REQUIRED PROFILE SETUP"} · {employee ? "EMPLOYEE" : "STUDENT"}</p>
         <h1>Complete your basic information</h1>
         <p className="profile-completion-intro">Complete the required fields before choosing a clinic service. Your name and ID came from the imported roster.</p>
 
