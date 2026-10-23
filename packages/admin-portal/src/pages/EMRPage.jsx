@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, saveMedicalProfile, updateMedicalDocumentStatus, updateMedicalProfile } from "../services/api.js";
+import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, updateMedicalDocumentStatus, updateMedicalProfile } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/components/ActiveSessionModal.css";
@@ -296,6 +296,10 @@ function MedicalProfileHistory({ entries, vitals, studentMongoId, onSaved }) {
     setEditing(true);
   }
   async function saveEdits() {
+    if (!latest?._id) {
+      setSaveError("There is no medical profile to edit yet. Add the initial examination from New Medical Record.");
+      return;
+    }
     if (!studentMongoId || !profileMeta.purpose.trim()) {
       setSaveError("Enter a purpose before saving the medical profile.");
       return;
@@ -304,9 +308,7 @@ function MedicalProfileHistory({ entries, vitals, studentMongoId, onSaved }) {
     setSaveError("");
     try {
       const payload = { ...profileMeta, fields: draft };
-      const updated = latest?._id
-        ? await updateMedicalProfile(latest._id, payload)
-        : await saveMedicalProfile(studentMongoId, { ...payload, examinedAt: new Date().toISOString() });
+      const updated = await updateMedicalProfile(latest._id, payload);
       onSaved(updated);
       setEditing(false);
     } catch (error) {
@@ -316,7 +318,8 @@ function MedicalProfileHistory({ entries, vitals, studentMongoId, onSaved }) {
     }
   }
   return <>
-    <div className="emr-profile-toolbar"><div className="emr-profile-meta">{latest ? <>Last examined: {new Date(latest.examinedAt).toLocaleString()} · {latest.purpose} · {latest.provider}</> : "No medical profile has been saved for this patient."}</div><div className="emr-profile-edit-actions">{editing ? <><button className="btn btn-success" type="button" disabled={saving} onClick={saveEdits}>{saving ? "Saving…" : "Save medical profile"}</button><button className="btn btn-outline" type="button" disabled={saving} onClick={() => setEditing(false)}>Cancel</button></> : <button className="btn btn-primary" type="button" onClick={startEditing}>{latest ? "Edit medical profile" : "Create medical profile"}</button>}</div></div>
+    <div className="emr-profile-toolbar"><div className="emr-profile-meta">{latest ? <>Last examined: {new Date(latest.examinedAt).toLocaleString()} · {latest.purpose} · {latest.provider}</> : "No medical profile has been saved for this patient."}</div><div className="emr-profile-edit-actions">{editing ? <><button className="btn btn-success" type="button" disabled={saving} onClick={saveEdits}>{saving ? "Saving…" : "Save medical profile"}</button><button className="btn btn-outline" type="button" disabled={saving} onClick={() => setEditing(false)}>Cancel</button></> : <button className="btn btn-primary" type="button" disabled={!latest} onClick={startEditing}>Edit medical profile</button>}</div></div>
+    {!latest && <p className="emr-profile-empty-history">No saved medical profile is available to edit. Use New Medical Record to add the initial examination.</p>}
     {editing && <div className="emr-profile-meta-edit"><label>Purpose<input value={profileMeta.purpose} onChange={(event) => setProfileMeta((current) => ({ ...current, purpose: event.target.value }))} /></label><label>Provider<input value={profileMeta.provider} onChange={(event) => setProfileMeta((current) => ({ ...current, provider: event.target.value }))} /></label></div>}
     {saveError && <p className="error-text" role="alert">{saveError}</p>}
     <MedicalProfileSections entry={editing ? { ...latest, fields: draft } : latest} vitals={vitals} editable={editing} onFieldChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} />
