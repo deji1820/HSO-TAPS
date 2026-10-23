@@ -291,6 +291,10 @@ export default function App() {
             setStep("mobileWaiting");
             return;
           }
+          if (payload.new?.status === "mobile_flow_started" && stepRef.current === "documentSubmissionQr") {
+            setStep("documentSubmissionWaiting");
+            return;
+          }
           if (payload.new?.status === "awaiting_service_selection" && ["profileAccess", "profileEntry"].includes(stepRef.current)) {
             setServiceSessionId(payload.new.id);
             setServiceSessionReady(true);
@@ -303,6 +307,10 @@ export default function App() {
           }
           if (payload.new?.status === "completed" && stepRef.current === "mobileWaiting") {
             void resetSession("completed");
+            return;
+          }
+          if (payload.new?.status === "completed" && stepRef.current === "documentSubmissionWaiting") {
+            setStep("documentSubmissionComplete");
             return;
           }
           if (payload.new?.status === "mobile_sensor_requested" && !mobileSessionToken && !mobileSensorSessionIdRef.current && stepRef.current === "mobileWaiting") {
@@ -1646,13 +1654,15 @@ async function handleScreeningOptionSelect(mode) {
       {step === "documentSubmissionQr" && <QrChoiceScreen
         url={serviceSessionId && serviceSessionReady
           ? `${window.location.origin}${window.location.pathname}?mobileServiceSession=${encodeURIComponent(serviceSessionId)}&documentSubmission=1`
-          : !supabase ? `${window.location.origin}${window.location.pathname}?documentSubmission=1` : null}
+          : null}
         preparing={!!supabase && !serviceSessionReady}
         documentMode
         onContinue={() => setStep("documentSubmission")}
         onBack={() => setStep("service")}
         isOnline={isOnline}
       />}
+      {step === "documentSubmissionWaiting" && <main className="mobile-session-status"><h1>Document submission in progress</h1><p>Continue the upload on your phone. This kiosk will confirm when your submission has been received.</p></main>}
+      {step === "documentSubmissionComplete" && <main className="mobile-session-status"><h1>Document submission received</h1><p>Your documents were sent for clinic review. You can finish here.</p><button onClick={() => void resetSession("completed")}>Done</button></main>}
       {step === "documentSubmission" && <DocumentSubmissionScreen
         initialStudent={student}
         onEmailSaved={(email) => setStudent((current) => current ? { ...current, email } : current)}
