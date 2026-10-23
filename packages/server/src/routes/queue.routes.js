@@ -37,7 +37,7 @@ router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "de
   const queryFilter = {
     status: { $in: providerRole ? ["awaiting_provider", "provider_in_session"] : ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session"] },
   };
-  if (providerRole) queryFilter.serviceType = role === "dentist" ? "Dental Consultation" : { $in: ["Medical Consultation", "Medical Clearance"] };
+  if (providerRole) queryFilter.serviceType = role === "dentist" ? "Dental Consultation" : "Medical Consultation";
   let query = QueueEntry.find(queryFilter)
     .populate("student", "studentId firstName lastName program department")
     .sort({ createdAt: 1 });
@@ -118,7 +118,8 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
   if (!transition || !transition.roles.includes(role)) return res.status(403).json({ message: "You do not have access to this queue action" });
   const current = await QueueEntry.findById(req.params.id).select("status serviceType");
   if (!current) return res.status(404).json({ message: "Queue entry not found" });
-  if (status === "in_session" && current.status === "in_session" && isNurse) {
+  const isConsultation = ["Medical Consultation", "Dental Consultation"].includes(current.serviceType);
+  if (status === "in_session" && current.status === "in_session" && isNurse && isConsultation) {
     const assessment = req.body.nursingAssessment || {};
     const nursingAssessment = {
       physicalExam: String(assessment.physicalExam || "").trim().slice(0, 4000),
@@ -136,10 +137,12 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
   if (!transition.from.includes(current.status)) {
     return res.status(409).json({ message: "This queue entry has already been called or is no longer active" });
   }
+  if (status === "awaiting_provider" && !isConsultation) return res.status(403).json({ message: "Only medical and dental consultations are routed from nursing to a provider." });
+  if (status === "provider_in_session" && !isConsultation) return res.status(403).json({ message: "Provider handoff is only used for medical and dental consultations." });
   if (status === "provider_in_session" && ((role === "dentist" && current.serviceType !== "Dental Consultation") || (role !== "dentist" && current.serviceType === "Dental Consultation"))) {
     return res.status(403).json({ message: "This encounter must be handled by the matching physician or dentist." });
   }
-  const timestampField = { called: "calledAt", in_session: "startedAt", provider_in_session: "providerStartedAt" }[status];
+  const timestampField = { called: "calledAt", in_session: "startedAt", provider_in_session: "providerStartedAt", completed: "completedAt" }[status];
   const update = { status, ...(timestampField ? { [timestampField]: new Date() } : {}) };
   if (status === "awaiting_provider") {
     const assessment = req.body.nursingAssessment || {};

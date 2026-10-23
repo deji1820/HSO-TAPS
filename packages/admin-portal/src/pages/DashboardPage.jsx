@@ -15,7 +15,7 @@ const HISTORY_STATUS_LABEL = { ...STATUS_LABEL, waiting: "Not called" };
 
 function filterQueueEntries(entries, { provider, filter, search }) {
   return entries.filter((entry) => {
-    if (provider && !["Medical Consultation", "Dental Consultation", "Medical Clearance"].includes(entry.serviceType)) return false;
+    if (provider && !["Medical Consultation", "Dental Consultation"].includes(entry.serviceType)) return false;
     const matchesFilter = filter === "All" || (filter === "High Priority" ? entry.priorityLevel === filter : entry.serviceType === filter);
     const name = `${entry.student?.firstName || ""} ${entry.student?.lastName || ""} ${entry.student?.studentId || ""} ${entry.queueNumber || ""}`.toLowerCase();
     return matchesFilter && name.includes(search.toLowerCase());
@@ -119,7 +119,7 @@ export default function DashboardPage() {
         </div>
         <div className="queue-list-header">
           <h2>{queueView === "active" ? "Active Queue" : "Queue History - All Dates"}</h2>
-          <select className="text-input filter-select" value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter queue"><option value="All">Filter by</option><option value="High Priority">High Priority</option>{(provider ? SERVICE_TYPES.slice(0, 3) : SERVICE_TYPES).map((service) => <option key={service}>{service}</option>)}</select>
+          <select className="text-input filter-select" value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter queue"><option value="All">Filter by</option><option value="High Priority">High Priority</option>{(provider ? SERVICE_TYPES.slice(0, 2) : SERVICE_TYPES).map((service) => <option key={service}>{service}</option>)}</select>
           {queueView === "active" && <select className="text-input filter-select" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} aria-label="Sort by time-in"><option value="asc">Time-in: Oldest first</option><option value="desc">Time-in: Newest first</option></select>}
         </div>
         {queueView === "history" && <div className="queue-history-controls">
@@ -152,8 +152,10 @@ export default function DashboardPage() {
           <div className="snapshot-field"><span>Status:</span> {STATUS_LABEL[selected.status] || selected.status}</div>
           <div className="snapshot-actions">
             {selected.status === "waiting" && <button className="btn btn-warning" onClick={() => changeStatus(selected._id, "called")}>Call to Desk</button>}
-            {isNursingTeam(user.role) && selected.status === "called" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setNursingEntry(entry); }}>Start Nursing Assessment</button>}
-            {isNursingTeam(user.role) && selected.status === "in_session" && <button className="btn btn-success" onClick={() => setNursingEntry(selected)}>Resume Nursing Assessment</button>}
+            {isNursingTeam(user.role) && selected.status === "called" && isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setNursingEntry(entry); }}>Start Nursing Assessment</button>}
+            {isNursingTeam(user.role) && selected.status === "in_session" && isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={() => setNursingEntry(selected)}>Resume Nursing Assessment</button>}
+            {clinicalRole && selected.status === "called" && !isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setSessionEntry(entry); }}>Start Session</button>}
+            {clinicalRole && selected.status === "in_session" && !isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Session</button>}
             {provider && selected.status === "awaiting_provider" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>Start Provider Review</button>}
             {provider && selected.status === "provider_in_session" && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Provider Review</button>}
             {!provider && <button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button>}
@@ -182,3 +184,4 @@ export default function DashboardPage() {
 }
 
 function isNursingTeam(role) { return ["nurse", "supervisor"].includes(role); }
+function isConsultation(serviceType) { return ["Medical Consultation", "Dental Consultation"].includes(serviceType); }

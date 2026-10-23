@@ -43,16 +43,21 @@ router.delete("/inventory/:id", requireNurseOrSupervisor, async (req, res) => {
   res.json({ deleted: true, id: item._id });
 });
 
-router.post("/consultations", requireRole("physician", "dentist"), async (req, res) => {
+router.post("/consultations", requireClinicalRole, async (req, res) => {
   const { queueEntryId, visitType, secondaryVitals = {} } = req.body;
   const queueEntry = await QueueEntry.findById(queueEntryId).populate("student").populate("linkedVitals");
   if (!queueEntry) return res.status(404).json({ message: "Queue entry not found" });
-  if (queueEntry.status !== "provider_in_session") {
-    return res.status(409).json({ message: "A physician or dentist must start this encounter before completing it." });
-  }
   const role = String(req.user.role || "").toLowerCase();
-  if ((role === "dentist" && queueEntry.serviceType !== "Dental Consultation") || (role !== "dentist" && queueEntry.serviceType === "Dental Consultation")) {
-    return res.status(403).json({ message: "This encounter must be completed by the matching physician or dentist." });
+  const isConsultation = ["Medical Consultation", "Dental Consultation"].includes(queueEntry.serviceType);
+  if (isConsultation) {
+    if (!(["physician", "doctor", "dentist"].includes(role)) || queueEntry.status !== "provider_in_session") {
+      return res.status(409).json({ message: "A physician or dentist must start this consultation before completing it." });
+    }
+    if ((role === "dentist" && queueEntry.serviceType !== "Dental Consultation") || (role !== "dentist" && queueEntry.serviceType === "Dental Consultation")) {
+      return res.status(403).json({ message: "This consultation must be completed by the matching physician or dentist." });
+    }
+  } else if (!(["nurse", "supervisor"].includes(role)) || queueEntry.status !== "in_session") {
+    return res.status(409).json({ message: "A nurse or supervisor must start this service before completing it." });
   }
   const allowed = ["Walk-in Medical Consultation", "Dental Consultation", "Medication and Relief", "General Inquiry"];
   if (!allowed.includes(visitType)) return res.status(400).json({ message: "Invalid visit type" });
