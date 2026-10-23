@@ -42,7 +42,7 @@ export default function WalkInResultScreen({
           </div>
         ) : (
           <div className="wic-info-banner">
-            Take a picture of the queue number before you leave the kiosk, and wait on the clinic queue.
+            You have joined the clinic queue. Take a picture of your number, then wait for it to appear under Now Serving on the Clinic Queue board.
           </div>
         )}
         <div className="wic-heading-block">
@@ -52,6 +52,11 @@ export default function WalkInResultScreen({
 
         {overrideTriggered ? (
           <>
+            {queueCode && <div className="wic-result-box wic-result-box--queue wic-result-box--urgent-queue">
+              <p className="wic-result-box-title">YOUR PRIORITY QUEUE NUMBER</p>
+              <p className="wic-queue-code">{queueCode}</p>
+              <p className="wic-queue-instruction">A priority queue entry was created. Proceed inside now and show this number to clinic staff.</p>
+            </div>}
             <div className="wic-result-box wic-result-box--urgent-summary">
               <p className="wic-result-box-title">INITIAL VITAL SIGNS SUMMARY</p>
               <div className="wic-vitals-summary">

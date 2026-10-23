@@ -419,6 +419,10 @@
 .wic-screen--result .wic-content > .qhs-bp-help { width: min(755px, calc(100% - 24px)); margin: 0 auto 20px; }
 .wic-screen--result .wic-vitals-row { margin: 0; }
 .wic-screen--result .wic-queue-code { margin: 8px 0 0; text-align: center; font-size: 26px; }
+.wic-screen--result .wic-result-box--urgent-queue { min-height: auto; border: 1px solid #fca5a5; background: #fff5f5; color: #991b1b; }
+.wic-screen--result .wic-result-box--urgent-queue .wic-result-box-title,
+.wic-screen--result .wic-result-box--urgent-queue .wic-queue-code { color: #991b1b; }
+.wic-screen--result .wic-queue-instruction { margin: 10px 0 0; text-align: center; font-size: 14px; line-height: 1.4; }
 .wic-screen--urgent .wic-vitals-value--danger,
 .wic-screen--urgent .wic-vitals-value { color: var(--danger); }
 .wic-screen--urgent .wic-warning-detail { width: min(755px, calc(100% - 24px)); margin: 0 auto 10px; color: var(--danger); font-style: italic; }

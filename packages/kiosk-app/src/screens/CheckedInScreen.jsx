@@ -62,6 +62,9 @@ export default function CheckedInScreen({ info, onDone, isOnline }) {
             <div className="checkin-queue-block">
               <span className="checkin-queue-label">{isTemperatureAlert ? "Priority Queue Number" : "Queue Number"}</span>
               <span className="checkin-queue-number">{info.queueNumber}</span>
+              <p className="checkin-queue-instruction">{isTemperatureAlert
+                ? "Proceed inside now and show this number to clinic staff."
+                : "You have joined the clinic queue. Wait for your number to appear under Now Serving on the Clinic Queue board."}</p>
             </div>
           )}
         </div>

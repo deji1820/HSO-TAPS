@@ -117,6 +117,13 @@ export default function ResultScreen({ readings, overrideTriggered, queueNumber,
           </>
         )}
 
+        {queueNumber && <div className={`result-queue-status${hasTemperatureAlert ? " result-queue-status--priority" : ""}`} role="status">
+          <strong>{hasTemperatureAlert ? "Priority queue number" : "Your queue number"}: {queueNumber}</strong>
+          <p>{hasTemperatureAlert
+            ? "A priority queue entry was created. Proceed inside the clinic now and show this number to staff."
+            : "You have joined the clinic queue. Wait for your number to appear under Now Serving on the Clinic Queue board."}</p>
+        </div>}
+
         {/* Minimalist Stat Cards Grid */}
         <div className="reading-summary-grid">
           {tempFormatted != null && (

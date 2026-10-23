@@ -48,6 +48,15 @@
   font-weight: 800;
 }
 
+.checkin-queue-instruction {
+  max-width: 540px;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .checkin-done-btn {
   max-width: 460px;
 }

@@ -1974,6 +1974,8 @@ async function handleScreeningOptionSelect(mode) {
             bpNoReading={bpNoReading}
             bpWaiting={bpWaiting}
             isResult
+            overrideTriggered={overrideTriggered}
+            queueNumber={resultQueueNumber}
             onDone={onFlowDone}
             isOnline={isOnline}
           />

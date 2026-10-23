@@ -59,6 +59,8 @@ export default function ScreeningReadingsScreen({
   bpNoReading = false,
   bpWaiting = false,
   isResult = false,
+  overrideTriggered = false,
+  queueNumber = null,
   sensorFailed = false,
   onManual,
   onManualBpSubmit,
@@ -113,10 +115,19 @@ export default function ScreeningReadingsScreen({
     <div className="kiosk-shell qhs-reading-screen">
       <KioskHeader isOnline={isOnline} />
       <main className="qhs-reading-content">
-        <div className="qhs-banner">Take a photo of your health screening summary for your personal record before leaving the kiosk.</div>
+        {isResult ? (
+          <div className={`qhs-result-outcome${overrideTriggered ? " qhs-result-outcome--alert" : ""}`} role="status">
+            <strong>{overrideTriggered ? "Priority clinic queue created" : "Screening complete"}</strong>
+            {overrideTriggered ? <>
+              <p>{queueNumber ? "You were added to the priority clinic queue. Show this number to staff." : "Your reading needs clinic follow-up. Please proceed inside and ask clinic staff for assistance."}</p>
+              {queueNumber && <span className="qhs-result-queue-number">{queueNumber}</span>}
+              {queueNumber && <p>Please proceed inside the clinic now.</p>}
+            </> : <p>No clinic queue entry was created. You can finish here. Take a photo of your screening summary for your personal record.</p>}
+          </div>
+        ) : <div className="qhs-banner">Take a photo of your health screening summary for your personal record before leaving the kiosk.</div>}
         <div className="qhs-reading-heading">
           <p>SERVICE: QUICK HEALTH SCREENING &gt; {MODE_LABELS[mode]}</p>
-          <h1>Follow the prompts to measure your vitals</h1>
+          <h1>{isResult ? "Screening results" : "Follow the prompts to measure your vitals"}</h1>
         </div>
         <div className={`qhs-reading-layout${showBpInstructions ? " qhs-reading-layout--with-bp-help" : ""}`}>
         <section className="qhs-reading-panel">
