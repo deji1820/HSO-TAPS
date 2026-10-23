@@ -3,9 +3,10 @@ import KioskHeader from "../components/KioskHeader.jsx";
 import "../styles/screens/ManualEntry.css";
 
 // Matches PDF screen: "Manual Student ID Entry" — numeric keypad.
-// Student IDs follow the "YYYY-NNNNNN" pattern (10 digits total);
+// Student IDs use a four-digit year and six- or seven-digit number;
 // the dash is inserted automatically as the student types.
-const MAX_DIGITS = 10;
+const MIN_DIGITS = 10;
+const MAX_DIGITS = 11;
 const DASH_AFTER = 4;
 
 function formatId(digits) {
@@ -35,7 +36,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline, firstT
   const [error, setError] = useState(null);
   const lookupControllerRef = useRef(null);
 
-  const canSubmit = (firstTimeRfid ? digits.trim().length > 0 : digits.length === MAX_DIGITS) && !loading;
+  const canSubmit = (firstTimeRfid ? digits.trim().length > 0 : digits.length >= MIN_DIGITS && digits.length <= MAX_DIGITS) && !loading;
 
   function pressKey(key) {
     if (loading) return;
@@ -92,7 +93,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline, firstT
           <div className="manual-entry-body">
             <div className="manual-entry-label-row">
               <span className="field-label-kiosk">{firstTimeRfid ? "Student or Employee ID:" : "Student ID:"}</span>
-              <span className="manual-entry-format-badge">{firstTimeRfid ? "Enter your ID" : "Format: YYYY-NNNNNN"}</span>
+              <span className="manual-entry-format-badge">{firstTimeRfid ? "Enter your ID" : "Format: YYYY-NNNNNN or YYYY-NNNNNNN"}</span>
             </div>
 
             {firstTimeRfid && <p className="manual-entry-help">Your RFID card is not linked yet. Enter your student number to find your record in the uploaded student list. You will confirm your profile before continuing.</p>}
