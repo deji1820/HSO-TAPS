@@ -17,6 +17,12 @@
 .queue-view-tabs { display: flex; gap: 8px; margin: 0 0 14px; border-bottom: 1px solid #d8d8d8; }
 .queue-view-tabs button { border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; background: transparent; color: #596579; font: inherit; font-weight: 700; cursor: pointer; }
 .queue-view-tabs button.active { border-bottom-color: #337fb5; color: #1f5f91; }
+.queue-history-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin: 0 0 12px; padding: 12px; border: 1px solid #d8e0e8; background: #f8fafc; color: #596579; font-size: .82rem; }
+.queue-history-controls label { display: grid; gap: 4px; color: #42536a; font-weight: 700; }
+.queue-history-controls input { min-height: 36px; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 4px; color: #344256; font: inherit; }
+.queue-history-controls > span { margin-left: auto; padding-bottom: 8px; }
+.queue-history-pagination { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 14px 0; color: #596579; font-size: .86rem; }
+.queue-history-pagination .btn { min-height: 36px; padding: 6px 14px; }
 .snapshot-archive-vitals { display: grid; gap: 5px; margin-top: 14px; padding: 12px; border: 1px solid #d8e0e8; background: #f8fafc; color: #4b4b4b; font-size: .88rem; }
 .snapshot-archive-vitals strong { margin-bottom: 3px; }
 .filter-select { width: 125px; padding: 5px 8px !important; font-size: .75rem !important; }
@@ -36,4 +42,4 @@
 .snapshot-actions-secondary .btn-danger { background: #e33a3a; color: #fff; border-radius: 2px; }
 .snapshot-actions-secondary .btn-primary { border-radius: 2px; }
 @media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr; } .patient-snapshot { position: static; } }
-@media (max-width: 600px) { .nurse-dashboard-heading { flex-wrap: wrap; } .dashboard-search { width: 100%; margin-left: 0; } .dashboard-queue-table-wrap { overflow-x: auto; } .dashboard-queue-table { min-width: 560px; } }
+@media (max-width: 600px) { .nurse-dashboard-heading { flex-wrap: wrap; } .dashboard-search { width: 100%; margin-left: 0; } .dashboard-queue-table-wrap { overflow-x: auto; } .dashboard-queue-table { min-width: 760px; } .queue-history-controls { align-items: stretch; } .queue-history-controls label { flex: 1 1 130px; } .queue-history-controls input { width: 100%; } .queue-history-controls > span { flex: 1 0 100%; margin-left: 0; padding: 0; } }

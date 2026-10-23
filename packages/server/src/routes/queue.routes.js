@@ -11,6 +11,15 @@ function getManilaDayRange(now = new Date()) {
   return { start: new Date(start), end: new Date(start + 24 * 60 * 60 * 1000) };
 }
 
+function parseManilaDateStart(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  const utcDay = Date.UTC(year, month - 1, day);
+  const parsed = new Date(utcDay);
+  if (parsed.toISOString().slice(0, 10) !== value) return null;
+  return new Date(utcDay - MANILA_OFFSET_MS);
+}
+
 // Public waiting-room display: expose only queue numbers and their current state.
 router.get("/board", async (_req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -52,23 +61,52 @@ router.get("/history", requireAuth, requireRole("nurse", "supervisor", "physicia
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   const role = String(req.user.role || "").toLowerCase();
   const clinicalRole = ["nurse", "supervisor", "physician", "doctor", "dentist"].includes(role);
-  const { start, end } = getManilaDayRange();
-  let query = QueueEntry.find({
-    calledAt: { $gte: start, $lt: end },
-    status: { $in: ["called", "in_session", "completed", "cancelled"] },
-  })
+  const todayStart = getManilaDayRange().start;
+  const { from, to } = req.query;
+  const fromStart = from ? parseManilaDateStart(from) : null;
+  const toStart = to ? parseManilaDateStart(to) : null;
+  if ((from && !fromStart) || (to && !toStart)) {
+    return res.status(400).json({ message: "Use valid dates for the history range." });
+  }
+  if (fromStart && toStart && fromStart > toStart) {
+    return res.status(400).json({ message: "The start date must be on or before the end date." });
+  }
+
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const pageSize = 50;
+  const match = {
+    // Today's waiting entries stay in the live list; everything from past days
+    // and all entries already called today belong in the archive.
+    $or: [
+      { createdAt: { $lt: todayStart } },
+      { status: { $ne: "waiting" } },
+    ],
+  };
+  if (fromStart || toStart) {
+    match.createdAt = {
+      ...(fromStart ? { $gte: fromStart } : {}),
+      ...(toStart ? { $lt: new Date(toStart.getTime() + 24 * 60 * 60 * 1000) } : {}),
+    };
+  }
+
+  let entriesQuery = QueueEntry.find(match)
     .populate("student", "studentId firstName lastName program department")
-    .sort({ calledAt: -1 });
-  if (clinicalRole) query = query.populate("linkedVitals");
-  const entries = await query;
-  if (clinicalRole) return res.json(entries);
-  res.json(entries.map((entry) => {
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * pageSize)
+    .limit(pageSize);
+  if (clinicalRole) entriesQuery = entriesQuery.populate("linkedVitals");
+  const [total, entries] = await Promise.all([
+    QueueEntry.countDocuments(match),
+    entriesQuery,
+  ]);
+  const safeEntries = clinicalRole ? entries : entries.map((entry) => {
     const safeEntry = entry.toObject();
     delete safeEntry.reason;
     delete safeEntry.requestDetails;
     delete safeEntry.linkedVitals;
     return safeEntry;
-  }));
+  });
+  res.json({ entries: safeEntries, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
 });
 
 router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), async (req, res) => {

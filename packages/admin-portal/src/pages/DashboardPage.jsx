@@ -10,6 +10,7 @@ const BADGE = { "High Priority": "badge-high", "Standard Priority": "badge-stand
 const clock = (value) => value ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
 const dateTime = (value) => value ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
 const STATUS_LABEL = { called: "Called", in_session: "In session", completed: "Completed", cancelled: "Cancelled" };
+const HISTORY_STATUS_LABEL = { ...STATUS_LABEL, waiting: "Not called" };
 
 function filterQueueEntries(entries, { provider, filter, search }) {
   return entries.filter((entry) => {
@@ -24,6 +25,12 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [queue, setQueue] = useState([]);
   const [history, setHistory] = useState([]);
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(1);
+  const [historyError, setHistoryError] = useState("");
   const [queueView, setQueueView] = useState("active");
   const [selectedId, setSelectedId] = useState(null);
   const [filter, setFilter] = useState("All");
@@ -41,8 +48,18 @@ export default function DashboardPage() {
   }, []);
 
   const refreshHistory = useCallback(() => {
-    getQueueHistory().then(setHistory).catch((error) => console.warn("Could not refresh today's queue history:", error));
-  }, []);
+    getQueueHistory({ from: historyFrom, to: historyTo, page: historyPage }).then((result) => {
+      setHistory(result.entries || []);
+      setHistoryTotal(result.total || 0);
+      setHistoryTotalPages(result.totalPages || 1);
+      setHistoryError("");
+    }).catch((error) => {
+      setHistory([]);
+      setHistoryTotal(0);
+      setHistoryTotalPages(1);
+      setHistoryError(error.response?.data?.message || "Could not load queue history.");
+    });
+  }, [historyFrom, historyTo, historyPage]);
 
   useEffect(() => {
     refreshQueue();
@@ -66,7 +83,7 @@ export default function DashboardPage() {
   }, [refreshQueue, refreshHistory]);
 
   const visibleQueue = useMemo(() => filterQueueEntries(queue, { provider, filter, search }).sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * (sortOrder === "asc" ? 1 : -1)), [queue, filter, search, provider, sortOrder]);
-  const visibleHistory = useMemo(() => filterQueueEntries(history, { provider, filter, search }).sort((a, b) => new Date(b.calledAt) - new Date(a.calledAt)), [history, filter, search, provider]);
+  const visibleHistory = useMemo(() => filterQueueEntries(history, { provider, filter, search }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [history, filter, search, provider]);
   const selected = (queueView === "active" ? queue : history).find((entry) => entry._id === selectedId) || null;
 
   async function changeStatus(id, status) {
@@ -92,18 +109,30 @@ export default function DashboardPage() {
       <section className="card dashboard-queue-card">
         <div className="queue-view-tabs" role="tablist" aria-label="Queue views">
           <button type="button" role="tab" aria-selected={queueView === "active"} className={queueView === "active" ? "active" : ""} onClick={() => { setQueueView("active"); setSelectedId(null); }}>Waiting ({queue.length})</button>
-          <button type="button" role="tab" aria-selected={queueView === "history"} className={queueView === "history" ? "active" : ""} onClick={() => { setQueueView("history"); setSelectedId(null); }}>Today's History ({history.length})</button>
+          <button type="button" role="tab" aria-selected={queueView === "history"} className={queueView === "history" ? "active" : ""} onClick={() => { setQueueView("history"); setSelectedId(null); }}>Queue History ({historyTotal})</button>
         </div>
         <div className="queue-list-header">
-          <h2>{queueView === "active" ? "Waiting Queue" : "Called Numbers — Today's Archive"}</h2>
+          <h2>{queueView === "active" ? "Waiting Queue" : "Queue History - All Dates"}</h2>
           <select className="text-input filter-select" value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter queue"><option value="All">Filter by</option><option value="High Priority">High Priority</option>{(provider ? SERVICE_TYPES.slice(0, 2) : SERVICE_TYPES).map((service) => <option key={service}>{service}</option>)}</select>
           {queueView === "active" && <select className="text-input filter-select" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} aria-label="Sort by time-in"><option value="asc">Time-in: Oldest first</option><option value="desc">Time-in: Newest first</option></select>}
         </div>
+        {queueView === "history" && <div className="queue-history-controls">
+          <label>From<input type="date" value={historyFrom} max={historyTo || undefined} onChange={(event) => { setHistoryFrom(event.target.value); setHistoryPage(1); setSelectedId(null); }} /></label>
+          <label>To<input type="date" value={historyTo} min={historyFrom || undefined} onChange={(event) => { setHistoryTo(event.target.value); setHistoryPage(1); setSelectedId(null); }} /></label>
+          {(historyFrom || historyTo) && <button type="button" className="btn btn-secondary" onClick={() => { setHistoryFrom(""); setHistoryTo(""); setHistoryPage(1); setSelectedId(null); }}>All dates</button>}
+          <span>Showing {history.length} of {historyTotal} entries; 50 per page</span>
+        </div>}
+        {queueView === "history" && historyError && <div className="table-empty" role="alert">{historyError}</div>}
         {queueView === "active" ? (
           visibleQueue.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th></tr></thead><tbody>{visibleQueue.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td></tr>)}</tbody></table></div> : <div className="table-empty">No one is waiting in the queue.</div>
         ) : (
-          visibleHistory.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Called at</th><th>Purpose</th><th>Status</th></tr></thead><tbody>{visibleHistory.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{clock(entry.calledAt)}</td><td>{entry.serviceType || "—"}</td><td>{STATUS_LABEL[entry.status] || entry.status}</td></tr>)}</tbody></table></div> : <div className="table-empty">No numbers have been called today.</div>
+          visibleHistory.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Date / time queued</th><th>Called at</th><th>Purpose</th><th>Status</th></tr></thead><tbody>{visibleHistory.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "-"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{dateTime(entry.createdAt)}</td><td>{entry.calledAt ? dateTime(entry.calledAt) : "-"}</td><td>{entry.serviceType || "-"}</td><td>{HISTORY_STATUS_LABEL[entry.status] || entry.status}</td></tr>)}</tbody></table></div> : !historyError && <div className="table-empty">No archived queue entries match this date range.</div>
         )}
+        {queueView === "history" && <nav className="queue-history-pagination" aria-label="Queue history pages">
+          <button type="button" className="btn btn-secondary" disabled={historyPage <= 1} onClick={() => { setHistoryPage((page) => Math.max(1, page - 1)); setSelectedId(null); }}>Previous</button>
+          <span>Page {historyPage} of {historyTotalPages}</span>
+          <button type="button" className="btn btn-secondary" disabled={historyPage >= historyTotalPages} onClick={() => { setHistoryPage((page) => Math.min(historyTotalPages, page + 1)); setSelectedId(null); }}>Next</button>
+        </nav>}
       </section>
 
       <section className="card patient-snapshot"><h2>Patient Snapshot</h2>{!selected ? <div className="table-empty">Select a patient from the queue to see details.</div> : <>
@@ -117,7 +146,7 @@ export default function DashboardPage() {
           <div className="snapshot-actions"><button className="btn btn-warning" disabled={selected.status !== "waiting"} onClick={() => changeStatus(selected._id, "called")}>Call to Desk</button><button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button></div>
           {clinicalRole && <div className="snapshot-actions"><button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Full EMR</button></div>}
         </> : <>
-          <div className="snapshot-field"><span>Status:</span> {STATUS_LABEL[selected.status] || selected.status}</div>
+          <div className="snapshot-field"><span>Status:</span> {HISTORY_STATUS_LABEL[selected.status] || selected.status}</div>
           <div className="snapshot-field"><span>Checked in:</span> {dateTime(selected.createdAt)}</div>
           <div className="snapshot-field"><span>Called:</span> {dateTime(selected.calledAt)}</div>
           {selected.startedAt && <div className="snapshot-field"><span>Started:</span> {dateTime(selected.startedAt)}</div>}

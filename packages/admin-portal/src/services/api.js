@@ -14,7 +14,8 @@ api.interceptors.request.use((config) => {
 
 export const login = (email, password) => api.post("/auth/login", { email, password }).then((r) => r.data);
 export const getQueue = () => api.get("/queue").then((r) => r.data);
-export const getQueueHistory = () => api.get("/queue/history").then((r) => r.data);
+export const getQueueHistory = ({ from = "", to = "", page = 1 } = {}) =>
+  api.get("/queue/history", { params: { from: from || undefined, to: to || undefined, page } }).then((r) => r.data);
 export const getQueueBoard = () => api.get("/queue/board").then((r) => r.data);
 export const getAppointments = () => api.get("/appointments").then((r) => r.data);
 export const updateAppointmentDecision = (id, decisionStatus) => api.patch("/appointments/" + id + "/decision", { decisionStatus }).then((r) => r.data);
