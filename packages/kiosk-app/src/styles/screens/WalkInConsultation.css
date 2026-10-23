@@ -376,6 +376,7 @@
   font-size: 16px;
 }
 .wic-intake-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 12px 0; }
+.wic-skip-intake-btn { min-height: 52px; padding: 12px 18px; border: 1px solid #17345b; border-radius: 8px; background: #fff; color: var(--nu-blue-dark); font-size: 16px; font-weight: 700; cursor: pointer; }
 .wic-screen--intake .wic-back-btn {
   display: inline-flex;
   align-items: center;

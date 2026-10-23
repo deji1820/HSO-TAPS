@@ -51,7 +51,8 @@ export async function submitIntake(req, res) {
   const isFeverFlagged = temperatureStatus === "Fever";
   const isTempAlert = temperatureStatus === "Fever" || temperatureStatus === "Hypothermia";
 
-  const vitals = await VitalsLog.create({
+  const hasVitals = [temperatureC, bloodPressure, pulseRate, heightCm, weightKg].some((value) => value !== undefined && value !== null && value !== "");
+  const vitals = hasVitals ? await VitalsLog.create({
     student: student._id,
     source: source || "kiosk",
     temperatureC,
@@ -64,7 +65,7 @@ export async function submitIntake(req, res) {
     bmi,
     bmiCategory: classifyBmi(bmi),
     isFeverFlagged,
-  });
+  }) : null;
 
   const isSelfService = serviceType === "Quick Health Screening";
   const needsQueueEntry = !isSelfService || isTempAlert; // the override rule
@@ -78,7 +79,7 @@ export async function submitIntake(req, res) {
       serviceType,
       reason: isTempAlert ? (isFeverFlagged ? "High Temperature" : "Low Temperature") : reason,
       requestDetails,
-      linkedVitals: vitals._id,
+      linkedVitals: vitals?._id,
     });
     io?.to("clinical-queue").to("frontdesk-queue").emit("queue:new", { _id: queueEntry._id });
   }

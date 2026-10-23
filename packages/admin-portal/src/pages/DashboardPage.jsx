@@ -3,18 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { getQueue, getQueueHistory, updateQueueStatus, getAnnouncement, saveAnnouncement } from "../services/api.js";
 import { socket } from "../services/socket.js";
 import ActiveSessionModal from "../components/ActiveSessionModal.jsx";
+import NursingAssessmentModal from "../components/NursingAssessmentModal.jsx";
 import "../styles/pages/Dashboard.css";
 
 const SERVICE_TYPES = ["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription/OTC Pickup", "General Inquiry", "Quick Health Screening"];
 const BADGE = { "High Priority": "badge-high", "Standard Priority": "badge-standard", "Routine Check": "badge-routine" };
 const clock = (value) => value ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
 const dateTime = (value) => value ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
-const STATUS_LABEL = { called: "Called", in_session: "In session", completed: "Completed", cancelled: "Cancelled" };
+const STATUS_LABEL = { waiting: "Waiting", called: "Called to desk", in_session: "Nursing assessment", awaiting_provider: "Waiting for provider", provider_in_session: "With provider", completed: "Completed", cancelled: "Cancelled" };
 const HISTORY_STATUS_LABEL = { ...STATUS_LABEL, waiting: "Not called" };
 
 function filterQueueEntries(entries, { provider, filter, search }) {
   return entries.filter((entry) => {
-    if (provider && !["Medical Consultation", "Dental Consultation"].includes(entry.serviceType)) return false;
+    if (provider && !["Medical Consultation", "Dental Consultation", "Medical Clearance"].includes(entry.serviceType)) return false;
     const matchesFilter = filter === "All" || (filter === "High Priority" ? entry.priorityLevel === filter : entry.serviceType === filter);
     const name = `${entry.student?.firstName || ""} ${entry.student?.lastName || ""} ${entry.student?.studentId || ""} ${entry.queueNumber || ""}`.toLowerCase();
     return matchesFilter && name.includes(search.toLowerCase());
@@ -36,6 +37,7 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [sessionEntry, setSessionEntry] = useState(null);
+  const [nursingEntry, setNursingEntry] = useState(null);
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const provider = ["physician", "doctor", "dentist"].includes(user.role);
   const supervisor = user.role === "supervisor";
@@ -73,7 +75,7 @@ export default function DashboardPage() {
     const onUpdate = (entry) => {
       refreshQueue();
       refreshHistory();
-      if (entry.status !== "waiting") setSelectedId((current) => current === entry._id ? null : current);
+      if (["completed", "cancelled"].includes(entry.status)) setSelectedId((current) => current === entry._id ? null : current);
     };
     socket.on("queue:new", onNew);
     socket.on("queue:update", onUpdate);
@@ -89,9 +91,13 @@ export default function DashboardPage() {
   async function changeStatus(id, status) {
     if (status === "cancelled" && !window.confirm("Cancel this queue entry?")) return;
     const updated = await updateQueueStatus(id, status);
-    setQueue((items) => status === "waiting" ? items.map((item) => item._id === id ? updated : item) : items.filter((item) => item._id !== id));
-    if (updated.calledAt) setHistory((items) => [updated, ...items.filter((item) => item._id !== id)]);
-    if (status === "called") setSelectedId(null);
+    if (["completed", "cancelled"].includes(status)) {
+      setQueue((items) => items.filter((item) => item._id !== id));
+      refreshHistory();
+    } else {
+      setQueue((items) => items.map((item) => item._id === id ? updated : item));
+      setSelectedId(id);
+    }
     return updated;
   }
 
@@ -108,12 +114,12 @@ export default function DashboardPage() {
     <div className="dashboard-grid">
       <section className="card dashboard-queue-card">
         <div className="queue-view-tabs" role="tablist" aria-label="Queue views">
-          <button type="button" role="tab" aria-selected={queueView === "active"} className={queueView === "active" ? "active" : ""} onClick={() => { setQueueView("active"); setSelectedId(null); }}>Waiting ({queue.length})</button>
+          <button type="button" role="tab" aria-selected={queueView === "active"} className={queueView === "active" ? "active" : ""} onClick={() => { setQueueView("active"); setSelectedId(null); }}>Active Queue ({queue.length})</button>
           <button type="button" role="tab" aria-selected={queueView === "history"} className={queueView === "history" ? "active" : ""} onClick={() => { setQueueView("history"); setSelectedId(null); }}>Queue History ({historyTotal})</button>
         </div>
         <div className="queue-list-header">
-          <h2>{queueView === "active" ? "Waiting Queue" : "Queue History - All Dates"}</h2>
-          <select className="text-input filter-select" value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter queue"><option value="All">Filter by</option><option value="High Priority">High Priority</option>{(provider ? SERVICE_TYPES.slice(0, 2) : SERVICE_TYPES).map((service) => <option key={service}>{service}</option>)}</select>
+          <h2>{queueView === "active" ? "Active Queue" : "Queue History - All Dates"}</h2>
+          <select className="text-input filter-select" value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter queue"><option value="All">Filter by</option><option value="High Priority">High Priority</option>{(provider ? SERVICE_TYPES.slice(0, 3) : SERVICE_TYPES).map((service) => <option key={service}>{service}</option>)}</select>
           {queueView === "active" && <select className="text-input filter-select" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} aria-label="Sort by time-in"><option value="asc">Time-in: Oldest first</option><option value="desc">Time-in: Newest first</option></select>}
         </div>
         {queueView === "history" && <div className="queue-history-controls">
@@ -124,7 +130,7 @@ export default function DashboardPage() {
         </div>}
         {queueView === "history" && historyError && <div className="table-empty" role="alert">{historyError}</div>}
         {queueView === "active" ? (
-          visibleQueue.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th></tr></thead><tbody>{visibleQueue.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td></tr>)}</tbody></table></div> : <div className="table-empty">No one is waiting in the queue.</div>
+          visibleQueue.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th><th>Status</th></tr></thead><tbody>{visibleQueue.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td><td>{STATUS_LABEL[entry.status] || entry.status}</td></tr>)}</tbody></table></div> : <div className="table-empty">No active patients in the queue.</div>
         ) : (
           visibleHistory.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Date / time queued</th><th>Called at</th><th>Purpose</th><th>Status</th></tr></thead><tbody>{visibleHistory.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "-"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{dateTime(entry.createdAt)}</td><td>{entry.calledAt ? dateTime(entry.calledAt) : "-"}</td><td>{entry.serviceType || "-"}</td><td>{HISTORY_STATUS_LABEL[entry.status] || entry.status}</td></tr>)}</tbody></table></div> : !historyError && <div className="table-empty">No archived queue entries match this date range.</div>
         )}
@@ -143,7 +149,15 @@ export default function DashboardPage() {
         <div className="snapshot-field"><span>Department:</span> {selected.student?.program || "—"}</div>
         <div className="snapshot-field"><span>Purpose:</span> {selected.serviceType || "—"}</div>
         {queueView === "active" ? <>
-          <div className="snapshot-actions"><button className="btn btn-warning" disabled={selected.status !== "waiting"} onClick={() => changeStatus(selected._id, "called")}>Call to Desk</button><button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button></div>
+          <div className="snapshot-field"><span>Status:</span> {STATUS_LABEL[selected.status] || selected.status}</div>
+          <div className="snapshot-actions">
+            {selected.status === "waiting" && <button className="btn btn-warning" onClick={() => changeStatus(selected._id, "called")}>Call to Desk</button>}
+            {isNursingTeam(user.role) && selected.status === "called" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setNursingEntry(entry); }}>Start Nursing Assessment</button>}
+            {isNursingTeam(user.role) && selected.status === "in_session" && <button className="btn btn-success" onClick={() => setNursingEntry(selected)}>Resume Nursing Assessment</button>}
+            {provider && selected.status === "awaiting_provider" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>Start Provider Review</button>}
+            {provider && selected.status === "provider_in_session" && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Provider Review</button>}
+            {!provider && <button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button>}
+          </div>
           {clinicalRole && <div className="snapshot-actions"><button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Full EMR</button></div>}
         </> : <>
           <div className="snapshot-field"><span>Status:</span> {HISTORY_STATUS_LABEL[selected.status] || selected.status}</div>
@@ -155,13 +169,16 @@ export default function DashboardPage() {
           {selected.requestDetails && <div className="snapshot-field"><span>Request details:</span> {selected.requestDetails}</div>}
           {selected.linkedVitals && <div className="snapshot-archive-vitals"><strong>Vitals</strong><div>Temperature: {selected.linkedVitals.temperatureC ?? "—"} °C</div><div>Height: {selected.linkedVitals.heightCm ?? "—"} cm</div><div>Weight: {selected.linkedVitals.weightKg ?? "—"} kg</div><div>Blood pressure: {selected.linkedVitals.bloodPressure || "—"}</div></div>}
           <div className="snapshot-actions">
-            {clinicalRole && ["called", "in_session"].includes(selected.status) && <button className="btn btn-success" onClick={async () => { const entry = selected.status === "in_session" ? selected : await changeStatus(selected._id, "in_session"); if (entry) setSessionEntry(entry); }}>{selected.status === "in_session" ? "Resume" : "Start"}</button>}
+            {provider && ["awaiting_provider", "provider_in_session"].includes(selected.status) && <button className="btn btn-success" onClick={async () => { const entry = selected.status === "provider_in_session" ? selected : await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>{selected.status === "provider_in_session" ? "Resume Provider Review" : "Start Provider Review"}</button>}
             {clinicalRole && <button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Full EMR</button>}
           </div>
         </>}
       </>}</section>
     </div>
 
-    {sessionEntry && <ActiveSessionModal entry={sessionEntry} onClose={() => setSessionEntry(null)} onCompleted={(entry) => { setQueue((items) => items.filter((item) => item._id !== entry._id)); setHistory((items) => items.map((item) => item._id === entry._id ? entry : item)); setSessionEntry(null); refreshHistory(); }} />}
+    {nursingEntry && <NursingAssessmentModal entry={nursingEntry} onClose={() => setNursingEntry(null)} onSaved={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setSelectedId(entry._id); setNursingEntry(null); }} onRouted={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setSelectedId(entry._id); setNursingEntry(null); }} />}
+    {sessionEntry && <ActiveSessionModal entry={sessionEntry} onClose={() => setSessionEntry(null)} onCompleted={(entry) => { setQueue((items) => items.filter((item) => item._id !== entry._id)); setSelectedId(null); setSessionEntry(null); refreshHistory(); }} />}
   </div>;
 }
+
+function isNursingTeam(role) { return ["nurse", "supervisor"].includes(role); }

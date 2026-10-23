@@ -52,7 +52,7 @@ export default function QueueBoardPage() {
     <div className="queue-board-columns">
       <section className="queue-board-panel queue-board-serving">
         <header><div><span className="queue-board-kicker">PLEASE PROCEED</span><h2>Now Serving</h2></div><span className="queue-board-count">{board.serving.length}</span></header>
-        {board.serving.length ? <div className="queue-board-tickets">{board.serving.map((ticket, index) => <article className="queue-board-ticket queue-board-ticket--serving" key={`${ticket.queueNumber}-${index}`}><strong>{ticket.queueNumber || "—"}</strong><span>{ticket.status === "in_session" ? "At the clinic" : "Proceed to desk"}</span></article>)}</div> : <p className="queue-board-empty">No numbers are being called right now.</p>}
+        {board.serving.length ? <div className="queue-board-tickets">{board.serving.map((ticket, index) => <article className="queue-board-ticket queue-board-ticket--serving" key={`${ticket.queueNumber}-${index}`}><strong>{ticket.queueNumber || "—"}</strong><span>{ticket.status === "called" ? "Proceed to clinic desk" : ticket.status === "in_session" ? "At nurse station" : ticket.status === "awaiting_provider" ? "Waiting for provider" : "With provider"}</span></article>)}</div> : <p className="queue-board-empty">No numbers are being called right now.</p>}
       </section>
       <section className="queue-board-panel queue-board-waiting">
         <header><div><span className="queue-board-kicker">PLEASE WAIT</span><h2>Up Next</h2></div><span className="queue-board-count">{board.waiting.length}</span></header>

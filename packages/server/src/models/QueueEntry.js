@@ -27,13 +27,21 @@ const queueEntrySchema = new mongoose.Schema(
     requestDetails: String, // full free-text request (e.g. Prescription/OTC or General Inquiry details) — `reason` above is just a short display label, this is the durable record staff read
     status: {
       type: String,
-      enum: ["waiting", "called", "in_session", "completed", "cancelled"],
+      enum: ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session", "completed", "cancelled"],
       default: "waiting",
     },
     linkedVitals: { type: mongoose.Schema.Types.ObjectId, ref: "VitalsLog" },
     calledAt: Date,
     startedAt: Date,
+    providerStartedAt: Date,
     completedAt: Date,
+    nursingAssessment: {
+      physicalExam: { type: String, maxlength: 4000 },
+      laboratoryExamination: { type: String, maxlength: 4000 },
+      notes: { type: String, maxlength: 4000 },
+      recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      recordedAt: Date,
+    },
   },
   { timestamps: true }
 );

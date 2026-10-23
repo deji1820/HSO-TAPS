@@ -42,6 +42,7 @@ export default function WalkInIntakeScreen({
   onRetry,
   onManualBpSubmit,
   onContinue,            // () => void
+  onSkip,                // () => void; creates the queue entry without kiosk intake data
   onBack,
   onFaq,
   isOnline,
@@ -118,6 +119,10 @@ export default function WalkInIntakeScreen({
           disabled={!canContinue}
         >
           Continue
+        </button>
+
+        <button type="button" className="wic-skip-intake-btn" onClick={onSkip}>
+          Skip intake and continue to the queue
         </button>
 
         <button className="wic-back-btn" onClick={onBack}>

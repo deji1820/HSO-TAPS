@@ -952,6 +952,37 @@ async function handleWalkInSubmit() {
   }
 }
 
+async function handleSkipWalkInIntake() {
+  if (submittingRef.current) return;
+  submittingRef.current = true;
+  clearTimeout(captureTimerRef.current);
+  clearTimeout(bpTimeoutRef.current);
+  serviceSensorFlowRef.current = null;
+  serviceSensorRequestRef.current = null;
+  activeSensorModeRef.current = null;
+  setSensorFailed(false);
+  setCaptureMode(null);
+  setReadings({});
+  const serviceType = consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation";
+  try {
+    const result = await submitIntake({
+      studentId: student?.studentId || student?.rfidTagUid,
+      serviceType,
+      source: "kiosk",
+      reason: "Initial intake skipped",
+      requestDetails: `Walk-in ${consultSubType} consultation. The patient chose to skip the optional kiosk intake.`,
+    });
+    currentSessionIdRef.current = null;
+    setOverrideTriggered(false);
+    setResultQueueNumber(result?.queueEntry?.queueNumber ?? null);
+    setStep("walkInResult");
+  } catch (err) {
+    console.warn("[handleSkipWalkInIntake] intake submission failed:", err);
+    submittingRef.current = false;
+    alert("We couldn't add you to the queue. Please try again or see clinic staff.");
+  }
+}
+
 async function handleContinueAtKiosk() {
   const sessionId = currentSessionIdRef.current;
   if (sessionId && supabase) {
@@ -1581,6 +1612,7 @@ async function handleScreeningOptionSelect(mode) {
             onRetry={() => triggerHardwareSensors(serviceSensorStep === "bloodPressure" ? "bloodPressure" : "temperature", `${consultSubType === "Dental" ? "Dental" : "Medical"} Consultation`)}
             onManualBpSubmit={handleManualBpSubmit}
     onContinue={handleWalkInSubmit}
+    onSkip={handleSkipWalkInIntake}
     onFaq={openFaq}
     onBack={handleLeaveWalkIn}
     isOnline={isOnline}

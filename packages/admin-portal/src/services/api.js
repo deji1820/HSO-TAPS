@@ -19,7 +19,7 @@ export const getQueueHistory = ({ from = "", to = "", page = 1 } = {}) =>
 export const getQueueBoard = () => api.get("/queue/board").then((r) => r.data);
 export const getAppointments = () => api.get("/appointments").then((r) => r.data);
 export const updateAppointmentDecision = (id, decisionStatus) => api.patch("/appointments/" + id + "/decision", { decisionStatus }).then((r) => r.data);
-export const updateQueueStatus = (id, status) => api.patch(`/queue/${id}/status`, { status }).then((r) => r.data);
+export const updateQueueStatus = (id, status, details = {}) => api.patch(`/queue/${id}/status`, { status, ...details }).then((r) => r.data);
 export const completeSession = (payload) => api.post("/consultations", payload).then((r) => r.data);
 export const saveMedicalProfile = (id, payload) => api.post(`/students/${id}/medical-profiles`, payload).then((r) => r.data);
 export const getMedicalProfiles = (id) => api.get(`/students/${id}/medical-profiles`).then((r) => r.data);

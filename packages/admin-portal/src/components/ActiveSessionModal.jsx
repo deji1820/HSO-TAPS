@@ -182,6 +182,8 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
             </div>
           </div>
 
+          {entry.nursingAssessment && <section className="card" aria-label="Nursing handoff"><h3 className="vitals-block-title">Nursing assessment and handoff</h3><div className="vitals-rows">{entry.nursingAssessment.physicalExam && <p><strong>Physical examination:</strong> {entry.nursingAssessment.physicalExam}</p>}{entry.nursingAssessment.laboratoryExamination && <p><strong>Laboratory examination:</strong> {entry.nursingAssessment.laboratoryExamination}</p>}{entry.nursingAssessment.notes && <p><strong>Nursing notes:</strong> {entry.nursingAssessment.notes}</p>}</div></section>}
+
           <h3 className="workstation-title">Workstation Tabs</h3>
           <div className="workstation-tabs">
             {TABS.map((t) => (
