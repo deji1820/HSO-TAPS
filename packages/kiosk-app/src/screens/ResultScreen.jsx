@@ -1,4 +1,5 @@
 import KioskHeader from "../components/KioskHeader.jsx";
+import { classifyTemperature } from "../utils/temperature.js";
 import "../styles/screens/Result.css";
 
 function formatHeight(heightInput) {
@@ -75,11 +76,14 @@ export default function ResultScreen({ readings, overrideTriggered, queueNumber,
     : null;
 
   const bmi = computeBmi(readings?.heightCm ?? readings?.height, rawWeight);
-  const isFever = tempFormatted != null && Number(tempFormatted) >= 37.5;
-  const hasFeverAlert = isFever || overrideTriggered;
+  const tempClassification = classifyTemperature(rawTemp);
+  const isFever = tempClassification === "Fever";
+  const isHypothermia = tempClassification === "Hypothermia";
+  const hasTemperatureAlert = isFever || isHypothermia;
+  const hasFeverAlert = hasTemperatureAlert || overrideTriggered;
 
   const tempStatus = tempFormatted != null 
-    ? (isFever ? "Elevated / Fever" : "Normal (36.50°C – 37.40°C)") 
+    ? (isFever ? "Elevated / Fever" : isHypothermia ? "Hypothermia" : "Normal (35.50°C – 37.79°C)")
     : null;
 
   return (
@@ -98,7 +102,7 @@ export default function ResultScreen({ readings, overrideTriggered, queueNumber,
             </div>
             <h1 className="result-title-alert">Please proceed inside the clinic immediately</h1>
             <p className="kiosk-subtitle fever-subtitle">
-              High body temperature detected ({tempFormatted ?? readings?.temperatureC}°C). Please proceed inside the clinic for direct attention of the nurse.
+              {isHypothermia ? "Low" : "High"} body temperature detected ({tempFormatted ?? readings?.temperatureC}°C). Please proceed inside the clinic for direct attention of the nurse.
             </p>
           </>
         ) : (
@@ -116,11 +120,11 @@ export default function ResultScreen({ readings, overrideTriggered, queueNumber,
         {/* Minimalist Stat Cards Grid */}
         <div className="reading-summary-grid">
           {tempFormatted != null && (
-            <div className={`reading-summary-stat ${isFever ? "stat-fever" : ""}`}>
+            <div className={`reading-summary-stat ${hasTemperatureAlert ? "stat-fever" : ""}`}>
               <span className="reading-summary-label">Body Temp</span>
               <span className="reading-summary-value">{tempFormatted}°C</span>
-              <span className={`reading-badge ${isFever ? "badge-fever" : "badge-normal"}`}>
-                {isFever ? "Fever Detected" : "Normal"}
+              <span className={`reading-badge ${hasTemperatureAlert ? "badge-fever" : "badge-normal"}`}>
+                {isFever ? "Fever Detected" : isHypothermia ? "Low Temperature" : "Normal"}
               </span>
             </div>
           )}
@@ -171,7 +175,7 @@ export default function ResultScreen({ readings, overrideTriggered, queueNumber,
                 {tempStatus && (
                   <div className="vitals-analysis-col">
                     <span className="vitals-col-label">Thermal Status:</span>
-                    <span className={`vitals-col-val ${isFever ? "text-fever" : "text-normal"}`}>
+                    <span className={`vitals-col-val ${hasTemperatureAlert ? "text-fever" : "text-normal"}`}>
                       {tempStatus}
                     </span>
                   </div>

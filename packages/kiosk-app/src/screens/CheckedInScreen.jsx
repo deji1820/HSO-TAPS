@@ -1,15 +1,19 @@
 import KioskHeader from "../components/KioskHeader.jsx";
+import { classifyTemperature } from "../utils/temperature.js";
 import "../styles/screens/CheckedIn.css";
 
 export default function CheckedInScreen({ info, onDone, isOnline }) {
-  const isFever = info?.temperatureC != null && Number(info.temperatureC) >= 37.5;
+  const temperatureStatus = classifyTemperature(info?.temperatureC);
+  const isFever = temperatureStatus === "Fever";
+  const isHypothermia = temperatureStatus === "Hypothermia";
+  const isTemperatureAlert = isFever || isHypothermia;
 
   return (
     <div className="kiosk-shell">
       <KioskHeader isOnline={isOnline} />
 
       <div className="kiosk-content">
-        {isFever ? (
+        {isTemperatureAlert ? (
           <>
             <div className="checkin-success-icon alert-icon" style={{ background: '#fef2f2', color: 'var(--danger)', border: '2px solid #fecaca' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -20,7 +24,7 @@ export default function CheckedInScreen({ info, onDone, isOnline }) {
             </div>
             <h1 style={{ color: "var(--danger)", maxWidth: "640px" }}>Please proceed inside the clinic immediately</h1>
             <p className="kiosk-subtitle" style={{ color: "#991b1b", fontWeight: 600, maxWidth: "600px" }}>
-              High body temperature detected ({Number(info.temperatureC).toFixed(1)} °C). Please proceed inside the clinic immediately for direct attention of the nurse.
+              {isHypothermia ? "Low" : "High"} body temperature detected ({Number(info.temperatureC).toFixed(1)} °C). Please proceed inside the clinic immediately for direct attention of the nurse.
             </p>
           </>
         ) : (
@@ -48,15 +52,15 @@ export default function CheckedInScreen({ info, onDone, isOnline }) {
           {info?.temperatureC != null && (
             <div className="checkin-row">
               <span className="confirm-detail-label">Recorded Temp:</span>
-              <span className="confirm-detail-value" style={{ fontWeight: 700, color: isFever ? '#dc2626' : '#16a34a' }}>
+              <span className="confirm-detail-value" style={{ fontWeight: 700, color: isTemperatureAlert ? '#dc2626' : '#16a34a' }}>
                 {Number(info.temperatureC).toFixed(1)} °C
-                {isFever ? " (Fever Flagged - Priority)" : " (Normal)"}
+                {isFever ? " (Fever Flagged - Priority)" : isHypothermia ? " (Low Temperature - Priority)" : " (Normal)"}
               </span>
             </div>
           )}
           {info?.queueNumber && (
             <div className="checkin-queue-block">
-              <span className="checkin-queue-label">{isFever ? "Priority Queue Number" : "Queue Number"}</span>
+              <span className="checkin-queue-label">{isTemperatureAlert ? "Priority Queue Number" : "Queue Number"}</span>
               <span className="checkin-queue-number">{info.queueNumber}</span>
             </div>
           )}
