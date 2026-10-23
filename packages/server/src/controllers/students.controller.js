@@ -78,6 +78,15 @@ export async function archiveRosterRecord(req, res) {
   res.json({ ok: true, message: "Roster record archived and RFID link reset. Existing clinical history is preserved." });
 }
 
+// PATCH /api/students/roster/:personId/restore (superadmin)
+export async function restoreRosterRecord(req, res) {
+  const person = await findRosterPerson(req.params.personId);
+  if (!person) return res.status(404).json({ message: "Roster record not found." });
+  person.isActive = true;
+  await person.save();
+  res.json({ ok: true, message: "Roster record restored. The person can use kiosk lookup again; their RFID may need to be registered again." });
+}
+
 // DELETE /api/students/roster/:personId (superadmin; only when no linked history exists)
 export async function deleteRosterRecord(req, res) {
   const person = await findRosterPerson(req.params.personId);
@@ -204,6 +213,7 @@ export async function bulkUpsertStudents(req, res) {
       if (!personId || !row.firstName || !row.lastName) throw new Error("ID, first name, and last name are required.");
       if (!["Student", "Employee"].includes(affiliation)) throw new Error("Affiliation must be Student or Employee.");
       const normalized = { ...row, studentId: personId, affiliation };
+      normalized.isActive = true;
       if (affiliation === "Employee") normalized.employeeId = personId;
       else delete normalized.employeeId;
       const existing = await Student.findOne({ studentId: personId });

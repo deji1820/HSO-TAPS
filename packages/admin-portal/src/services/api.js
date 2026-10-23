@@ -43,6 +43,7 @@ export const getRosterRecord = (personId) => api.get(`/students/roster/${encodeU
 export const resetRosterRfid = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/rfid`).then((r) => r.data);
 export const resetRosterProfile = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/reset-profile`).then((r) => r.data);
 export const archiveRosterRecord = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/archive`).then((r) => r.data);
+export const restoreRosterRecord = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/restore`).then((r) => r.data);
 export const deleteRosterRecord = (personId) => api.delete(`/students/roster/${encodeURIComponent(personId)}`).then((r) => r.data);
 export const getFormPipelines = () => api.get("/forms").then((r) => r.data);
 export const getSyncLog = () => api.get("/forms/sync-log").then((r) => r.data);

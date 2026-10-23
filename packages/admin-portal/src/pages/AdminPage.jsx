@@ -6,6 +6,7 @@ import {
   getRosterRecord,
   resetRosterProfile,
   resetRosterRfid,
+  restoreRosterRecord,
 } from "../services/api.js";
 import "../styles/pages/Admin.css";
 
@@ -142,6 +143,7 @@ export default function AdminPage() {
       resetProfile: `Reset ${person.firstName} ${person.lastName}'s profile details and RFID link? Their roster ID and clinical history will be preserved.`,
       resetRfid: `Unlink the RFID card from ${person.firstName} ${person.lastName}?`,
       archive: `Archive ${person.firstName} ${person.lastName} from the active roster? Their clinical history will be preserved.`,
+      restore: `Restore ${person.firstName} ${person.lastName} to the active roster? They may need to register their RFID card again.`,
       delete: `Permanently delete ${person.firstName} ${person.lastName}'s roster record? This cannot be undone.`,
     };
     if (!window.confirm(prompts[action])) return;
@@ -153,7 +155,8 @@ export default function AdminPage() {
       const result = action === "resetProfile" ? await resetRosterProfile(person.personId)
         : action === "resetRfid" ? await resetRosterRfid(person.personId)
           : action === "archive" ? await archiveRosterRecord(person.personId)
-            : await deleteRosterRecord(person.personId);
+            : action === "restore" ? await restoreRosterRecord(person.personId)
+              : await deleteRosterRecord(person.personId);
       setRosterNotice(result.message);
       if (action === "delete") setRosterRecord(null);
       else setRosterRecord(await getRosterRecord(person.personId));
@@ -315,7 +318,7 @@ export default function AdminPage() {
 
       <h2 className="section-title roster-management-title">Manage Roster Records</h2>
       <section className="card roster-management" aria-label="Roster record management">
-        <p>Search by student or employee ID to reset RFID enrollment, clear profile details, archive a record, or permanently delete a record without linked history.</p>
+        <p>Search by student or employee ID to reset RFID enrollment, clear profile details, archive or restore a record, or permanently delete a record without linked history.</p>
         <form className="roster-search-form" onSubmit={searchRosterRecord}>
           <label htmlFor="roster-person-id">Student or employee ID</label>
           <div className="roster-search-row">
@@ -336,7 +339,9 @@ export default function AdminPage() {
             <div className="roster-actions">
               <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.isActive} onClick={() => runRosterAction("resetProfile")}>{rosterAction ? "Working…" : "Reset profile &amp; RFID"}</button>
               <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.hasRfid} onClick={() => runRosterAction("resetRfid")}>Reset RFID only</button>
-              <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.isActive} onClick={() => runRosterAction("archive")}>Archive</button>
+              {rosterRecord.person.isActive
+                ? <button className="btn btn-outline" type="button" disabled={rosterAction} onClick={() => runRosterAction("archive")}>Archive</button>
+                : <button className="btn btn-outline" type="button" disabled={rosterAction} onClick={() => runRosterAction("restore")}>Restore to active roster</button>}
               <button className="btn btn-danger" type="button" disabled={rosterAction || rosterRecord.hasLinkedRecords} onClick={() => runRosterAction("delete")}>Delete permanently</button>
             </div>
           </div>

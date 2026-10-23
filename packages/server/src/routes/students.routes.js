@@ -14,6 +14,7 @@ router.get("/roster/:personId", requireAuth, requireRole("superadmin"), ctrl.get
 router.patch("/roster/:personId/rfid", requireAuth, requireRole("superadmin"), ctrl.resetRosterRfid);
 router.patch("/roster/:personId/reset-profile", requireAuth, requireRole("superadmin"), ctrl.resetRosterProfile);
 router.patch("/roster/:personId/archive", requireAuth, requireRole("superadmin"), ctrl.archiveRosterRecord);
+router.patch("/roster/:personId/restore", requireAuth, requireRole("superadmin"), ctrl.restoreRosterRecord);
 router.delete("/roster/:personId", requireAuth, requireRole("superadmin"), ctrl.deleteRosterRecord);
 router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist"), ctrl.listStudents);
 router.get("/:id/emr", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist"), ctrl.getFullEmr);
