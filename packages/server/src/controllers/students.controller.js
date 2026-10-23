@@ -4,6 +4,91 @@ import ConsultationRecord from "../models/ConsultationRecord.js";
 import ExternalDocument from "../models/ExternalDocument.js";
 import QueueEntry from "../models/QueueEntry.js";
 import { SyncLog } from "../models/FormPipeline.js";
+import Appointment from "../models/Appointment.js";
+import MedicalProfile from "../models/MedicalProfile.js";
+import PatientHistory from "../models/PatientHistory.js";
+
+async function findRosterPerson(personId) {
+  const id = String(personId || "").trim();
+  return Student.findOne({ $or: [{ studentId: id }, { employeeId: id }] });
+}
+
+async function getLinkedRecordCounts(id) {
+  const [vitals, consultations, documents, queueEntries, appointments, medicalProfiles, patientHistories, formSubmissions] = await Promise.all([
+    VitalsLog.countDocuments({ student: id }), ConsultationRecord.countDocuments({ student: id }),
+    ExternalDocument.countDocuments({ student: id }), QueueEntry.countDocuments({ student: id }),
+    Appointment.countDocuments({ student: id }), MedicalProfile.countDocuments({ student: id }),
+    PatientHistory.countDocuments({ student: id }), SyncLog.countDocuments({ matchedStudent: id }),
+  ]);
+  return { vitals, consultations, documents, queueEntries, appointments, medicalProfiles, patientHistories, formSubmissions };
+}
+
+function hasLinkedRecords(counts) {
+  return Object.values(counts).some((count) => count > 0);
+}
+
+// GET /api/students/roster/:personId (superadmin roster management)
+export async function getRosterRecord(req, res) {
+  const person = await findRosterPerson(req.params.personId);
+  if (!person) return res.status(404).json({ message: "Roster record not found." });
+  const linkedRecords = await getLinkedRecordCounts(person._id);
+  res.json({
+    person: {
+      id: person._id,
+      personId: person.employeeId || person.studentId,
+      affiliation: person.affiliation || "Student",
+      firstName: person.firstName,
+      lastName: person.lastName,
+      isActive: person.isActive !== false,
+      hasRfid: Boolean(person.rfidTagUid),
+    },
+    linkedRecords,
+    hasLinkedRecords: hasLinkedRecords(linkedRecords),
+  });
+}
+
+// PATCH /api/students/roster/:personId/rfid (superadmin)
+export async function resetRosterRfid(req, res) {
+  const person = await findRosterPerson(req.params.personId);
+  if (!person) return res.status(404).json({ message: "Roster record not found." });
+  person.rfidTagUid = undefined;
+  await person.save();
+  res.json({ ok: true, message: "RFID link reset. The person can scan their card to register it again." });
+}
+
+// PATCH /api/students/roster/:personId/reset-profile (superadmin)
+export async function resetRosterProfile(req, res) {
+  const person = await findRosterPerson(req.params.personId);
+  if (!person) return res.status(404).json({ message: "Roster record not found." });
+  if (person.isActive === false) return res.status(409).json({ message: "This roster record is archived. Restore it before resetting the profile." });
+  for (const field of ["rfidTagUid", "age", "sex", "program", "department", "yearLevel", "guardianContact", "email", "schoolYear"]) {
+    person[field] = undefined;
+  }
+  await person.save();
+  res.json({ ok: true, message: "Profile details and RFID link reset. Roster identity and clinical history were preserved." });
+}
+
+// PATCH /api/students/roster/:personId/archive (superadmin)
+export async function archiveRosterRecord(req, res) {
+  const person = await findRosterPerson(req.params.personId);
+  if (!person) return res.status(404).json({ message: "Roster record not found." });
+  person.isActive = false;
+  person.rfidTagUid = undefined;
+  await person.save();
+  res.json({ ok: true, message: "Roster record archived and RFID link reset. Existing clinical history is preserved." });
+}
+
+// DELETE /api/students/roster/:personId (superadmin; only when no linked history exists)
+export async function deleteRosterRecord(req, res) {
+  const person = await findRosterPerson(req.params.personId);
+  if (!person) return res.status(404).json({ message: "Roster record not found." });
+  const linkedRecords = await getLinkedRecordCounts(person._id);
+  if (hasLinkedRecords(linkedRecords)) {
+    return res.status(409).json({ message: "This record has linked clinical history. Archive it to remove it from the active roster while preserving that history.", linkedRecords });
+  }
+  await person.deleteOne();
+  res.json({ ok: true, message: "Roster record permanently deleted." });
+}
 
 // GET /api/students/lookup/:studentId  (kiosk "Is this your profile?" screen by studentId or rfidTagUid)
 export async function lookupForKiosk(req, res) {

@@ -1,5 +1,12 @@
 import { useRef, useState } from "react";
-import { bulkUpload } from "../services/api.js";
+import {
+  archiveRosterRecord,
+  bulkUpload,
+  deleteRosterRecord,
+  getRosterRecord,
+  resetRosterProfile,
+  resetRosterRfid,
+} from "../services/api.js";
 import "../styles/pages/Admin.css";
 
 // Small hand-rolled CSV parser — no papaparse in this project's dependencies,
@@ -63,6 +70,12 @@ export default function AdminPage() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [rosterSearchId, setRosterSearchId] = useState("");
+  const [rosterRecord, setRosterRecord] = useState(null);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterAction, setRosterAction] = useState(false);
+  const [rosterError, setRosterError] = useState("");
+  const [rosterNotice, setRosterNotice] = useState("");
   const fileInputRef = useRef(null);
   const unrecognizedHeaders = headers.filter((header) => !EXPECTED_COLUMNS.includes(header));
 
@@ -103,6 +116,51 @@ export default function AdminPage() {
       setError("Upload failed. Check that the server is running and the file format is correct.");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function searchRosterRecord(event) {
+    event.preventDefault();
+    if (!rosterSearchId.trim()) return;
+    setRosterLoading(true);
+    setRosterError("");
+    setRosterNotice("");
+    setRosterRecord(null);
+    try {
+      setRosterRecord(await getRosterRecord(rosterSearchId.trim()));
+    } catch (lookupError) {
+      setRosterError(lookupError?.response?.data?.message || "Could not find that roster record.");
+    } finally {
+      setRosterLoading(false);
+    }
+  }
+
+  async function runRosterAction(action) {
+    if (!rosterRecord || rosterAction) return;
+    const person = rosterRecord.person;
+    const prompts = {
+      resetProfile: `Reset ${person.firstName} ${person.lastName}'s profile details and RFID link? Their roster ID and clinical history will be preserved.`,
+      resetRfid: `Unlink the RFID card from ${person.firstName} ${person.lastName}?`,
+      archive: `Archive ${person.firstName} ${person.lastName} from the active roster? Their clinical history will be preserved.`,
+      delete: `Permanently delete ${person.firstName} ${person.lastName}'s roster record? This cannot be undone.`,
+    };
+    if (!window.confirm(prompts[action])) return;
+
+    setRosterAction(true);
+    setRosterError("");
+    setRosterNotice("");
+    try {
+      const result = action === "resetProfile" ? await resetRosterProfile(person.personId)
+        : action === "resetRfid" ? await resetRosterRfid(person.personId)
+          : action === "archive" ? await archiveRosterRecord(person.personId)
+            : await deleteRosterRecord(person.personId);
+      setRosterNotice(result.message);
+      if (action === "delete") setRosterRecord(null);
+      else setRosterRecord(await getRosterRecord(person.personId));
+    } catch (actionError) {
+      setRosterError(actionError?.response?.data?.message || "The roster action failed. Please try again.");
+    } finally {
+      setRosterAction(false);
     }
   }
 
@@ -254,6 +312,36 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      <h2 className="section-title roster-management-title">Manage Roster Records</h2>
+      <section className="card roster-management" aria-label="Roster record management">
+        <p>Search by student or employee ID to reset RFID enrollment, clear profile details, archive a record, or permanently delete a record without linked history.</p>
+        <form className="roster-search-form" onSubmit={searchRosterRecord}>
+          <label htmlFor="roster-person-id">Student or employee ID</label>
+          <div className="roster-search-row">
+            <input id="roster-person-id" className="text-input" value={rosterSearchId} onChange={(event) => setRosterSearchId(event.target.value)} />
+            <button className="btn btn-primary" type="submit" disabled={rosterLoading || !rosterSearchId.trim()}>{rosterLoading ? "Searching…" : "Search"}</button>
+          </div>
+        </form>
+        {rosterError && <p className="error-text" role="alert">{rosterError}</p>}
+        {rosterNotice && <p className="roster-notice" role="status">{rosterNotice}</p>}
+        {rosterRecord && (
+          <div className="roster-record-card">
+            <div className="roster-record-summary">
+              <strong>{rosterRecord.person.firstName} {rosterRecord.person.lastName}</strong>
+              <span>{rosterRecord.person.personId} · {rosterRecord.person.affiliation}</span>
+              <span>{rosterRecord.person.isActive ? "Active record" : "Archived record"} · {rosterRecord.person.hasRfid ? "RFID linked" : "No RFID linked"}</span>
+            </div>
+            {rosterRecord.hasLinkedRecords && <p className="roster-history-note">This record has linked clinical history. Permanent deletion is disabled; archive it to remove it from the active roster.</p>}
+            <div className="roster-actions">
+              <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.isActive} onClick={() => runRosterAction("resetProfile")}>{rosterAction ? "Working…" : "Reset profile &amp; RFID"}</button>
+              <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.hasRfid} onClick={() => runRosterAction("resetRfid")}>Reset RFID only</button>
+              <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.isActive} onClick={() => runRosterAction("archive")}>Archive</button>
+              <button className="btn btn-danger" type="button" disabled={rosterAction || rosterRecord.hasLinkedRecords} onClick={() => runRosterAction("delete")}>Delete permanently</button>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

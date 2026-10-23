@@ -39,6 +39,11 @@ export const deleteInventoryItem = (id) => api.delete(`/inventory/${id}`).then((
 export const getStudents = (q) => api.get("/students", { params: { q } }).then((r) => r.data);
 export const getFullEmr = (id) => api.get(`/students/${id}/emr`).then((r) => r.data);
 export const bulkUpload = (rows, mode) => api.post("/students/bulk-upload", { rows, mode }).then((r) => r.data);
+export const getRosterRecord = (personId) => api.get(`/students/roster/${encodeURIComponent(personId)}`).then((r) => r.data);
+export const resetRosterRfid = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/rfid`).then((r) => r.data);
+export const resetRosterProfile = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/reset-profile`).then((r) => r.data);
+export const archiveRosterRecord = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/archive`).then((r) => r.data);
+export const deleteRosterRecord = (personId) => api.delete(`/students/roster/${encodeURIComponent(personId)}`).then((r) => r.data);
 export const getFormPipelines = () => api.get("/forms").then((r) => r.data);
 export const getSyncLog = () => api.get("/forms/sync-log").then((r) => r.data);
 export const getAnalyticsSummary = (days) => api.get("/analytics/summary", { params: { days } }).then((r) => r.data);

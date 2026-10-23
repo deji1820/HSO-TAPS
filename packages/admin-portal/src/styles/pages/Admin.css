@@ -66,3 +66,21 @@
 .upload-result-stats { display: flex; gap: 22px; margin: 10px 0; font-size: 0.9rem; align-items: center; }
 .upload-result-stats > div { display: flex; align-items: center; gap: 8px; }
 .upload-error-list { margin: 8px 0 0; padding-left: 18px; font-size: 0.85rem; color: var(--text-secondary); }
+
+.roster-management-title { margin-top: 34px; }
+.roster-management > p { color: var(--text-secondary); margin-top: 0; }
+.roster-search-form { display: grid; gap: 8px; max-width: 620px; }
+.roster-search-form label { color: var(--text-primary); font-weight: 650; }
+.roster-search-row { display: flex; gap: 10px; }
+.roster-search-row .text-input { flex: 1; }
+.roster-record-card { margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.roster-record-summary { display: grid; gap: 4px; color: var(--text-secondary); }
+.roster-record-summary strong { color: var(--text-primary); font-size: 1.05rem; }
+.roster-history-note { color: #815b00; background: #fff5d3; padding: 10px 12px; border-radius: var(--radius-sm); font-size: .88rem; }
+.roster-notice { color: #155e36; background: #e6f6ec; padding: 10px 12px; border-radius: var(--radius-sm); }
+.roster-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+.roster-actions button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 580px) {
+  .roster-search-row { flex-direction: column; }
+  .roster-actions { flex-direction: column; }
+}
