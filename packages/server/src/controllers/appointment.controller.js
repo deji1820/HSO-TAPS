@@ -3,10 +3,18 @@ import Appointment from "../models/Appointment.js";
 import { sendAppointmentDecisionNotification } from "../services/documentNotifications.service.js";
 
 const SERVICES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance"]);
-const TIMES = new Set([
-  "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
-  "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM",
-]);
+const SERVICE_DAYS = {
+  "Medical Consultation": new Set([1, 2, 3, 4, 5]),
+  "Dental Consultation": new Set([3, 5]),
+  "Medical Clearance": new Set([1, 2, 3, 4, 5, 6]),
+};
+const TIMES = new Set(Array.from({ length: 26 }, (_, index) => {
+  const totalMinutes = 8 * 60 + index * 30;
+  const hour24 = Math.floor(totalMinutes / 60);
+  const hour = hour24 % 12 || 12;
+  const minute = String(totalMinutes % 60).padStart(2, "0");
+  return `${hour}:${minute} ${hour24 < 12 ? "AM" : "PM"}`;
+}));
 
 function todayInManila() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -31,13 +39,20 @@ function slotIsInFuture(dateKey, timeSlot) {
 function validDateKey(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value && date.getUTCDay() !== 0;
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+}
+
+function serviceAllowsDate(serviceType, dateKey) {
+  if (!validDateKey(dateKey)) return false;
+  const weekdays = SERVICE_DAYS[serviceType];
+  if (!weekdays) return false;
+  return weekdays.has(new Date(`${dateKey}T00:00:00.000Z`).getUTCDay());
 }
 
 export async function getAvailability(req, res) {
   const { serviceType, date } = req.query;
-  if (!SERVICES.has(serviceType) || !validDateKey(date) || date < todayInManila()) {
-    return res.status(400).json({ message: "Choose a valid service and a non-past weekday." });
+  if (!SERVICES.has(serviceType) || !serviceAllowsDate(serviceType, date) || date < todayInManila()) {
+    return res.status(400).json({ message: "Choose a valid service and a date when that service accepts appointments." });
   }
   const appointments = await Appointment.find({ serviceType, dateKey: date, status: "scheduled" }).select("timeSlot -_id");
   const unavailableTimes = appointments.map(({ timeSlot }) => timeSlot);
@@ -47,7 +62,7 @@ export async function getAvailability(req, res) {
 export async function createAppointment(req, res) {
   const { studentId, serviceType, purpose, date, timeSlot } = req.body;
   const notificationEmail = String(req.body.notificationEmail || "").trim().toLowerCase();
-  if (!SERVICES.has(serviceType) || !validDateKey(date) || date < todayInManila() || !TIMES.has(timeSlot) || !slotIsInFuture(date, timeSlot)) {
+  if (!SERVICES.has(serviceType) || !serviceAllowsDate(serviceType, date) || date < todayInManila() || !TIMES.has(timeSlot) || !slotIsInFuture(date, timeSlot)) {
     return res.status(400).json({ message: "The selected service, date, or time is invalid." });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {

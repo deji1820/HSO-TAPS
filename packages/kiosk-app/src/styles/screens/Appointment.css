@@ -425,12 +425,19 @@
   border-bottom: 1px solid var(--border);
 }
 .apt-page--booking .apt-booking-grid {
-  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(230px, .8fr) minmax(0, 1.35fr) minmax(210px, .8fr);
   gap: clamp(14px, 2vw, 24px);
   width: 100%;
   max-width: none;
   align-items: start;
 }
+.apt-schedule-guide { align-self: stretch; }
+.apt-schedule-guide .apt-card-title { margin: 0 0 12px; color: var(--nu-blue-dark); }
+.apt-schedule-guide ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.apt-schedule-guide li { display: grid; gap: 3px; padding-bottom: 10px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 13px; line-height: 1.35; }
+.apt-schedule-guide li strong { color: var(--nu-blue-dark); }
+.apt-schedule-guide li.apt-schedule-guide-current { margin: -5px; padding: 8px 8px 12px; border: 1px solid #b7c9e6; border-radius: 8px; background: #f2f6fc; }
+.apt-schedule-guide > p { margin: 12px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
 .apt-email-field {
   display: grid;
   gap: 8px;

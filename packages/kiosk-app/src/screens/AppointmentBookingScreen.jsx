@@ -4,8 +4,20 @@ import { getAppointmentAvailability } from "../services/api.js";
 import "../styles/screens/Appointment.css";
 
 const MORNING = ["8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM"];
-const AFTERNOON = ["1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM"];
+const AFTERNOON = Array.from({ length: 18 }, (_, index) => {
+  const totalMinutes = 12 * 60 + index * 30;
+  const hour24 = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  const hour = hour24 % 12 || 12;
+  return `${hour}:${String(minute).padStart(2, "0")} ${hour24 < 12 ? "AM" : "PM"}`;
+});
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const DAY_SCHEDULES = [
+  { label: "Medical Consultation", days: "Monday–Friday", weekdays: [1, 2, 3, 4, 5] },
+  { label: "Dental Consultation", days: "Wednesday & Friday", weekdays: [3, 5] },
+  { label: "Medical Clearance", days: "Monday–Saturday", weekdays: [1, 2, 3, 4, 5, 6] },
+  { label: "Prescription & Medicine Request", days: "Monday–Saturday", weekdays: [1, 2, 3, 4, 5, 6] },
+];
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const sameDay = (a, b) => a && b && a.toDateString() === b.toDateString();
@@ -62,6 +74,7 @@ export default function AppointmentBookingScreen({
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState(schoolEmail);
 
+  const serviceSchedule = DAY_SCHEDULES.find(({ label }) => label === serviceType);
   const cells = buildMonthCells(viewMonth);
   const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase();
   const atCurrentMonth =
@@ -125,7 +138,7 @@ export default function AppointmentBookingScreen({
                 <button
                   key={date.toISOString()}
                   className={`apt-day${sameDay(date, selectedDate) ? " apt-day--selected" : ""}`}
-                  disabled={!inMonth || isDateDisabled(date)}
+                  disabled={!inMonth || isDateDisabled(date) || !serviceSchedule?.weekdays.includes(date.getDay())}
                   onClick={() => pickDate(date)}
                 >
                   {date.getDate()}
@@ -138,9 +151,21 @@ export default function AppointmentBookingScreen({
           <div className="apt-card apt-time-card">
             <p className="apt-card-title">MORNING</p>
             <div className="apt-slot-grid">{renderSlots(MORNING)}</div>
-            <p className="apt-card-title apt-card-title--spaced">AFTERNOON</p>
+            <p className="apt-card-title apt-card-title--spaced">AFTERNOON &amp; EVENING · UNTIL 9:00 PM</p>
             <div className="apt-slot-grid">{renderSlots(AFTERNOON)}</div>
           </div>
+
+          <aside className="apt-card apt-schedule-guide" aria-label="Appointment schedule guide">
+            <h2 className="apt-card-title">BOOKING DAYS</h2>
+            <ul>
+              {DAY_SCHEDULES.map(({ label, days }) => (
+                <li key={label} className={label === serviceType ? "apt-schedule-guide-current" : ""}>
+                  <strong>{label}</strong><span>{days}</span>
+                </li>
+              ))}
+            </ul>
+            <p>Available appointment times are 8:00 AM–8:30 PM. The last 30-minute slot ends at 9:00 PM.</p>
+          </aside>
 
         </div>
 

@@ -1,0 +1,322 @@
+/* Phone and small tablet layout. Keep kiosk sizing on larger touch displays. */
+@media (max-width: 760px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+    min-height: 100%;
+    height: auto;
+  }
+
+  html,
+  body {
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-size: 16px;
+  }
+
+  #root > div {
+    zoom: 1 !important;
+    width: 100%;
+    min-width: 0;
+    min-height: 100svh;
+    overflow-x: clip;
+  }
+
+  .kiosk-shell,
+  .mobile-checkin-app .kiosk-shell {
+    width: 100%;
+    min-width: 0;
+    min-height: 100svh;
+    overflow-x: clip;
+  }
+
+  .kiosk-content {
+    width: 100%;
+    min-width: 0;
+    padding: 28px 16px calc(28px + env(safe-area-inset-bottom));
+  }
+
+  .kiosk-content h1,
+  .kiosk-eyebrow,
+  .kiosk-content > p.kiosk-subtitle {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .kiosk-header {
+    position: relative;
+    width: 100%;
+    height: auto;
+    min-height: 58px;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom-width: 3px;
+  }
+
+  .kiosk-header-brand { gap: 8px; min-width: 0; }
+  .kiosk-header-title { font-size: .88rem; }
+  .kiosk-header-subtitle { font-size: .7rem; }
+  .kiosk-header-status { gap: 7px; min-width: 0; font-size: .78rem; }
+  .kiosk-header-time,
+  .kiosk-header-date { white-space: nowrap; }
+  .kiosk-header-crest-frame { width: 32px; height: 32px; }
+
+  .mobile-checkin-toolbar {
+    flex-wrap: wrap;
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-left: max(12px, env(safe-area-inset-left));
+  }
+
+  .ss .ss-content,
+  .wic-content,
+  .med-content,
+  .clearance-content,
+  .kiosk-content,
+  .apt-page,
+  .qhs-options,
+  .qhs-reading-content,
+  .mobile-vitals-content,
+  .qr-choice-content,
+  .document-submission-content,
+  .health-declaration-content {
+    width: 100%;
+    max-width: 680px;
+    min-width: 0;
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .ss .ss-grid,
+  .qhs-options .card-grid,
+  .apt-booking-grid,
+  .document-form-grid,
+  .health-declaration-grid,
+  .health-declaration-check-grid,
+  .vitals-entry-body {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
+    height: auto;
+  }
+
+  .ss .ss-grid { margin-right: 0; margin-left: 0; overflow: visible; }
+  .ss .ss-card,
+  .qhs-options .service-card { min-width: 0; min-height: 0; height: auto; }
+
+  .wic-panel,
+  .med-panel,
+  .clearance-panel,
+  .apt-card,
+  .document-card,
+  .health-declaration-card,
+  .vitals-entry-card,
+  .manual-entry-card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin-right: 0;
+    margin-left: 0;
+    padding: 16px;
+  }
+
+  .wic-complaint-grid,
+  .med-symptoms,
+  .apt-slot-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .apt-cal-grid { gap: 2px; }
+  .apt-day { min-width: 0; min-height: 40px; }
+
+  .apt-actions,
+  .wic-actions,
+  .med-actions,
+  .clearance-actions,
+  .document-actions,
+  .qr-choice-actions,
+  .mobile-vitals-actions {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .apt-actions > *,
+  .wic-actions > *,
+  .med-actions > *,
+  .clearance-actions > *,
+  .document-actions > *,
+  .qr-choice-actions > *,
+  .mobile-vitals-actions > *,
+  .kiosk-content > button,
+  .kiosk-card button {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    min-height: 48px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    max-width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  textarea { min-height: 110px; }
+  input[type="checkbox"], input[type="radio"] { flex: 0 0 auto; }
+  .document-field-wide,
+  .health-declaration-wide { grid-column: auto; }
+
+  .document-identity-verify {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .qhs-reading-content { min-height: 0; padding-top: 20px; }
+  .qhs-reading-heading { margin: 18px auto; }
+  .qhs-reading-panel { min-height: 0; padding: 16px; }
+  .qhs-reading-layout--with-bp-help { grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .qhs-reading-layout--with-bp-help > * { min-width: 0; }
+  .qhs-capture-actions { flex-direction: column; align-items: stretch; }
+  .qhs-capture-actions .qhs-done { width: 100%; }
+
+  .result-card,
+  .kiosk-card,
+  .manual-entry-card { max-width: 100%; }
+
+  .mobile-session-status {
+    min-height: 100svh;
+    padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-session-status h1 { overflow-wrap: anywhere; }
+  .mobile-session-status button { width: min(100%, 360px); min-height: 48px; }
+
+  table { display: block; max-width: 100%; overflow-x: auto; }
+  img, video, canvas, svg { max-width: 100%; }
+
+  /* Let users select text and use pinch zoom on their own phones. */
+  input, textarea, select, [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+@media (max-width: 420px) {
+  .kiosk-header-time,
+  .kiosk-header-date,
+  .kiosk-header-divider { display: none; }
+
+  .kiosk-header-status { margin-left: auto; }
+  .kiosk-header { padding-right: max(10px, env(safe-area-inset-right)); padding-left: max(10px, env(safe-area-inset-left)); }
+  .kiosk-content { padding-right: 12px; padding-left: 12px; }
+  .mobile-checkin-app .wic-content,
+  .mobile-checkin-app .med-content,
+  .mobile-checkin-app .clearance-content,
+  .mobile-checkin-app .apt-page,
+  .mobile-checkin-app .qhs-options,
+  .mobile-checkin-app .qhs-reading-content { padding-right: 12px; padding-left: 12px; }
+}
+
+@media (max-width: 600px) {
+  /* Booking gets a single, compact column with controls kept inside the card. */
+  .apt-screen .apt-page--booking {
+    display: block;
+    width: 100%;
+    max-width: 520px;
+    min-height: 0;
+    padding: 18px 12px calc(24px + env(safe-area-inset-bottom));
+    overflow: visible;
+  }
+
+  .apt-screen .apt-page--booking > .apt-eyebrow {
+    margin: 0 0 6px;
+    padding: 0;
+    font-size: .72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .apt-screen .apt-page--booking > .apt-heading {
+    margin: 0 0 14px;
+    padding: 0 0 12px;
+    font-size: clamp(1.35rem, 6vw, 1.7rem);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .apt-screen .apt-page--booking .apt-booking-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin: 0;
+  }
+
+  .apt-screen .apt-page--booking .apt-card,
+  .apt-screen .apt-page--booking .apt-card:first-child,
+  .apt-screen .apt-page--booking .apt-time-card {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .apt-screen .apt-page--booking .apt-card:first-child { border-width: 1px; }
+  .apt-screen .apt-page--booking .apt-cal-head { margin-bottom: 8px; }
+  .apt-screen .apt-page--booking .apt-cal-month { font-size: .9rem; }
+  .apt-screen .apt-page--booking .apt-cal-nav { width: 40px; min-height: 40px; }
+  .apt-screen .apt-page--booking .apt-cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; }
+  .apt-screen .apt-page--booking .apt-cal-weekday { padding-bottom: 2px; font-size: .75rem; }
+  .apt-screen .apt-page--booking .apt-day { width: 100%; min-height: 38px; aspect-ratio: auto; font-size: .86rem; }
+
+  .apt-screen .apt-page--booking .apt-card-title { margin: 0 0 8px; font-size: .78rem; }
+  .apt-screen .apt-page--booking .apt-card-title--spaced { margin-top: 16px; }
+  .apt-screen .apt-page--booking .apt-slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .apt-screen .apt-page--booking .apt-slot { min-width: 0; min-height: 44px; padding: 7px 4px; font-size: .85rem; }
+
+  .apt-screen .apt-page--booking .apt-email-field {
+    width: 100%;
+    margin: 12px 0 0;
+    font-size: .95rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
+  .apt-screen .apt-page--booking .apt-email-field input { width: 100%; min-width: 0; }
+  .apt-screen .apt-page--booking .apt-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    margin: 14px 0 0;
+    gap: 8px;
+  }
+
+  .apt-screen .apt-page--booking .apt-actions .apt-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    flex: auto;
+    margin: 0;
+  }
+
+  .apt-screen .apt-page--booking .apt-autoclose { margin: 10px 0 0; overflow-wrap: anywhere; }
+  .apt-screen .apt-page--booking .apt-faq { max-width: 100%; margin: 12px auto 0; white-space: normal; }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .kiosk-content { padding-top: 16px; padding-bottom: 20px; }
+  .mobile-session-status { min-height: 100svh; align-content: start; padding-top: 20px; }
+}
