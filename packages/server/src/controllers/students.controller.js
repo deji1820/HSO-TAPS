@@ -211,7 +211,28 @@ export async function bulkUpsertStudents(req, res) {
         results.skipped++;
         continue;
       }
-      await Student.findOneAndUpdate({ studentId: personId }, normalized, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true });
+      if (mode === "overwrite") {
+        // A complete roster replacement clears profile fields omitted from the
+        // import and unlinks any RFID card, while preserving the Mongo record
+        // identity and separate clinical-history documents.
+        const profileFields = ["age", "sex", "program", "department", "yearLevel", "guardianContact", "schoolYear", "email"];
+        const unset = { rfidTagUid: 1 };
+        delete normalized.rfidTagUid;
+        for (const field of profileFields) {
+          if (normalized[field] == null || String(normalized[field]).trim() === "") {
+            unset[field] = 1;
+            delete normalized[field];
+          }
+        }
+        if (affiliation !== "Employee") unset.employeeId = 1;
+        await Student.findOneAndUpdate(
+          { studentId: personId },
+          { $set: normalized, $unset: unset },
+          { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+        );
+      } else {
+        await Student.findOneAndUpdate({ studentId: personId }, normalized, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true });
+      }
       existing ? results.updated++ : results.inserted++;
     } catch (err) {
       results.errors.push({ studentId: row?.studentId || row?.employeeId, error: err.message });

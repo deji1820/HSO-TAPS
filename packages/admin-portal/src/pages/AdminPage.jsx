@@ -58,7 +58,7 @@ const EXPECTED_COLUMNS = [
 const MODE_OPTIONS = [
   { value: "upsert", label: "Update existing records (UPSERT)", hint: "Insert new rows, update rows that already exist." },
   { value: "skip", label: "Skip existing records", hint: "Only insert rows for students not already in the system." },
-  { value: "overwrite", label: "Overwrite completely", hint: "Replace existing student records entirely with the uploaded row." },
+  { value: "overwrite", label: "Overwrite completely", hint: "Replace roster details, clear omitted fields, and unlink RFID. Clinical history is preserved." },
 ];
 
 export default function AdminPage() {
