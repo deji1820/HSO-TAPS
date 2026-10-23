@@ -60,6 +60,13 @@
   color: var(--text-muted);
 }
 
+.manual-entry-help {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: -4px 0 16px;
+}
+
 .id-display {
   background: #eef1f6;
   border-radius: var(--radius);
@@ -70,6 +77,12 @@
   letter-spacing: 2px;
   color: var(--text-primary);
   margin-bottom: 20px;
+}
+
+.manual-entry-id-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  font-family: inherit;
 }
 
 .manual-entry-error {

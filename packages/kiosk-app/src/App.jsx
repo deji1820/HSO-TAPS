@@ -18,7 +18,7 @@ import ResultScreen from "./screens/ResultScreen.jsx";
 import OfflineScreen from "./screens/OfflineScreen.jsx";
 import { connectDeviceBridge } from "./services/deviceBridge.js";
 import { supabase } from "./services/supabase.js";
-import { lookupStudent, submitIntake, createAppointment } from "./services/api.js";
+import { lookupStudent, registerRfid, submitIntake, createAppointment } from "./services/api.js";
 import { startHealthMonitor } from "./services/healthCheck.js";
 import ConsultationEntryScreen from "./screens/ConsultationEntryScreen.jsx";
 import AppointmentBookingScreen from "./screens/AppointmentBookingScreen.jsx";
@@ -66,6 +66,9 @@ export default function App() {
     return () => window.removeEventListener("kiosk:faq", handler);
   }, [step]);
   const [student, setStudent] = useState(null);
+  const [unrecognizedRfid, setUnrecognizedRfid] = useState(false);
+  const [unrecognizedRfidUid, setUnrecognizedRfidUid] = useState(null);
+  const [rfidRegistrationError, setRfidRegistrationError] = useState("");
   const [captureMode, setCaptureMode] = useState(null); // "complete" | "temperature" | "physical"
   const [readings, setReadings] = useState({});
   const [manualFields, setManualFields] = useState([]); // Array of keys entered manually
@@ -213,8 +216,13 @@ export default function App() {
             } catch (error) {
               console.warn("[Supabase] RFID student lookup failed:", error);
             }
-            window.alert(`Card ${rfid} could not be verified. Please use manual entry or contact clinic staff.`);
-            await resetSession("cancelled");
+            // Give first-time card users a chance to match their imported
+            // student record by student number. Keep the tap session so the
+            // kiosk can continue into the existing mobile check-in flow.
+            setUnrecognizedRfid(true);
+            setUnrecognizedRfidUid(String(rfid));
+            setRfidRegistrationError("");
+            setStep("manual");
           }
         }
       )
@@ -466,6 +474,9 @@ export default function App() {
     currentSessionIdRef.current = null;
     submittingRef.current = false;
     setStudent(null);
+    setUnrecognizedRfid(false);
+    setUnrecognizedRfidUid(null);
+    setRfidRegistrationError("");
     setCaptureMode(null);
     setReadings({});
     setManualFields([]);
@@ -536,8 +547,10 @@ export default function App() {
         }
       } catch (err) {
         console.error("[kiosk-app] lookup error:", err);
-        alert(`Card ${evt.uid} could not be verified. Please use manual entry or contact clinic staff.`);
-        await resetSession("cancelled");
+        setUnrecognizedRfid(true);
+        setUnrecognizedRfidUid(String(evt.uid));
+        setRfidRegistrationError("");
+        setStep("manual");
       }
       return;
     }
@@ -598,10 +611,29 @@ export default function App() {
   }
 
   async function handleConfirmYes() {
+    const needsRfidRegistration = Boolean(unrecognizedRfid && unrecognizedRfidUid);
+    setRfidRegistrationError("");
+    if (needsRfidRegistration) {
+      try {
+        const personId = student?.employeeId || student?.studentId;
+        const result = await registerRfid(personId, unrecognizedRfidUid);
+        setStudent(result.person);
+      } catch (error) {
+        setRfidRegistrationError(error?.response?.data?.message || "We couldn't register this RFID card. Please ask clinic staff for help.");
+        return;
+      }
+    }
     setStep("serviceAccess");
     if (!supabase) return;
 
-    const existingSessionId = currentSessionIdRef.current || serviceSessionId;
+    const tappedSessionId = currentSessionIdRef.current || serviceSessionId;
+    const existingSessionId = needsRfidRegistration ? null : tappedSessionId;
+    if (needsRfidRegistration && tappedSessionId) {
+      void supabase.from("kiosk_sessions").update({ status: "cancelled" })
+        .eq("id", tappedSessionId).eq("status", "tap_logged");
+      currentSessionIdRef.current = null;
+      setServiceSessionId(null);
+    }
     if (existingSessionId) {
       try {
         const { data, error } = await supabase.from("kiosk_sessions")
@@ -634,6 +666,8 @@ export default function App() {
       currentSessionIdRef.current = data.id;
       setServiceSessionId(data.id);
       setServiceSessionReady(true);
+      setUnrecognizedRfid(false);
+      setUnrecognizedRfidUid(null);
     } catch (error) {
       console.warn("[handleConfirmYes] Could not create phone service selection session:", error);
       setServiceSessionReady(true);
@@ -1431,11 +1465,11 @@ async function handleScreeningOptionSelect(mode) {
       {step === "welcome" && <WelcomeScreen onManualEntry={() => setStep("manual")} />}
 
       {step === "manual" && (
-        <ManualEntryScreen onSubmit={handleManualSubmit} onCancel={resetSession} isOnline={isOnline} />
+        <ManualEntryScreen onSubmit={handleManualSubmit} onCancel={resetSession} isOnline={isOnline} firstTimeRfid={unrecognizedRfid} />
       )}
 
       {step === "confirm" && (
-        <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} onRescan={handleRescanId} onFaq={openFaq} isOnline={isOnline} />
+        <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} onRescan={handleRescanId} onFaq={openFaq} isOnline={isOnline} rfidRegistrationError={rfidRegistrationError} />
       )}
 
       {step === "service" && (

@@ -42,10 +42,10 @@ function parseCsv(text) {
   return { headers, rows };
 }
 
-// Student.js fields the bulk-upsert route can actually use.
+// Roster fields accepted for both students and employees.
 const EXPECTED_COLUMNS = [
-  "studentId", "firstName", "lastName", "age", "sex",
-  "program", "yearLevel", "guardianContact", "schoolYear", "email",
+  "affiliation", "studentId", "employeeId", "firstName", "lastName", "age", "sex",
+  "program", "department", "yearLevel", "guardianContact", "schoolYear", "email",
 ];
 
 const MODE_OPTIONS = [
@@ -124,7 +124,7 @@ export default function AdminPage() {
         <h1>Admin</h1>
       </div>
 
-      <h2 className="section-title">Upload Master Data</h2>
+      <h2 className="section-title">Upload Student &amp; Employee Master Data</h2>
 
       <div
         className={"dropzone" + (isDragging ? " dragging" : "")}
@@ -139,7 +139,7 @@ export default function AdminPage() {
         </svg>
         <p className="dropzone-title">Drag &amp; Drop CSV file here</p>
         <p className="dropzone-sub">or <span className="dropzone-link">Browse Files</span></p>
-        <p className="dropzone-meta">Supported Format: .csv | Max File Size: 25 MB<br />Recommended Batch Size: ≤ 5,000 rows per file</p>
+        <p className="dropzone-meta">Required CSV columns: studentId (students) or employeeId (employees), firstName, and lastName. Affiliation and other profile fields are optional and can be added later.<br />Rows with employeeId and no affiliation are treated as employees; other rows default to students. Max File Size: 25 MB · Recommended Batch Size: ≤ 5,000 rows</p>
         <input
           ref={fileInputRef}
           type="file"

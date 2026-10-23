@@ -1,13 +1,16 @@
 import mongoose from "mongoose";
 
 /**
- * Master student profile — populated via RFID tap / manual entry,
- * and via Admin > "Upload Master Data" batch import.
+ * Shared student/employee health record, populated from the admin roster
+ * import and linked to an RFID card after kiosk identity confirmation.
  * Matches the "Is this your profile?" kiosk screen + EMR header block.
  */
 const studentSchema = new mongoose.Schema(
   {
     studentId: { type: String, required: true, unique: true, index: true }, // e.g. "2024-100123"
+    affiliation: { type: String, enum: ["Student", "Employee"], default: "Student", index: true },
+    department: String,
+    employeeId: { type: String, sparse: true, index: true },
     rfidTagUid: { type: String, unique: true, sparse: true, index: true },
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },

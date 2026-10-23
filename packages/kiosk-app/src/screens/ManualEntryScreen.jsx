@@ -29,13 +29,13 @@ const KEYS = [
   { key: "0", label: "0" },
 ];
 
-export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
+export default function ManualEntryScreen({ onSubmit, onCancel, isOnline, firstTimeRfid = false }) {
   const [digits, setDigits] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const lookupControllerRef = useRef(null);
 
-  const canSubmit = digits.length === MAX_DIGITS && !loading;
+  const canSubmit = (firstTimeRfid ? digits.trim().length > 0 : digits.length === MAX_DIGITS) && !loading;
 
   function pressKey(key) {
     if (loading) return;
@@ -56,10 +56,14 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
     const controller = new AbortController();
     lookupControllerRef.current = controller;
     try {
-      await onSubmit(formatId(digits), controller.signal);
-    } catch {
+      await onSubmit(firstTimeRfid ? digits.trim() : formatId(digits), controller.signal);
+    } catch (lookupError) {
       if (!controller.signal.aborted) {
-        setError("Student ID could not be verified. Please check the number and try again, or ask the front desk for help.");
+        setError(firstTimeRfid && lookupError?.response?.status === 404
+          ? "We couldn't find that student number in the uploaded student list. Please ask clinic staff for help registering your RFID card."
+          : firstTimeRfid
+            ? "We couldn't verify your student number right now. Please try again or ask clinic staff for help registering your RFID card."
+            : "Student ID could not be verified. Please check the number and try again, or ask the front desk for help.");
       }
     } finally {
       if (lookupControllerRef.current === controller) lookupControllerRef.current = null;
@@ -79,7 +83,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
       <div className="kiosk-content">
         <div className="manual-entry-card">
           <div className="manual-entry-titlebar">
-            <span>Manual Student ID Entry</span>
+            <span>{firstTimeRfid ? "First-time RFID check-in" : "Manual Student ID Entry"}</span>
             <button className="manual-entry-close" onClick={handleCancel} aria-label="Close">
               ✕
             </button>
@@ -87,16 +91,29 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
 
           <div className="manual-entry-body">
             <div className="manual-entry-label-row">
-              <span className="field-label-kiosk">Student ID:</span>
-              <span className="manual-entry-format-badge">Format: YYYY-NNNNNN</span>
+              <span className="field-label-kiosk">{firstTimeRfid ? "Student or Employee ID:" : "Student ID:"}</span>
+              <span className="manual-entry-format-badge">{firstTimeRfid ? "Enter your ID" : "Format: YYYY-NNNNNN"}</span>
             </div>
 
-            <div className="id-display">{formatId(digits) || "—"}</div>
+            {firstTimeRfid && <p className="manual-entry-help">Your RFID card is not linked yet. Enter your student number to find your record in the uploaded student list. You will confirm your profile before continuing.</p>}
+
+            {firstTimeRfid ? (
+              <input
+                className="id-display manual-entry-id-input"
+                aria-label="Student or employee ID"
+                type="text"
+                value={digits}
+                maxLength={64}
+                autoComplete="off"
+                placeholder="Enter your ID"
+                onChange={(event) => { setError(null); setDigits(event.target.value); }}
+              />
+            ) : <div className="id-display">{formatId(digits) || "—"}</div>}
 
             {error && <p className="manual-entry-error">{error}</p>}
             {loading && <p className="manual-entry-loading">Looking up student…</p>}
 
-            <div className="keypad">
+            {!firstTimeRfid && <div className="keypad">
               {KEYS.map(({ key, label, variant }) => (
                 <button
                   key={key}
@@ -107,7 +124,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline }) {
                   {label}
                 </button>
               ))}
-            </div>
+            </div>}
 
             <div className="manual-entry-actions">
               <button className="btn-kiosk btn-kiosk-muted manual-entry-cancel" onClick={handleCancel}>

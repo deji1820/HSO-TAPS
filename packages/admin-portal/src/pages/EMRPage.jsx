@@ -16,7 +16,7 @@ function isHealthStatusDeclaration(document) {
 }
 
 function patientType(student) {
-  return student?.occupation || student?.patientType || student?.userType || "Student";
+  return student?.affiliation || student?.occupation || student?.patientType || student?.userType || "Student";
 }
 
 function patientDepartment(student) {
