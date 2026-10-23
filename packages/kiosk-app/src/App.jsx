@@ -228,6 +228,43 @@ export default function App() {
   useEffect(() => { stepRef.current = step; }, [step]);
 
   useEffect(() => {
+    const sessionId = mobileSessionToken || mobileProfileToken;
+    if (!sessionId || !supabase) return undefined;
+
+    const channel = supabase.channel(`kiosk_session_activity_${sessionId}`);
+    let subscribed = false;
+    let lastSentAt = 0;
+    channel.subscribe((status) => { subscribed = status === "SUBSCRIBED"; });
+
+    const handlePhoneActivity = () => {
+      const now = Date.now();
+      if (!subscribed || now - lastSentAt < 5000) return;
+      lastSentAt = now;
+      void channel.send({ type: "broadcast", event: "activity", payload: { at: now } });
+    };
+    const events = ["pointerdown", "keydown", "input", "change", "touchstart"];
+    events.forEach((eventName) => window.addEventListener(eventName, handlePhoneActivity, { passive: true }));
+    handlePhoneActivity();
+
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, handlePhoneActivity));
+      void supabase.removeChannel(channel);
+    };
+  }, [mobileSessionToken, mobileProfileToken]);
+
+  useEffect(() => {
+    if (mobileSessionToken || mobileProfileToken || !supabase) return undefined;
+    const phoneHandoffSteps = ["profileAccess", "serviceAccess", "documentSubmissionQr", "mobileWaiting", "documentSubmissionWaiting"];
+    const sessionId = ["profileAccess"].includes(step) ? profileSessionId : serviceSessionId;
+    if (!phoneHandoffSteps.includes(step) || !sessionId) return undefined;
+
+    const channel = supabase.channel(`kiosk_session_activity_${sessionId}`)
+      .on("broadcast", { event: "activity" }, () => resetIdleTimerRef.current?.());
+    channel.subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [step, serviceSessionId, profileSessionId, mobileSessionToken, mobileProfileToken]);
+
+  useEffect(() => {
     // A phone session is tied to the QR token in its URL. It must never act
     // as another kiosk's RFID listener or read the shared hardware bridge.
     if (mobileSessionToken || mobileProfileToken) return undefined;
