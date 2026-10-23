@@ -35,6 +35,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline, firstT
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const lookupControllerRef = useRef(null);
+  const idInputRef = useRef(null);
 
   const canSubmit = (firstTimeRfid ? digits.trim().length > 0 : digits.length >= MIN_DIGITS && digits.length <= MAX_DIGITS) && !loading;
 
@@ -61,10 +62,10 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline, firstT
     } catch (lookupError) {
       if (!controller.signal.aborted) {
         setError(firstTimeRfid && lookupError?.response?.status === 404
-          ? "We couldn't find that student number in the uploaded student list. Please ask clinic staff for help registering your RFID card."
+          ? "We couldn't find that ID in the uploaded roster."
           : firstTimeRfid
-            ? "We couldn't verify your student number right now. Please try again or ask clinic staff for help registering your RFID card."
-            : "Student ID could not be verified. Please check the number and try again, or ask the front desk for help.");
+            ? "We couldn't verify your ID right now."
+            : "We couldn't verify that student ID.");
       }
     } finally {
       if (lookupControllerRef.current === controller) lookupControllerRef.current = null;
@@ -75,6 +76,14 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline, firstT
   function handleCancel() {
     lookupControllerRef.current?.abort();
     onCancel();
+  }
+
+  function handleRetry() {
+    setError(null);
+    if (firstTimeRfid) {
+      idInputRef.current?.focus();
+      idInputRef.current?.select();
+    }
   }
 
   return (
@@ -100,6 +109,7 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline, firstT
 
             {firstTimeRfid ? (
               <input
+                ref={idInputRef}
                 className="id-display manual-entry-id-input"
                 aria-label="Student or employee ID"
                 type="text"
@@ -111,7 +121,16 @@ export default function ManualEntryScreen({ onSubmit, onCancel, isOnline, firstT
               />
             ) : <div className="id-display">{formatId(digits) || "—"}</div>}
 
-            {error && <p className="manual-entry-error">{error}</p>}
+            {error && <div className="manual-entry-recovery" role="alert">
+              <p className="manual-entry-error">{error}</p>
+              <div className="manual-entry-recovery-options">
+                <button type="button" className="manual-entry-retry" onClick={handleRetry}>Try the ID again</button>
+                <div className="manual-entry-staff-help">
+                  <strong>Ask clinic staff</strong>
+                  <span>Visit the Health Services Office and ask staff to verify your ID{firstTimeRfid ? " or help register your RFID card" : ""}.</span>
+                </div>
+              </div>
+            </div>}
             {loading && <p className="manual-entry-loading">Looking up student…</p>}
 
             {!firstTimeRfid && <div className="keypad">

@@ -88,7 +88,45 @@
 .manual-entry-error {
   color: var(--danger);
   font-size: 0.85rem;
+  margin: 0 0 10px;
+}
+
+.manual-entry-recovery {
   margin: -8px 0 16px;
+  padding: 14px;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  background: #fff7f7;
+}
+
+.manual-entry-recovery-options {
+  display: grid;
+  gap: 10px;
+}
+
+.manual-entry-retry {
+  min-height: 44px;
+  border: 1px solid var(--nu-blue);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--nu-blue-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.manual-entry-retry:hover { background: #eef5ff; }
+
+.manual-entry-staff-help {
+  display: grid;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.manual-entry-staff-help strong {
+  color: var(--text-primary);
 }
 .manual-entry-loading {
   color: var(--text-secondary);
