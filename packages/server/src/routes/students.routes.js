@@ -7,6 +7,7 @@ const router = Router();
 // Kiosk-facing (RFID tap / manual entry lookup)
 router.get("/lookup/:studentId", requireKioskKey, ctrl.lookupForKiosk);
 router.post("/register-rfid", requireKioskKey, ctrl.registerRfidForKiosk);
+router.patch("/profile/:personId", requireKioskKey, ctrl.completeKioskProfile);
 
 // Staff-facing (EMR search, master data)
 router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist"), ctrl.listStudents);

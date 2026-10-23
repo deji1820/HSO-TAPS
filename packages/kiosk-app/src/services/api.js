@@ -11,6 +11,7 @@ export const api = axios.create({
 
 export const lookupStudent = (studentId, config) => api.get(`/students/lookup/${encodeURIComponent(studentId)}`, config).then((r) => r.data);
 export const registerRfid = (personId, rfidTagUid) => api.post("/students/register-rfid", { personId, rfidTagUid }).then((r) => r.data);
+export const completeStudentProfile = (personId, profile) => api.patch(`/students/profile/${encodeURIComponent(personId)}`, profile).then((r) => r.data);
 
 export const submitIntake = (payload) => api.post("/kiosk/intake", payload).then((r) => r.data);
 

@@ -44,6 +44,38 @@ export async function registerRfidForKiosk(req, res) {
   res.json({ ok: true, person });
 }
 
+// PATCH /api/students/profile/:personId (kiosk/mobile profile completion)
+export async function completeKioskProfile(req, res) {
+  const personId = String(req.params.personId || "").trim();
+  const person = await Student.findOne({ $or: [{ studentId: personId }, { employeeId: personId }], isActive: true });
+  if (!person) return res.status(404).json({ message: "Student or employee record not found." });
+
+  const { age, sex, email, program, yearLevel, department, guardianContact, schoolYear } = req.body || {};
+  const parsedAge = Number(age);
+  const allowedSex = ["Male", "Female", "Other", "Prefer not to say"];
+  if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) return res.status(400).json({ message: "Enter a valid age." });
+  if (!allowedSex.includes(sex)) return res.status(400).json({ message: "Select a valid sex option." });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim())) return res.status(400).json({ message: "Enter a valid email address." });
+  if (!String(guardianContact || "").trim() || String(guardianContact).length > 40) return res.status(400).json({ message: "Enter a guardian or emergency contact number." });
+  if (person.affiliation === "Employee" && !String(department || "").trim()) return res.status(400).json({ message: "Department is required for employee profiles." });
+  if (person.affiliation !== "Employee" && (!String(program || "").trim() || !String(yearLevel || "").trim() || !String(schoolYear || "").trim())) {
+    return res.status(400).json({ message: "Program, year level, and school year are required for student profiles." });
+  }
+
+  person.age = parsedAge;
+  person.sex = sex;
+  person.email = String(email).trim().toLowerCase();
+  person.guardianContact = String(guardianContact || "").trim();
+  if (person.affiliation === "Employee") person.department = String(department).trim();
+  else {
+    person.program = String(program).trim();
+    person.yearLevel = String(yearLevel).trim();
+    person.schoolYear = String(schoolYear).trim();
+  }
+  await person.save();
+  res.json(person);
+}
+
 // GET /api/students  (EMR list screen, filterable by school year / term upstream)
 export async function listStudents(req, res) {
   const { q } = req.query;

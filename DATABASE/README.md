@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS public.kiosk_sessions (
   rfid_uid TEXT,
   service_selected TEXT,
   sensor_required TEXT,
-  status TEXT DEFAULT 'tap_logged', -- Status values: 'tap_logged', 'pending_sensor', 'completed', 'cancelled'
+  status TEXT DEFAULT 'tap_logged', -- Includes tap_logged, awaiting_profile_completion, awaiting_service_selection, mobile_flow_started, pending_sensor, mobile_sensor_requested, mobile_readings_ready, completed, and cancelled.
   temp_c NUMERIC,
   height_m NUMERIC,
   weight_kg NUMERIC,

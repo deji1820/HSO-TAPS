@@ -6,6 +6,8 @@ import ServiceSelectScreen from "./screens/ServiceSelectScreen.jsx";
 import QrChoiceScreen from "./screens/QrChoiceScreen.jsx";
 import MobileVitalsEntryScreen from "./screens/MobileVitalsEntryScreen.jsx";
 import MobileSensorReadingsScreen from "./screens/MobileSensorReadingsScreen.jsx";
+import ProfileCompletionScreen from "./screens/ProfileCompletionScreen.jsx";
+import ProfileCompletionAccessScreen from "./screens/ProfileCompletionAccessScreen.jsx";
 import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen.jsx";
 import "./styles/mobile-flow.css";
 import ConsultationTypeScreen from "./screens/ConsultationTypeScreen.jsx";
@@ -18,7 +20,7 @@ import ResultScreen from "./screens/ResultScreen.jsx";
 import OfflineScreen from "./screens/OfflineScreen.jsx";
 import { connectDeviceBridge } from "./services/deviceBridge.js";
 import { supabase } from "./services/supabase.js";
-import { lookupStudent, registerRfid, submitIntake, createAppointment } from "./services/api.js";
+import { lookupStudent, registerRfid, completeStudentProfile, submitIntake, createAppointment } from "./services/api.js";
 import { startHealthMonitor } from "./services/healthCheck.js";
 import ConsultationEntryScreen from "./screens/ConsultationEntryScreen.jsx";
 import AppointmentBookingScreen from "./screens/AppointmentBookingScreen.jsx";
@@ -39,6 +41,13 @@ const KIOSK_IDLE_TIMEOUT_MS = 2 * 60_000;
 const KIOSK_IDLE_PROMPT_MS = 60_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
 const standaloneDocumentSubmission = new URLSearchParams(window.location.search).get("documentSubmission") === "1";
+function hasCompleteProfile(person) {
+  const baseComplete = Number.isInteger(Number(person?.age)) && Number(person.age) > 0
+    && Boolean(person?.sex && person?.email && person?.guardianContact);
+  return person?.affiliation === "Employee"
+    ? baseComplete && Boolean(person?.department)
+    : baseComplete && Boolean(person?.program && person?.yearLevel && person?.schoolYear);
+}
 
 // Which readings each screening mode needs before we can move to the result screen
 const REQUIRED_FIELDS = {
@@ -51,8 +60,11 @@ const REQUIRED_FIELDS = {
 
 export default function App() {
   const mobileSessionToken = new URLSearchParams(window.location.search).get("mobileServiceSession");
+  const mobileProfileToken = new URLSearchParams(window.location.search).get("mobileProfileSession");
   const [mobileSessionStatus, setMobileSessionStatus] = useState(mobileSessionToken ? "loading" : "idle");
   const [mobileSessionError, setMobileSessionError] = useState("");
+  const [mobileProfileStatus, setMobileProfileStatus] = useState(mobileProfileToken ? "loading" : "idle");
+  const [mobileProfileError, setMobileProfileError] = useState("");
   const [mobileFlowComplete, setMobileFlowComplete] = useState(false);
   const mobileMode = Boolean(mobileSessionToken && mobileSessionStatus === "ready");
   const [step, setStep] = useState("welcome");
@@ -94,6 +106,10 @@ export default function App() {
   const [medicineOtherText, setMedicineOtherText] = useState("");
   const [serviceSessionId, setServiceSessionId] = useState(null);
   const [serviceSessionReady, setServiceSessionReady] = useState(false);
+  const [profileSessionId, setProfileSessionId] = useState(null);
+  const [profileSessionReady, setProfileSessionReady] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState("");
   const [serviceSensorStep, setServiceSensorStep] = useState(null);
 
   const bridgeRef = useRef(null);
@@ -171,12 +187,50 @@ export default function App() {
     return () => { active = false; };
   }, [mobileSessionToken]);
 
+  useEffect(() => {
+    if (!mobileProfileToken) return undefined;
+    if (!supabase) {
+      setMobileProfileError("Phone profile completion is unavailable. Please complete your profile at the kiosk or ask clinic staff for help.");
+      setMobileProfileStatus("error");
+      return undefined;
+    }
+    let active = true;
+    async function loadMobileProfileSession() {
+      try {
+        const { data, error } = await supabase.from("kiosk_sessions")
+          .select("id, rfid_uid, status")
+          .eq("id", mobileProfileToken)
+          .in("status", ["awaiting_profile_completion", "awaiting_service_selection", "mobile_flow_started"])
+          .maybeSingle();
+        if (error) throw error;
+        if (!data?.rfid_uid) throw new Error("This profile link has expired. Please scan the kiosk QR code again.");
+        if (data.status !== "awaiting_profile_completion") {
+          window.location.replace(`${window.location.pathname}?mobileServiceSession=${encodeURIComponent(data.id)}`);
+          return;
+        }
+        const found = await lookupStudent(data.rfid_uid);
+        if (!found) throw new Error("We couldn't verify your roster record. Please ask clinic staff for help.");
+        if (!active) return;
+        currentSessionIdRef.current = data.id;
+        setStudent(found);
+        setStep("profileEntry");
+        setMobileProfileStatus("ready");
+      } catch (error) {
+        if (!active) return;
+        setMobileProfileError(error?.message || "We couldn't open your profile form. Please return to the kiosk.");
+        setMobileProfileStatus("error");
+      }
+    }
+    loadMobileProfileSession();
+    return () => { active = false; };
+  }, [mobileProfileToken]);
+
   useEffect(() => { stepRef.current = step; }, [step]);
 
   useEffect(() => {
     // A phone session is tied to the QR token in its URL. It must never act
     // as another kiosk's RFID listener or read the shared hardware bridge.
-    if (mobileSessionToken) return undefined;
+    if (mobileSessionToken || mobileProfileToken) return undefined;
     bridgeRef.current = connectDeviceBridge((event) => deviceEventHandlerRef.current?.(event));
     return () => {
       bridgeRef.current?.close();
@@ -198,7 +252,7 @@ export default function App() {
         async (payload) => {
           // Phone clients only follow their own session's UPDATE events below.
           // New RFID sessions belong to the physical kiosk, never this phone.
-          if (mobileSessionToken) return;
+          if (mobileSessionToken || mobileProfileToken) return;
           console.log("[Supabase Realtime] Session inserted:", payload.new);
           if (payload.new?.rfid_uid && payload.new?.status === "tap_logged") {
             if (payload.new?.id) {
@@ -235,6 +289,12 @@ export default function App() {
           if ((!currentSessionIdRef.current || String(payload.new?.id) !== String(currentSessionIdRef.current)) && !isMobileSensorParent) return;
           if (payload.new?.status === "mobile_flow_started" && stepRef.current === "serviceAccess") {
             setStep("mobileWaiting");
+            return;
+          }
+          if (payload.new?.status === "awaiting_service_selection" && ["profileAccess", "profileEntry"].includes(stepRef.current)) {
+            setServiceSessionId(payload.new.id);
+            setServiceSessionReady(true);
+            setStep("serviceAccess");
             return;
           }
           if (payload.new?.status === "awaiting_service_selection" && stepRef.current === "mobileWaiting") {
@@ -444,7 +504,7 @@ export default function App() {
   resetIdleTimerRef.current = resetIdleTimer;
 
   useEffect(() => {
-    if (mobileSessionToken || standaloneDocumentSubmission) return undefined;
+    if (mobileSessionToken || mobileProfileToken || standaloneDocumentSubmission) return undefined;
     const events = ["pointerdown", "keydown", "mousemove", "wheel", "touchstart", "input", "change"];
     const handleActivity = () => resetIdleTimerRef.current?.();
     events.forEach((eventName) => window.addEventListener(eventName, handleActivity, { passive: true }));
@@ -455,7 +515,7 @@ export default function App() {
       clearTimeout(idlePromptTimer.current);
       clearInterval(idleCountdownInterval.current);
     };
-  }, [mobileSessionToken]);
+  }, [mobileSessionToken, mobileProfileToken]);
 
   async function resetSession(statusReason = "cancelled") {
     clearTimeout(idlePromptTimer.current);
@@ -497,6 +557,10 @@ export default function App() {
     setMedicineSafetyAnswers({});
     setServiceSessionId(null);
     setServiceSessionReady(false);
+    setProfileSessionId(null);
+    setProfileSessionReady(false);
+    setProfileSaving(false);
+    setProfileSaveError("");
     setWalkInOtherText("");
     setMedicineOtherText("");
 
@@ -612,28 +676,61 @@ export default function App() {
 
   async function handleConfirmYes() {
     const needsRfidRegistration = Boolean(unrecognizedRfid && unrecognizedRfidUid);
+    let confirmedPerson = student;
     setRfidRegistrationError("");
+    setServiceSessionReady(false);
     if (needsRfidRegistration) {
       try {
         const personId = student?.employeeId || student?.studentId;
         const result = await registerRfid(personId, unrecognizedRfidUid);
+        confirmedPerson = result.person;
         setStudent(result.person);
+        setUnrecognizedRfid(false);
+        setUnrecognizedRfidUid(null);
       } catch (error) {
         setRfidRegistrationError(error?.response?.data?.message || "We couldn't register this RFID card. Please ask clinic staff for help.");
         return;
       }
     }
+    const tappedSessionId = currentSessionIdRef.current || serviceSessionId;
+    if (!hasCompleteProfile(confirmedPerson)) {
+      setProfileSaveError("");
+      if (!supabase) {
+        setStep("profileEntry");
+        return;
+      }
+      setProfileSessionReady(false);
+      try {
+        let sessionId = tappedSessionId;
+        if (sessionId) {
+          const { data, error } = await supabase.from("kiosk_sessions").update({ status: "awaiting_profile_completion" })
+            .eq("id", sessionId).in("status", ["tap_logged", "awaiting_service_selection"])
+            .select("id").maybeSingle();
+          if (error) throw error;
+          if (!data?.id) throw new Error("This kiosk session has expired. Please scan your ID again.");
+          sessionId = data.id;
+        } else {
+          const { data, error } = await supabase.from("kiosk_sessions").insert([{
+            rfid_uid: confirmedPerson?.rfidTagUid || confirmedPerson?.studentId,
+            status: "awaiting_profile_completion",
+          }]).select("id").single();
+          if (error) throw error;
+          sessionId = data.id;
+        }
+        currentSessionIdRef.current = sessionId;
+        setProfileSessionId(sessionId);
+        setProfileSessionReady(true);
+        setStep("profileAccess");
+      } catch (error) {
+        setProfileSaveError(error?.message || "We couldn't prepare the phone form. Please continue at the kiosk.");
+        setStep("profileEntry");
+      }
+      return;
+    }
     setStep("serviceAccess");
     if (!supabase) return;
 
-    const tappedSessionId = currentSessionIdRef.current || serviceSessionId;
-    const existingSessionId = needsRfidRegistration ? null : tappedSessionId;
-    if (needsRfidRegistration && tappedSessionId) {
-      void supabase.from("kiosk_sessions").update({ status: "cancelled" })
-        .eq("id", tappedSessionId).eq("status", "tap_logged");
-      currentSessionIdRef.current = null;
-      setServiceSessionId(null);
-    }
+    const existingSessionId = tappedSessionId;
     if (existingSessionId) {
       try {
         const { data, error } = await supabase.from("kiosk_sessions")
@@ -666,11 +763,50 @@ export default function App() {
       currentSessionIdRef.current = data.id;
       setServiceSessionId(data.id);
       setServiceSessionReady(true);
-      setUnrecognizedRfid(false);
-      setUnrecognizedRfidUid(null);
     } catch (error) {
       console.warn("[handleConfirmYes] Could not create phone service selection session:", error);
       setServiceSessionReady(true);
+    }
+  }
+
+  async function handleProfileSave(profile) {
+    setProfileSaving(true);
+    setProfileSaveError("");
+    try {
+      const personId = student?.employeeId || student?.studentId;
+      const updatedPerson = await completeStudentProfile(personId, profile);
+      setStudent(updatedPerson);
+      let sessionId = currentSessionIdRef.current || (mobileProfileToken ? mobileProfileToken : null);
+      if (supabase && sessionId) {
+        const { data, error } = await supabase.from("kiosk_sessions").update({ status: "awaiting_service_selection" })
+          .eq("id", sessionId).in("status", ["awaiting_profile_completion", "tap_logged"])
+          .select("id").maybeSingle();
+        if (error) throw error;
+        sessionId = data?.id || null;
+      }
+      if (supabase && !sessionId) {
+        const { data, error } = await supabase.from("kiosk_sessions").insert([{
+          rfid_uid: updatedPerson?.rfidTagUid || updatedPerson?.studentId,
+          status: "awaiting_service_selection",
+        }]).select("id").single();
+        if (error) throw error;
+        sessionId = data.id;
+      }
+      if (sessionId) {
+        currentSessionIdRef.current = sessionId;
+        setServiceSessionId(sessionId);
+        setServiceSessionReady(true);
+      }
+      if (mobileProfileToken) {
+        if (!sessionId) throw new Error("We couldn't prepare your service selection link. Please return to the kiosk.");
+        window.location.assign(`${window.location.pathname}?mobileServiceSession=${encodeURIComponent(sessionId)}`);
+        return;
+      }
+      setStep("serviceAccess");
+    } catch (error) {
+      setProfileSaveError(error?.response?.data?.message || error?.message || "We couldn't save your profile. Please try again.");
+    } finally {
+      setProfileSaving(false);
     }
   }
 
@@ -1452,12 +1588,14 @@ async function handleScreeningOptionSelect(mode) {
   }
 
   return (
-    <div className={mobileSessionToken ? "mobile-checkin-app" : undefined}>
+    <div className={mobileSessionToken || mobileProfileToken ? "mobile-checkin-app" : undefined}>
+      {mobileProfileToken && mobileProfileStatus === "loading" && <main className="mobile-session-status"><h1>Opening your profile form</h1><p>Verifying your roster record…</p></main>}
+      {mobileProfileToken && mobileProfileStatus === "error" && <main className="mobile-session-status"><h1>Unable to open profile form</h1><p>{mobileProfileError}</p><button onClick={() => window.location.assign(window.location.pathname)}>Return to kiosk</button></main>}
       {mobileSessionToken && mobileSessionStatus === "loading" && <main className="mobile-session-status"><h1>Starting mobile check-in</h1><p>Verifying your student record…</p></main>}
       {mobileSessionToken && mobileSessionStatus === "error" && <main className="mobile-session-status"><h1>Unable to start check-in</h1><p>{mobileSessionError}</p><button onClick={() => window.location.assign(window.location.pathname)}>Return to kiosk</button></main>}
       {mobileSessionToken && mobileSessionStatus === "cancelled" && <main className="mobile-session-status"><h1>Check-in cancelled</h1><p>Your kiosk session is ready again. Scan the QR code to restart or continue at the kiosk.</p><button onClick={() => window.location.assign(window.location.pathname)}>Done</button></main>}
       {mobileSessionToken && mobileFlowComplete && <main className="mobile-session-status"><h1>Check-in complete</h1><p>Your request has been submitted. You may close this page.</p><button onClick={() => window.location.assign(window.location.pathname)}>Done</button></main>}
-      {(!mobileSessionToken || (mobileMode && !mobileFlowComplete)) && <>
+      {(!mobileProfileToken || mobileProfileStatus === "ready") && (!mobileSessionToken || (mobileMode && !mobileFlowComplete)) && <>
       {mobileMode && <div className="mobile-checkin-toolbar"><strong>Mobile check-in</strong><button onClick={handleMobileCancel}>Cancel check-in</button></div>}
       {step === "mobileWaiting" && <main className="mobile-session-status"><h1>Continue check-in on your phone</h1><p>Your student record is verified. Continue the service selection and check-in on your phone.</p><button onClick={handleReturnToKiosk}>Continue at kiosk instead</button></main>}
       {step === "offline" && <OfflineScreen onRetry={() => window.dispatchEvent(new Event("online"))} />}
@@ -1471,6 +1609,23 @@ async function handleScreeningOptionSelect(mode) {
       {step === "confirm" && (
         <IdentityVerificationScreen student={student} onProceed={handleConfirmYes} onBack={handleConfirmNo} onRescan={handleRescanId} onFaq={openFaq} isOnline={isOnline} rfidRegistrationError={rfidRegistrationError} />
       )}
+
+      {step === "profileAccess" && <ProfileCompletionAccessScreen
+        url={profileSessionId && profileSessionReady ? `${window.location.origin}${window.location.pathname}?mobileProfileSession=${encodeURIComponent(profileSessionId)}` : null}
+        preparing={!!supabase && !profileSessionReady}
+        onContinueAtKiosk={() => setStep("profileEntry")}
+        isOnline={isOnline}
+      />}
+
+      {step === "profileEntry" && <ProfileCompletionScreen
+        student={student}
+        mobile={Boolean(mobileProfileToken)}
+        isOnline={isOnline}
+        onSave={handleProfileSave}
+        onBack={mobileProfileToken ? null : () => setStep("profileAccess")}
+        saving={profileSaving}
+        error={profileSaveError}
+      />}
 
       {step === "service" && (
         <ServiceSelectScreen onSelect={handleKioskServiceSelect} onBack={() => setStep("confirm")} onFaq={openFaq} isOnline={isOnline} mobileMode={mobileMode} />
