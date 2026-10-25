@@ -41,7 +41,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
   const [student, setStudent] = useState(initialStudent);
   const [studentId, setStudentId] = useState(initialStudent?.studentId || "");
   const [notificationEmail, setNotificationEmail] = useState(initialStudent?.email || "");
-  const [affiliation, setAffiliation] = useState("Student");
+  const [affiliation, setAffiliation] = useState(initialStudent?.affiliation || "Student");
   const [fullName, setFullName] = useState(initialStudent ? [initialStudent.lastName, initialStudent.firstName, initialStudent.middleName].filter(Boolean).join(", ") : "");
   const [sex, setSex] = useState(initialStudent?.sex || "");
   const [dateOfBirth, setDateOfBirth] = useState(initialStudent?.dateOfBirth?.slice?.(0, 10) || "");
@@ -70,12 +70,14 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     setError("");
     try {
       const found = await lookupStudent(studentId.trim());
+      const foundAffiliation = found.affiliation || affiliation;
       setStudent(found);
+      setAffiliation(foundAffiliation);
       setNotificationEmail(found.email || "");
       setFullName([found.lastName, found.firstName, found.middleName].filter(Boolean).join(", "));
       setSex(found.sex || "");
       setDateOfBirth(found.dateOfBirth?.slice?.(0, 10) || "");
-      setInstitutionalAffiliation(affiliation === "Student" ? found.program || "" : found.department || "");
+      setInstitutionalAffiliation(foundAffiliation === "Student" ? found.program || "" : found.department || "");
       setVerified(true);
     } catch (lookupError) {
       setError(lookupError?.response?.data?.message || "We couldn't verify that ID. Check the number or ask clinic staff for help.");
@@ -217,7 +219,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
         <fieldset className="document-card" disabled={!verified || loading}>
           <legend>Personal and institution details</legend>
           <div className="document-form-grid">
-            <label>Affiliation<select value={affiliation} onChange={(event) => { setAffiliation(event.target.value); setPurpose(""); setInstitutionalAffiliation(""); setDocumentType(""); setHealthDeclaration(null); setFiles([]); }}><option>Student</option><option>Employee</option></select></label>
+            <label>Affiliation<select value={affiliation} disabled aria-label="Affiliation from verified profile"><option>Student</option><option>Employee</option></select></label>
             <label>Student ID / Employee ID<input required value={studentId} onChange={(event) => { setStudentId(event.target.value); setVerified(false); }} /></label>
             <label className="document-field-wide">Full name (Last Name, First Name, Middle Initial)<input required value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
             {notificationEmail ? <div className="document-field-wide document-saved-email"><strong>Saved school email (Outlook)</strong><p>Status notices will be sent to {notificationEmail}. This address is saved for appointments and future document submissions.</p></div> : <label className="document-field-wide">School email address<input required type="email" autoComplete="email" value={notificationEmail} onChange={(event) => setNotificationEmail(event.target.value)} /><small>We’ll save this address for appointments and future document submissions. Status notices will be delivered to your Outlook inbox.</small></label>}
