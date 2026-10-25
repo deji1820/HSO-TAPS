@@ -22,7 +22,7 @@ export default function AppointmentTable({ appointments, loading, busyId, onDeci
   return (
     <div className="table-wrap appointment-table-wrap">
       <table className="data-table appointment-table">
-        <thead><tr><th>Record ID</th><th>Date &amp; time</th><th>Patient</th><th>Service / purpose</th><th>Appointment status</th><th>Decision</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Record ID</th><th>Date &amp; time</th><th>Patient</th><th>Service / purpose</th><th>Assigned provider</th><th>Appointment status</th><th>Decision</th><th>Actions</th></tr></thead>
         <tbody>
           {appointments.map((appointment) => {
             const person = appointment.student;
@@ -36,6 +36,7 @@ export default function AppointmentTable({ appointments, loading, busyId, onDeci
                 <td><strong>{formatDate(appointment.dateKey)}</strong><span className="appointment-cell-secondary">{appointment.timeSlot || "Time unavailable"}</span></td>
                 <td><strong>{name}</strong><span className="appointment-cell-secondary">{patientId || "ID unavailable"}</span></td>
                 <td><strong>{appointment.serviceType}</strong><span className="appointment-cell-secondary">{appointment.purpose || "No purpose specified"}</span></td>
+                <td>{appointment.assignedProvider?.name || <span className="appointment-cell-secondary">Unassigned</span>}</td>
                 <td><Badge value={labelForStatus(appointment.status)} kind={appointment.status || "unknown"} /></td>
                 <td><Badge value={decision[0].toUpperCase() + decision.slice(1)} kind={`decision-${decision}`} /></td>
                 <td>

@@ -9,6 +9,7 @@ import FormsPage from "./pages/FormsPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import AppointmentsPage from "./pages/AppointmentsPage.jsx";
 import AppointmentDetailsPage from "./pages/AppointmentDetailsPage.jsx";
+import ProviderSchedulesPage from "./pages/ProviderSchedulesPage.jsx";
 import ControlCenterPage from "./pages/ControlCenterPage.jsx";
 import NewMedicalRecordPage from "./pages/NewMedicalRecordPage.jsx";
 import { normalizeRole } from "./utils/roles.js";
@@ -84,11 +85,12 @@ export default function App() {
         path="/appointments/:appointmentId"
         element={<RoleRoute user={user} allowed={["nurse", "supervisor", "physician", "dentist", "staff"]}><AppointmentDetailsPage user={user} /></RoleRoute>}
       />
+      <Route path="/appointment-schedules" element={<RoleRoute user={user} allowed={["supervisor"]}><ProviderSchedulesPage /></RoleRoute>} />
       <Route
         path="/appointments"
         element={
           <RoleRoute user={user} allowed={["nurse", "supervisor", "physician", "dentist", "staff"]}>
-            <AppointmentsPage />
+            <AppointmentsPage user={user} />
           </RoleRoute>
         }
       />

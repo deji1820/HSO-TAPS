@@ -20,6 +20,8 @@
 .appointment-detail-field dd { margin: 0; color: var(--text-primary, #1b2b43); font-size: .9rem; font-weight: 600; overflow-wrap: anywhere; }
 .appointment-detail-muted { margin: 0; color: var(--text-muted); line-height: 1.55; }
 .appointment-detail-locked { margin: 0; padding: 11px 12px; border-radius: var(--radius-sm); background: #edf0f4; color: #44546a; font-size: .88rem; line-height: 1.5; }
+.appointment-provider-editor { display: grid; justify-items: start; gap: 10px; }
+.appointment-provider-editor label { display: grid; gap: 6px; width: min(100%, 420px); color: var(--nu-blue-dark); font-size: .82rem; font-weight: 650; }
 .appointment-detail-aside { position: sticky; top: 16px; }
 .appointment-detail-action { display: flex; justify-content: center; width: 100%; margin-top: 10px; text-decoration: none; }
 .appointment-detail-card .appointment-detail-grid + .btn { margin-top: 2px; }

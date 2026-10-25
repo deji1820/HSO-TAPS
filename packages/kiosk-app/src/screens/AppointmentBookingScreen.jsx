@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
-import { getAppointmentAvailability } from "../services/api.js";
+import { getAppointmentAvailability, getAppointmentSchedule } from "../services/api.js";
 import "../styles/screens/Appointment.css";
 
 const MORNING = ["8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM"];
@@ -21,6 +21,11 @@ const DAY_SCHEDULES = [
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const sameDay = (a, b) => a && b && a.toDateString() === b.toDateString();
+const displayScheduleTime = (value) => {
+  const [hours, minutes] = value.split(":").map(Number);
+  const hour = hours % 12 || 12;
+  return `${hour}:${String(minutes).padStart(2, "0")} ${hours < 12 ? "AM" : "PM"}`;
+};
 
 // Default rule: no Sundays, no past dates. Override with the isDateDisabled prop.
 const defaultDisabled = (date) => date.getDay() === 0 || date < startOfDay(new Date());
@@ -70,11 +75,22 @@ export default function AppointmentBookingScreen({
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [serverUnavailable, setServerUnavailable] = useState([]);
+  const [providerWeekdays, setProviderWeekdays] = useState(null);
+  const [providerTimeWindows, setProviderTimeWindows] = useState(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
   const [availabilityError, setAvailabilityError] = useState("");
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState(schoolEmail);
 
   const serviceSchedule = DAY_SCHEDULES.find(({ label }) => label === serviceType);
+  const isProviderScheduledService = ["Medical Consultation", "Dental Consultation", "Medical Clearance"].includes(serviceType);
+  const allowedWeekdays = isProviderScheduledService ? providerWeekdays : serviceSchedule?.weekdays;
+  const scheduleDayLabel = providerWeekdays !== null
+    ? providerWeekdays.length
+      ? providerWeekdays.map((day) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]).join(", ")
+      : "No provider days configured"
+    : serviceSchedule?.days || "No days available";
   const cells = buildMonthCells(viewMonth);
   const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase();
   const atCurrentMonth =
@@ -83,6 +99,18 @@ export default function AppointmentBookingScreen({
   const selectedDateKey = selectedDate
     ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
     : "";
+
+  useEffect(() => {
+    if (!isProviderScheduledService) { setProviderWeekdays(null); setProviderTimeWindows(null); setScheduleError(""); return undefined; }
+    let active = true;
+    setScheduleLoading(true);
+    setScheduleError("");
+    getAppointmentSchedule(serviceType)
+      .then(({ weekdays = [], timeWindows = [] }) => { if (active) { setProviderWeekdays(weekdays); setProviderTimeWindows(timeWindows); } })
+      .catch(() => { if (active) { setProviderWeekdays([]); setProviderTimeWindows([]); setScheduleError("Could not load clinic hours. Please try again before booking."); } })
+      .finally(() => { if (active) setScheduleLoading(false); });
+    return () => { active = false; };
+  }, [serviceType, isProviderScheduledService]);
 
   useEffect(() => {
     let active = true;
@@ -138,7 +166,7 @@ export default function AppointmentBookingScreen({
                 <button
                   key={date.toISOString()}
                   className={`apt-day${sameDay(date, selectedDate) ? " apt-day--selected" : ""}`}
-                  disabled={!inMonth || isDateDisabled(date) || !serviceSchedule?.weekdays.includes(date.getDay())}
+                  disabled={!inMonth || scheduleLoading || isDateDisabled(date) || !allowedWeekdays?.includes(date.getDay())}
                   onClick={() => pickDate(date)}
                 >
                   {date.getDate()}
@@ -160,11 +188,12 @@ export default function AppointmentBookingScreen({
             <ul>
               {DAY_SCHEDULES.map(({ label, days }) => (
                 <li key={label} className={label === serviceType ? "apt-schedule-guide-current" : ""}>
-                  <strong>{label}</strong><span>{days}</span>
+                  <strong>{label}</strong><span>{label === serviceType ? scheduleDayLabel : days}</span>
                 </li>
               ))}
             </ul>
-            <p>Available appointment times are 8:00 AM–8:30 PM. The last 30-minute slot ends at 9:00 PM.</p>
+            {scheduleError && <p className="appointment-error" role="alert">{scheduleError}</p>}
+            {isProviderScheduledService && providerTimeWindows ? <p>{providerTimeWindows.length ? `Available hours: ${providerTimeWindows.map(({ startTime, endTime }) => `${displayScheduleTime(startTime)}–${displayScheduleTime(endTime)}`).join(", ")}. Time slots are 30 minutes.` : "No provider hours are configured for this service."}</p> : <p>Available appointment times are 8:00 AM–8:30 PM. The last 30-minute slot ends at 9:00 PM.</p>}
           </aside>
 
         </div>

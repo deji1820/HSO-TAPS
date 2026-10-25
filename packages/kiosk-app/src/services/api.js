@@ -18,6 +18,9 @@ export const submitIntake = (payload) => api.post("/kiosk/intake", payload).then
 export const getAppointmentAvailability = (serviceType, date) =>
   api.get("/appointments/availability", { params: { serviceType, date } }).then((r) => r.data);
 
+export const getAppointmentSchedule = (serviceType) =>
+  api.get("/appointments/schedule", { params: { serviceType } }).then((r) => r.data);
+
 export const createAppointment = (payload) =>
   api.post("/appointments", payload).then((r) => r.data);
 

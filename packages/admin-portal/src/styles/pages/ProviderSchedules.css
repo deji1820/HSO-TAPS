@@ -1,0 +1,19 @@
+.provider-schedules-page { display: grid; gap: 18px; min-width: 0; }
+.provider-schedules-header h1 { margin: 10px 0 4px; color: var(--text-primary, #1b2b43); }
+.provider-schedules-header p { margin: 0; color: var(--text-muted); }
+.provider-schedules-page .appointment-detail-card h2 { margin-bottom: 10px; }
+.provider-schedules-hint { margin: 0 0 16px; color: var(--text-muted); line-height: 1.5; }
+.provider-schedule-form { display: grid; gap: 16px; max-width: 850px; }
+.provider-schedule-form > label, .provider-hours-row label { display: grid; gap: 6px; color: var(--nu-blue-dark); font-size: .84rem; font-weight: 650; }
+.provider-weekday-fieldset { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.provider-weekday-fieldset legend { padding: 0 6px; color: var(--nu-blue-dark); font-size: .84rem; font-weight: 650; }
+.provider-weekday-options { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.provider-weekday-options label { display: flex; align-items: center; gap: 7px; min-height: 34px; color: var(--text-primary, #1b2b43); }
+.provider-hours-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; max-width: 500px; }
+.provider-schedule-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.provider-schedule-empty { margin: 0; color: var(--danger); }
+.provider-schedules-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.provider-schedules-list-heading h2 { margin: 0 !important; }
+.provider-schedules-table { min-width: 760px; }
+.provider-schedules-table td strong, .provider-schedules-table td span { display: block; }
+@media (max-width: 600px) { .provider-hours-row { grid-template-columns: minmax(0, 1fr); } .provider-schedules-list-heading { align-items: flex-start; } }

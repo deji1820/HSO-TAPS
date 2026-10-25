@@ -75,6 +75,7 @@ export default function Layout({ user, onLogout, children }) {
         { to: provider ? "/dashboard" : "/dashboard", label: provider ? "Patient Queue" : "Dashboard", icon: icons.home },
         ...(["nurse", "supervisor", "physician", "dentist"].includes(role) ? [{ to: "/emr", label: "Electronic Medical Records", icon: icons.folder }] : []),
         { to: "/appointments", label: "Booking Appointments", icon: icons.list },
+        ...(supervisor ? [{ to: "/appointment-schedules", label: "Provider Schedules", icon: icons.list }] : []),
         ...(["nurse", "supervisor", "physician", "dentist"].includes(role) ? [{ to: "/medical-documents", label: "Medical Documents", icon: icons.doc }] : []),
         ...(["nurse", "supervisor"].includes(role) ? [{ to: "/inventory", label: "Medicine Inventory", icon: icons.box }] : []),
         ...(supervisor ? [{ to: "/analytics", label: "Data Analytics", icon: icons.chart }] : []),

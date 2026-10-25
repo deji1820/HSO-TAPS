@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { checkInAppointment, getAppointment, updateAppointmentDecision } from "../services/api.js";
+import { assignAppointmentProvider, checkInAppointment, getAppointment, getProviderOptions, updateAppointmentDecision } from "../services/api.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/AppointmentDetails.css";
 
@@ -44,13 +44,17 @@ export default function AppointmentDetailsPage({ user }) {
   const [decisionNotice, setDecisionNotice] = useState("");
   const [checkInBusy, setCheckInBusy] = useState(false);
   const [checkInNotice, setCheckInNotice] = useState("");
+  const [providerOptions, setProviderOptions] = useState([]);
+  const [providerConfigured, setProviderConfigured] = useState(false);
+  const [providerSchedule, setProviderSchedule] = useState(null);
+  const [providerBusy, setProviderBusy] = useState(false);
 
   const loadAppointment = useCallback(() => {
     let active = true;
     setLoading(true);
     setError("");
     getAppointment(appointmentId)
-      .then(({ appointment: result, encounter: linkedEncounter }) => { if (active) { setAppointment(result); setEncounter(linkedEncounter); } })
+      .then(({ appointment: result, encounter: linkedEncounter, providerSchedule: schedule }) => { if (active) { setAppointment(result); setEncounter(linkedEncounter); setProviderSchedule(schedule); } })
       .catch((requestError) => {
         if (active) setError(requestError.response?.data?.message || "Could not load this appointment. Try again.");
       })
@@ -59,6 +63,20 @@ export default function AppointmentDetailsPage({ user }) {
   }, [appointmentId]);
 
   useEffect(() => loadAppointment(), [loadAppointment]);
+
+  const canAssignProvider = ["nurse", "supervisor"].includes(normalizeRole(user?.role));
+  useEffect(() => {
+    if (!appointment || !canAssignProvider || appointment.status !== "scheduled" || appointment.decisionStatus !== "accepted" || !["Medical Consultation", "Dental Consultation"].includes(appointment.serviceType)) {
+      setProviderOptions([]);
+      setProviderConfigured(false);
+      return undefined;
+    }
+    let active = true;
+    getProviderOptions({ serviceType: appointment.serviceType, date: appointment.dateKey, timeSlot: appointment.timeSlot, excludeAppointmentId: appointment._id })
+      .then((result) => { if (active) { setProviderOptions(result.providers || []); setProviderConfigured(Boolean(result.configured)); } })
+      .catch(() => { if (active) { setProviderOptions([]); setProviderConfigured(false); } });
+    return () => { active = false; };
+  }, [appointment, canAssignProvider]);
 
   if (loading) return <main className="appointment-details-page"><p className="table-empty" role="status">Loading appointment details…</p></main>;
   if (error) return <main className="appointment-details-page"><Link className="appointment-back-link" to="/appointments">← Appointments</Link><div className="appointments-error" role="alert"><span>{error}</span><button type="button" className="btn btn-outline btn-sm" onClick={loadAppointment}>Try again</button></div></main>;
@@ -71,6 +89,24 @@ export default function AppointmentDetailsPage({ user }) {
   const decision = appointment.decisionStatus || "pending";
   const decisionIsOpen = decision === "pending" && appointment.status === "scheduled";
   const checkInIsOpen = decision === "accepted" && appointment.status === "scheduled" && appointment.dateKey === todayInManila();
+  const usesProvider = ["Medical Consultation", "Dental Consultation"].includes(appointment.serviceType);
+
+  async function updateProvider(providerId) {
+    setProviderBusy(true);
+    setError("");
+    setDecisionNotice("");
+    try {
+      const { appointment: updated } = await assignAppointmentProvider(appointment._id, providerId || null);
+      setAppointment(updated);
+      const { providerSchedule: schedule } = await getAppointment(appointment._id);
+      setProviderSchedule(schedule);
+      setDecisionNotice(providerId ? "Provider assignment saved." : "Provider assignment cleared.");
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Could not update the provider assignment.");
+    } finally {
+      setProviderBusy(false);
+    }
+  }
 
   async function markAsArrived() {
     setCheckInBusy(true);
@@ -140,6 +176,7 @@ export default function AppointmentDetailsPage({ user }) {
               <LabelValue label="Purpose">{valueOrDash(appointment.purpose)}</LabelValue>
               <LabelValue label="Date">{displayDate(appointment.dateKey)}</LabelValue>
               <LabelValue label="Time">{valueOrDash(appointment.timeSlot)}</LabelValue>
+              <LabelValue label="Assigned provider">{valueOrDash(appointment.assignedProvider?.name)}</LabelValue>
               <LabelValue label="Booking status"><Status value={appointment.status} group="booking" /></LabelValue>
               <LabelValue label="Decision"><Status value={decision} group="decision" /></LabelValue>
               <LabelValue label="Decision recorded">{displayTimestamp(appointment.decisionAt)}</LabelValue>
@@ -147,6 +184,21 @@ export default function AppointmentDetailsPage({ user }) {
               <LabelValue label="Last updated">{displayTimestamp(appointment.updatedAt)}</LabelValue>
             </dl>
           </section>
+
+          {usesProvider && <section className="appointment-detail-card" aria-labelledby="appointment-provider-title">
+            <h2 id="appointment-provider-title">Provider Assignment &amp; Schedule</h2>
+            <dl className="appointment-detail-grid">
+              <LabelValue label="Provider">{valueOrDash(appointment.assignedProvider?.name || "Unassigned")}</LabelValue>
+              <LabelValue label="Role">{valueOrDash(appointment.assignedProvider?.role)}</LabelValue>
+              <LabelValue label="Scheduled duty days">{providerSchedule?.weekdays?.length ? providerSchedule.weekdays.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ") : "Unavailable"}</LabelValue>
+              <LabelValue label="Duty hours">{providerSchedule ? `${providerSchedule.startTime}–${providerSchedule.endTime}` : "Unavailable"}</LabelValue>
+            </dl>
+            {canAssignProvider && decision === "accepted" && appointment.status === "scheduled" && <div className="appointment-provider-editor">
+              {providerConfigured ? <label htmlFor="appointment-provider-select">Change provider<select id="appointment-provider-select" className="text-input" disabled={providerBusy} value={appointment.assignedProvider?._id || ""} onChange={(event) => updateProvider(event.target.value)}><option value="">Unassigned</option>{providerOptions.map((provider) => <option key={provider._id} value={provider._id}>{provider.name} · {provider.role}</option>)}</select></label> : <p className="appointment-detail-muted">No provider schedule is configured for this service. Existing kiosk weekday rules remain active until schedules are added.</p>}
+              {normalizeRole(user?.role) === "supervisor" && <Link className="btn btn-outline btn-sm" to="/appointment-schedules">Manage provider schedules</Link>}
+              {providerConfigured && !providerOptions.length && <p className="appointment-detail-muted">No eligible provider is free for this appointment slot.</p>}
+            </div>}
+          </section>}
 
           <section className="appointment-detail-card" aria-labelledby="appointment-attendance-title">
             <h2 id="appointment-attendance-title">Check-in and Queue</h2>
@@ -164,7 +216,7 @@ export default function AppointmentDetailsPage({ user }) {
 
           <section className="appointment-detail-card" aria-labelledby="appointment-not-recorded-title">
             <h2 id="appointment-not-recorded-title">Additional workflow information</h2>
-            <p className="appointment-detail-muted">Provider and room assignments, general appointment event history, and email delivery logs are not currently stored on this appointment record, so they are not shown here.</p>
+            <p className="appointment-detail-muted">Room assignments, general appointment event history, and email delivery logs are not currently stored on this appointment record, so they are not shown here.</p>
           </section>
         </div>
         <aside className="appointment-detail-aside" aria-label="Appointment actions">

@@ -3,11 +3,13 @@ import { getAppointments, updateAppointmentDecision } from "../services/api.js";
 import { socket } from "../services/socket.js";
 import AppointmentFilters from "../components/AppointmentFilters.jsx";
 import AppointmentTable from "../components/AppointmentTable.jsx";
+import { Link } from "react-router-dom";
+import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/Appointments.css";
 
 const INITIAL_FILTERS = { from: "", to: "", serviceType: "", decisionStatus: "", status: "" };
 
-export default function AppointmentsPage() {
+export default function AppointmentsPage({ user }) {
   const [appointments, setAppointments] = useState([]);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(25);
@@ -108,6 +110,7 @@ export default function AppointmentsPage() {
           <h1>Appointments</h1>
         </div>
         <p className="page-subtitle">Review and manage kiosk appointment requests.</p>
+        {normalizeRole(user?.role) === "supervisor" && <Link to="/appointment-schedules" className="btn btn-outline">Manage provider schedules</Link>}
       </header>
 
       <div className="appointments-toolbar">

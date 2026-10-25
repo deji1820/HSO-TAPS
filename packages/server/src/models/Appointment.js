@@ -12,6 +12,7 @@ const appointmentSchema = new mongoose.Schema(
     dateKey: { type: String, required: true }, // YYYY-MM-DD in the kiosk's local calendar
     timeSlot: { type: String, required: true },
     notificationEmail: { type: String, trim: true, lowercase: true },
+    assignedProvider: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     status: { type: String, enum: ["scheduled", "checked_in", "cancelled", "completed"], default: "scheduled", index: true },
     decisionStatus: { type: String, enum: ["pending", "accepted", "rejected"], default: "pending", index: true },
     decisionAt: Date,
@@ -26,6 +27,11 @@ const appointmentSchema = new mongoose.Schema(
 appointmentSchema.index(
   { serviceType: 1, dateKey: 1, timeSlot: 1 },
   { unique: true, partialFilterExpression: { status: "scheduled" } }
+);
+
+appointmentSchema.index(
+  { assignedProvider: 1, dateKey: 1, timeSlot: 1 },
+  { unique: true, partialFilterExpression: { assignedProvider: { $type: "objectId" }, status: { $in: ["scheduled", "checked_in"] } } }
 );
 
 export default mongoose.model("Appointment", appointmentSchema);

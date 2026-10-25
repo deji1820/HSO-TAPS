@@ -19,6 +19,11 @@ export const getQueueHistory = ({ from = "", to = "", page = 1 } = {}) =>
 export const getQueueBoard = () => api.get("/queue/board").then((r) => r.data);
 export const getAppointments = (filters = {}) => api.get("/appointments", { params: filters }).then((r) => r.data);
 export const getAppointment = (id) => api.get(`/appointments/${encodeURIComponent(id)}`).then((r) => r.data);
+export const getProviderOptions = (params = {}) => api.get("/appointments/provider-options", { params }).then((r) => r.data);
+export const getProviderSchedules = () => api.get("/appointments/provider-schedules").then((r) => r.data);
+export const saveProviderSchedule = (payload) => api.put("/appointments/provider-schedules", payload).then((r) => r.data);
+export const disableProviderSchedule = (id) => api.patch(`/appointments/provider-schedules/${encodeURIComponent(id)}/disable`).then((r) => r.data);
+export const assignAppointmentProvider = (id, providerId) => api.patch(`/appointments/${encodeURIComponent(id)}/provider`, { providerId }).then((r) => r.data);
 export const checkInAppointment = (id) => api.post(`/appointments/${encodeURIComponent(id)}/check-in`).then((r) => r.data);
 export const updateAppointmentDecision = (id, decisionStatus) => api.patch("/appointments/" + id + "/decision", { decisionStatus }).then((r) => r.data);
 export const updateQueueStatus = (id, status, details = {}) => api.patch(`/queue/${id}/status`, { status, ...details }).then((r) => r.data);
