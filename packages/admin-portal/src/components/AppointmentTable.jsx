@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 function formatDate(dateKey) {
   if (!dateKey) return "—";
   const [year, month, day] = dateKey.split("-").map(Number);
@@ -37,6 +39,7 @@ export default function AppointmentTable({ appointments, loading, busyId, onDeci
                 <td><Badge value={labelForStatus(appointment.status)} kind={appointment.status || "unknown"} /></td>
                 <td><Badge value={decision[0].toUpperCase() + decision.slice(1)} kind={`decision-${decision}`} /></td>
                 <td>
+                  <Link className="btn btn-outline btn-sm appointment-detail-link" to={`/appointments/${encodeURIComponent(appointment._id)}`}>View details</Link>
                   {pending ? <div className="appointment-row-actions">
                     <button type="button" className="btn btn-primary btn-sm" disabled={busyId === appointment._id} onClick={() => onDecision(appointment, "accepted")}>
                       {busyId === appointment._id ? "Saving…" : "Accept"}

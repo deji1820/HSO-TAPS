@@ -8,6 +8,7 @@ import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import FormsPage from "./pages/FormsPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import AppointmentsPage from "./pages/AppointmentsPage.jsx";
+import AppointmentDetailsPage from "./pages/AppointmentDetailsPage.jsx";
 import ControlCenterPage from "./pages/ControlCenterPage.jsx";
 import NewMedicalRecordPage from "./pages/NewMedicalRecordPage.jsx";
 import { normalizeRole } from "./utils/roles.js";
@@ -78,6 +79,10 @@ export default function App() {
             <EMRPage />
           </RoleRoute>
         }
+      />
+      <Route
+        path="/appointments/:appointmentId"
+        element={<RoleRoute user={user} allowed={["nurse", "supervisor", "physician", "dentist", "staff"]}><AppointmentDetailsPage user={user} /></RoleRoute>}
       />
       <Route
         path="/appointments"

@@ -155,6 +155,14 @@ export async function listAppointments(req, res) {
   res.json({ items: appointments, total, page, limit });
 }
 
+export async function getAppointment(req, res) {
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ message: "Invalid appointment ID." });
+  const appointment = await Appointment.findById(req.params.id)
+    .populate("student", "studentId employeeId affiliation firstName lastName program department email");
+  if (!appointment) return res.status(404).json({ message: "Appointment not found." });
+  return res.json({ appointment });
+}
+
 export async function updateAppointmentDecision(req, res) {
   const { decisionStatus } = req.body;
   if (!["accepted", "rejected"].includes(decisionStatus)) {
