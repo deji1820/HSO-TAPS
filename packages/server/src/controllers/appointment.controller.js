@@ -1,6 +1,7 @@
 import Student from "../models/Student.js";
 import Appointment from "../models/Appointment.js";
 import { sendAppointmentDecisionNotification } from "../services/documentNotifications.service.js";
+import { escapeRegex, parseAppointmentListFilters } from "../services/appointmentListFilters.js";
 
 const SERVICES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance"]);
 const SERVICE_DAYS = {
@@ -105,17 +106,53 @@ export async function createAppointment(req, res) {
   }
 }
 
-export async function listAppointments(_req, res) {
-  const appointments = await Appointment.find({
-    dateKey: { $gte: todayInManila() },
-    $or: [
-      { status: "scheduled" },
-      { status: "cancelled", decisionStatus: "rejected" },
-    ],
-  })
-    .populate("student", "studentId firstName lastName program email")
-    .sort({ dateKey: 1, timeSlot: 1 });
-  res.json(appointments);
+export async function listAppointments(req, res) {
+  const parsed = parseAppointmentListFilters(req.query, todayInManila());
+  if (parsed.error) return res.status(400).json({ message: parsed.error });
+
+  const { from, to, serviceType, decisionStatus, status, search, page } = parsed.filters;
+  const limit = 25;
+  const conditions = [];
+  const dateRange = {};
+  if (from) dateRange.$gte = from;
+  if (to) dateRange.$lte = to;
+  if (Object.keys(dateRange).length) conditions.push({ dateKey: dateRange });
+  if (serviceType) conditions.push({ serviceType });
+  if (status) conditions.push({ status });
+  if (decisionStatus === "pending") {
+    conditions.push({ $or: [{ decisionStatus: "pending" }, { decisionStatus: { $exists: false } }] });
+  } else if (decisionStatus) {
+    conditions.push({ decisionStatus });
+  }
+
+  if (search) {
+    const searchTerms = search.split(/\s+/).filter(Boolean);
+    const studentSearch = searchTerms.map((term) => {
+      const regex = { $regex: escapeRegex(term), $options: "i" };
+      return { $or: [
+        { firstName: regex }, { lastName: regex }, { studentId: regex },
+        { employeeId: regex }, { email: regex },
+      ] };
+    });
+    const matchingStudents = await Student.find({ $and: studentSearch }).select("_id");
+    const appointmentMatches = [
+      { student: { $in: matchingStudents.map(({ _id }) => _id) } },
+      { notificationEmail: { $regex: escapeRegex(search), $options: "i" } },
+    ];
+    if (/^[a-f\d]{24}$/i.test(search)) appointmentMatches.push({ _id: search });
+    conditions.push({ $or: appointmentMatches });
+  }
+
+  const appointmentFilter = conditions.length ? { $and: conditions } : {};
+  const [appointments, total] = await Promise.all([
+    Appointment.find(appointmentFilter)
+    .populate("student", "studentId employeeId affiliation firstName lastName program department email")
+      .sort({ dateKey: 1, timeSlot: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit),
+    Appointment.countDocuments(appointmentFilter),
+  ]);
+  res.json({ items: appointments, total, page, limit });
 }
 
 export async function updateAppointmentDecision(req, res) {
