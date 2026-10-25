@@ -11,6 +11,9 @@ const CLEARANCE_PURPOSES = {
 };
 const EXAM_FIELDS = ["Height (cm)", "Weight (kg)", "Abdomen", "Ears", "Eyes, Pupils", "Heart", "Lungs", "Nose", "Skin", "Thorax", "Extremities", "Deformities"];
 function fieldKey(label) { return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""); }
+function patientAffiliation(person) {
+  return person?.affiliation || person?.occupation || person?.patientType || person?.userType || (person?.employeeId ? "Employee" : "Student");
+}
 
 function Section({ title, children }) { return <section className="record-section"><h2>{title}</h2>{children}</section>; }
 
@@ -19,7 +22,6 @@ export default function NewMedicalRecordPage() {
   const [matches, setMatches] = useState([]);
   const [student, setStudent] = useState(null);
   const [purpose, setPurpose] = useState("");
-  const [clearanceAffiliation, setClearanceAffiliation] = useState("Student");
   const [clearancePurpose, setClearancePurpose] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [physicalOn, setPhysicalOn] = useState(false);
@@ -30,6 +32,7 @@ export default function NewMedicalRecordPage() {
   const recordFieldsRef = useRef(null);
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const { inventoryItems, inventoryLoading, inventoryError } = useMedicineInventory();
+  const clearanceAffiliation = patientAffiliation(student) === "Employee" ? "Employee" : "Student";
 
   useEffect(() => {
     if (query.trim().length < 2 || student) { setMatches([]); return undefined; }
@@ -63,18 +66,18 @@ export default function NewMedicalRecordPage() {
     {!showForm ? <Section title="Patient and Visit Details">
       <div className="new-record-grid">
         <label>Patient Name<input className="text-input" value={student ? `${student.firstName} ${student.lastName}` : query} onChange={(event) => { setStudent(null); setQuery(event.target.value); }} placeholder="Search student name or ID" /></label>
-        <label>Patient Type<select className="text-input" value="Student" disabled><option>Student</option></select></label>
+        <label>Patient Type<select className="text-input" value={student ? clearanceAffiliation : "Student"} disabled><option>Student</option><option>Employee</option></select></label>
         {matches.length > 0 && <div className="student-suggestions">{matches.map((candidate) => <button type="button" key={candidate._id} onClick={() => { setStudent(candidate); setQuery(`${candidate.firstName} ${candidate.lastName}`); setMatches([]); }}>{candidate.firstName} {candidate.lastName} <small>({candidate.studentId})</small></button>)}</div>}
         <label>Purpose<select className="text-input" value={purpose} onChange={(event) => setPurpose(event.target.value)}><option value="">Select purpose</option>{PURPOSES.map((item) => <option key={item}>{item}</option>)}</select></label>
       </div>
       <div className="record-footer-actions"><Link className="btn btn-outline" to="/dashboard">&lt;&lt; Back</Link><button className="btn btn-primary" onClick={proceed} disabled={!student || !purpose}>Proceed &gt;&gt;</button></div>
       {!student && query.length > 1 && matches.length === 0 && <p className="record-hint">Choose a matching student from the search results to continue.</p>}
     </Section> : <>
-      <div className="record-summary"><div><h2>&lt;{student.lastName}, {student.firstName}&gt;</h2><p>Patient Type: Student</p><p>Department: {student.program || "—"}</p><p>Official Email: {student.email || "—"}</p></div><div><p>Date of Examination: {new Date().toLocaleString()}</p><p>Physician/Nurse: {user.name || "—"}</p><label>Purpose<textarea className="text-input" value={purpose} readOnly rows={2} /></label></div></div>
+      <div className="record-summary"><div><h2>&lt;{student.lastName}, {student.firstName}&gt;</h2><p>Patient Type: {clearanceAffiliation}</p><p>Department: {student.department || student.program || "—"}</p><p>Official Email: {student.email || "—"}</p></div><div><p>Date of Examination: {new Date().toLocaleString()}</p><p>Physician/Nurse: {user.name || "—"}</p><label>Purpose<textarea className="text-input" value={purpose} readOnly rows={2} /></label></div></div>
       <div ref={recordFieldsRef}>
       <div className="record-top-actions"><button type="button" className="btn btn-outline" onClick={() => setShowForm(false)}>&lt;&lt; Back</button><button type="button" className="btn btn-warning" onClick={() => { setPhysicalOn(false); setLabOn(false); }}>↻ Reset Form</button></div>
 
-      {purpose === "Medical Clearance" ? <Section title="Medical Clearance"><label className="field-label" htmlFor="clearance-affiliation">Affiliation</label><select id="clearance-affiliation" className="text-input" name="clearance_affiliation" value={clearanceAffiliation} onChange={(event) => { setClearanceAffiliation(event.target.value); setClearancePurpose(""); }}><option>Student</option><option>Employee</option></select><label className="field-label" htmlFor="clearance-purpose">Clearance purpose</label><select id="clearance-purpose" className="text-input" name="clearance_purpose" value={clearancePurpose} onChange={(event) => setClearancePurpose(event.target.value)}><option value="">Select the reason for submitting</option>{CLEARANCE_PURPOSES[clearanceAffiliation].map((item) => <option key={item}>{item}</option>)}</select><p className="record-hint">Select the same clearance purpose used for medical document submission.</p><h3>Required Documents</h3><div className="required-documents">Required document checklist will appear after selecting a clearance purpose.</div></Section> : <>
+      {purpose === "Medical Clearance" ? <Section title="Medical Clearance"><label className="field-label" htmlFor="clearance-affiliation">Affiliation</label><select id="clearance-affiliation" className="text-input" name="clearance_affiliation" value={clearanceAffiliation} disabled aria-label="Affiliation from patient profile"><option>Student</option><option>Employee</option></select><label className="field-label" htmlFor="clearance-purpose">Clearance purpose</label><select id="clearance-purpose" className="text-input" name="clearance_purpose" value={clearancePurpose} onChange={(event) => setClearancePurpose(event.target.value)}><option value="">Select the reason for submitting</option>{CLEARANCE_PURPOSES[clearanceAffiliation].map((item) => <option key={item}>{item}</option>)}</select><p className="record-hint">Select the same clearance purpose used for medical document submission.</p><h3>Required Documents</h3><div className="required-documents">Required document checklist will appear after selecting a clearance purpose.</div></Section> : <>
         <Section title="Physical Examination"><label className="record-toggle"><input type="checkbox" checked={physicalOn} onChange={(event) => setPhysicalOn(event.target.checked)} /> Physical Examination <span>{physicalOn ? "On" : "Off"}</span></label>{physicalOn && <div className="exam-grid"><label>Blood Pressure<div className="bp-fields"><input name="blood_pressure_systolic" className="text-input" placeholder="Systolic" /><input name="blood_pressure_diastolic" className="text-input" placeholder="Diastolic" /></div></label>{EXAM_FIELDS.map((field) => <label key={field}>{field}<input name={fieldKey(field)} className="text-input" /></label>)}<label className="exam-wide">Other Pertinent Findings<textarea name="physical_other_findings" className="text-input" rows={3} /></label></div>}</Section>
         <Section title="Laboratory Examination"><label className="record-toggle"><input type="checkbox" checked={labOn} onChange={(event) => setLabOn(event.target.checked)} /> Laboratory Examination <span>{labOn ? "On" : "Off"}</span></label>{labOn && <div className="exam-grid lab-grid"><fieldset><legend>Chest X-Ray</legend><label><input type="radio" name="chest_xray" value="Normal" /> Normal</label><label><input type="radio" name="chest_xray" value="For Repeated Chest X-Ray" /> For Repeated Chest X-Ray</label></fieldset><label className="exam-wide">Significant Findings<textarea name="lab_significant_findings" className="text-input" rows={2} /></label><fieldset><legend>Cardio Clearance</legend><label><input type="radio" name="cardio_clearance" value="Cleared" /> Cleared</label><label><input type="radio" name="cardio_clearance" value="With Significant Findings" /> With Significant Findings</label></fieldset><label className="exam-wide">Remarks<textarea name="lab_remarks" className="text-input" rows={2} /></label></div>}</Section>
         <Section title="Medical Result"><div className="result-fields"><label>Findings<input name="medical_findings" className="text-input" /></label><label>Diagnosis<select name="diagnosis" className="text-input"><option value="">Select diagnosis</option><option>Pending assessment</option></select></label><label>Treatment / Remarks<textarea name="treatment_remarks" className="text-input" rows={2} /></label><label>Medicine Issued<select name="medicine_issued" className="text-input"><option value="">{inventoryLoading ? "Loading inventory…" : "Select medicine"}</option>{inventoryItems.map((item) => <option key={item._id} value={item.name} disabled={isInventoryItemUnavailable(item)}>{inventoryItemLabel(item)}</option>)}</select>{inventoryError && <small className="error-text">{inventoryError}</small>}{!inventoryLoading && !inventoryItems.length && <small className="record-hint">No active inventory items are available.</small>}</label></div></Section>
