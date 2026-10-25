@@ -1,11 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
-import { DOCUMENT_PURPOSES, DOCUMENT_PURPOSE_REQUIREMENTS } from "../data/documentPurposes.js";
+import { getClearanceRequirements } from "../services/api.js";
 import "../styles/screens/MedicalClearance.css";
-
-export const CLEARANCE_PURPOSES = Object.entries(DOCUMENT_PURPOSES).flatMap(([affiliation, purposes]) =>
-  purposes.filter((label) => label !== "Health Status Declaration Form").map((label) => ({ id: `${affiliation}:${label}`, affiliation, label }))
-);
 
 export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnline, isAppointment = false, affiliation = "Student" }) {
   const [purposeId, setPurposeId] = useState("");
@@ -14,12 +10,24 @@ export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnlin
   const [showWarning, setShowWarning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const purpose = CLEARANCE_PURPOSES.find((item) => item.id === purposeId);
-  const documents = purpose ? [
-    purpose.affiliation === "Student" ? "Valid NU student ID" : "Valid NU employee ID",
-    ...(DOCUMENT_PURPOSE_REQUIREMENTS[purpose.label] || []),
-  ] : [];
-  const ready = !!purpose && (isAppointment || (checkedDocuments.length === documents.length && acknowledged)) && !loading;
+  const [requirementsData, setRequirementsData] = useState([]);
+  const [requirementsLoading, setRequirementsLoading] = useState(true);
+  const [requirementsError, setRequirementsError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    getClearanceRequirements()
+      .then(({ items = [] }) => { if (active) setRequirementsData(items); })
+      .catch(() => { if (active) setRequirementsError("Clearance requirements are unavailable. Please try again before proceeding."); })
+      .finally(() => { if (active) setRequirementsLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const purposes = requirementsData.filter((item) => item.clearance && item.affiliation === affiliation);
+  const purpose = purposes.find((item) => item.purpose === purposeId);
+  const documents = purpose?.requirements || [];
+  const confirmableDocuments = documents.filter((item) => item.kind === "document" && item.required);
+  const ready = !!purpose && !requirementsLoading && !requirementsError && (isAppointment || (confirmableDocuments.every((item) => checkedDocuments.includes(item.text)) && acknowledged)) && !loading;
 
   function toggleDocument(document) {
     setCheckedDocuments((current) => current.includes(document)
@@ -35,7 +43,7 @@ export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnlin
     setLoading(true);
     setError("");
     try {
-      await onSubmit({ purpose: purpose.label, affiliation: purpose.affiliation, documents });
+      await onSubmit({ purpose: purpose.purpose, affiliation: purpose.affiliation, requirements: documents, documents: confirmableDocuments.map((item) => item.text), acknowledged });
     } catch {
       setError("We couldn't complete your check-in. Please try again or see the clinic staff.");
       setLoading(false);
@@ -61,7 +69,7 @@ export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnlin
 
         <section className="clearance-panel clearance-purpose-panel">
           <h2>MEDICAL CLEARANCE PURPOSE</h2>
-          <p className="clearance-hint">Select medical clearance purpose and review the required documents.</p>
+          <p className="clearance-hint">Select medical clearance purpose and review its requirements from the HSO system notes.</p>
           <label className="clearance-field-label">Affiliation
             <select value={affiliation} disabled aria-label="Affiliation from verified profile">
               <option>Student</option><option>Employee</option>
@@ -70,30 +78,24 @@ export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnlin
           <label className="clearance-field-label">Purpose
           <select value={purposeId} onChange={handlePurposeChange} aria-label="Medical clearance purpose">
             <option value="">Select an option</option>
-            {CLEARANCE_PURPOSES.filter((item) => item.affiliation === affiliation).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
+            {purposes.map((item) => <option value={item.purpose} key={`${item.affiliation}:${item.purpose}`}>{item.purpose}</option>)}
           </select>
           </label>
         </section>
 
         <section className="clearance-panel clearance-documents-panel">
-          <h2>REQUIRED DOCUMENTS</h2>
+          <h2>REQUIREMENTS</h2>
           {purpose ? (
             <div className="clearance-document-list">
-              {documents.map((document) => isAppointment ? <p key={document}>{document}</p> : (
-                <label key={document}>
-                  <input
-                    type="checkbox"
-                    checked={checkedDocuments.includes(document)}
-                    onChange={() => toggleDocument(document)}
-                  />
-                  {document}
+              {documents.map((requirement) => requirement.kind === "document" && requirement.required && !isAppointment ? (
+                <label key={requirement.text}>
+                  <input type="checkbox" checked={checkedDocuments.includes(requirement.text)} onChange={() => toggleDocument(requirement.text)} />
+                  {requirement.text}
                 </label>
-              ))}
+              ) : <p key={requirement.text}><strong>{requirement.kind === "document" ? "Required document: " : requirement.kind === "action" ? "Next step: " : "When applicable: "}</strong>{requirement.text}</p>)}
             </div>
           ) : (
-            <p className="clearance-empty-documents">{isAppointment
-              ? "<< displays the required documents list for the selected medical clearance purpose >>"
-              : "Select a purpose to view its required document checklist."}</p>
+            <p className="clearance-empty-documents">{requirementsLoading ? "Loading the HSO requirements list…" : "Select a purpose to view its requirements."}</p>
           )}
         </section>
 
@@ -102,12 +104,13 @@ export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnlin
         </p>}
         {!isAppointment && <label className="clearance-acknowledge">
           <input type="checkbox" checked={acknowledged} onChange={(event) => { setAcknowledged(event.target.checked); setShowWarning(false); }} />
-          I understand that missing requirements may cancel my appointment today.
+          I understand missing required documents may delay or prevent completion of today's clearance.
         </label>}
+        {requirementsError && <p className="clearance-error" role="alert">{requirementsError}</p>}
         {error && <p className="clearance-error" role="alert">{error}</p>}
         <div className="clearance-actions">
           <button className="clearance-back" onClick={onBack} disabled={loading}>&lt;&lt; Back</button>
-          <button className="clearance-proceed" onClick={handleProceed} disabled={loading || (isAppointment && !purpose)}>
+          <button className="clearance-proceed" onClick={handleProceed} disabled={loading || requirementsLoading || Boolean(requirementsError) || (isAppointment && !purpose)}>
             {loading ? "Please wait..." : "Proceed >>"}
           </button>
         </div>

@@ -6,6 +6,7 @@ const router = Router();
 
 router.get("/availability", requireKioskKey, ctrl.getAvailability);
 router.get("/schedule", requireKioskKey, ctrl.getAppointmentSchedule);
+router.get("/clearance-requirements", ctrl.getClearanceRequirements);
 router.post("/", requireKioskKey, ctrl.createAppointment);
 router.get("/provider-options", requireAuth, requireRole("nurse", "supervisor"), ctrl.getProviderOptions);
 router.get("/provider-schedules", requireAuth, requireRole("supervisor"), ctrl.listProviderSchedules);

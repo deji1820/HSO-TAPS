@@ -558,6 +558,8 @@
   background: #f7f7f7;
 }
 .apt-page--confirmed .apt-details-card { margin: 0 auto 0; }
+.apt-page--confirmed .apt-clearance-requirements { margin-top: 12px; }
+.apt-page--confirmed .apt-clearance-requirements ul { margin: 0; padding-left: 20px; color: var(--nu-blue-dark); font-size: 13px; line-height: 1.5; }
 .apt-page--confirmed .apt-details-title,
 .apt-page--summary .apt-details-title,
 .apt-page--found .apt-details-title {

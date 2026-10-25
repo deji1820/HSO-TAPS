@@ -6,6 +6,7 @@ import QueueEntry from "../models/QueueEntry.js";
 import ConsultationRecord from "../models/ConsultationRecord.js";
 import User from "../models/User.js";
 import ProviderSchedule from "../models/ProviderSchedule.js";
+import { CLEARANCE_REQUIREMENTS, findClearanceRequirement } from "../services/clearanceRequirements.js";
 import { sendAppointmentDecisionNotification, retryAppointmentNotification } from "../services/documentNotifications.service.js";
 import { escapeRegex, parseAppointmentListFilters } from "../services/appointmentListFilters.js";
 import { checkInEligibility } from "../services/appointmentCheckIn.js";
@@ -88,6 +89,10 @@ export async function getAppointmentSchedule(req, res) {
   if (!SERVICES.has(serviceType)) return res.status(400).json({ message: "Choose a valid appointment service." });
   const schedule = await getAppointmentWeekdays(serviceType);
   return res.json({ ...schedule, dayNames: schedule.weekdays.map((day) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]) });
+}
+
+export function getClearanceRequirements(_req, res) {
+  return res.json({ items: CLEARANCE_REQUIREMENTS });
 }
 
 export async function getProviderOptions(req, res) {
@@ -201,6 +206,12 @@ export async function createAppointment(req, res) {
     isActive: { $ne: false },
   });
   if (!student) return res.status(404).json({ message: "Unknown student." });
+  const clearanceRequirement = serviceType === "Medical Clearance"
+    ? findClearanceRequirement(student.affiliation, purpose)
+    : null;
+  if (serviceType === "Medical Clearance" && !clearanceRequirement) {
+    return res.status(400).json({ message: "Choose a medical clearance purpose that matches the patient's affiliation." });
+  }
 
   const slotUnavailable = await Appointment.exists({
     serviceType,
@@ -221,7 +232,7 @@ export async function createAppointment(req, res) {
     const appointment = await Appointment.create({
       student: student._id,
       serviceType,
-      purpose: purpose?.trim(),
+      purpose: clearanceRequirement?.purpose || purpose?.trim(),
       dateKey: date,
       timeSlot,
       ...(assignedProvider ? { assignedProvider } : {}),

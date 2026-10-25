@@ -21,6 +21,8 @@ export const getAppointmentAvailability = (serviceType, date) =>
 export const getAppointmentSchedule = (serviceType) =>
   api.get("/appointments/schedule", { params: { serviceType } }).then((r) => r.data);
 
+export const getClearanceRequirements = () => api.get("/appointments/clearance-requirements").then((r) => r.data);
+
 export const createAppointment = (payload) =>
   api.post("/appointments", payload).then((r) => r.data);
 

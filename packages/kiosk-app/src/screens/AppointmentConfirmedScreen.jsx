@@ -6,6 +6,7 @@ export default function AppointmentConfirmedScreen({
   consultSubType,
   serviceLabel,
   purposeLabel,
+  requirements = [],
   dateLabel,     // e.g. "Friday, October 2, 2026"
   timeLabel,     // e.g. "9:30 AM"
   pendingEmailSent,
@@ -34,6 +35,8 @@ export default function AppointmentConfirmedScreen({
             <span className="apt-details-value">{timeLabel}</span>
           </div>
         </div>
+
+        {purposeLabel && requirements.length > 0 && <div className="apt-details-card apt-clearance-requirements"><p className="apt-details-title">CLEARANCE REQUIREMENTS</p><ul>{requirements.map((item) => <li key={item.text}><strong>{item.kind === "document" && item.required ? "Required document: " : item.kind === "action" ? "Next step: " : "When applicable: "}</strong>{item.text}</li>)}</ul></div>}
 
         <div className="apt-reminders">
           <p className="apt-reminders-title">PENDING HEALTH SERVICES OFFICE REVIEW</p>

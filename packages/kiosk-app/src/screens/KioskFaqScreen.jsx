@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
+import { getClearanceRequirements } from "../services/api.js";
 
 const FAQS = [
   ["How do I book a medical clearance appointment?", "Choose Medical Clearance, select the appointment option, pick a purpose and available time, then save the appointment details."],
@@ -17,12 +19,25 @@ const FAQS = [
 ];
 
 export default function KioskFaqScreen({ onBack, isOnline }) {
+  const [requirements, setRequirements] = useState([]);
+  const [requirementsLoading, setRequirementsLoading] = useState(true);
+  const [requirementsError, setRequirementsError] = useState("");
+  useEffect(() => {
+    let active = true;
+    getClearanceRequirements()
+      .then(({ items = [] }) => { if (active) setRequirements(items.filter((item) => item.clearance)); })
+      .catch(() => { if (active) setRequirementsError("The current HSO clearance requirements could not be loaded."); })
+      .finally(() => { if (active) setRequirementsLoading(false); });
+    return () => { active = false; };
+  }, []);
+
   return <div className="kiosk-shell qhs-reading-screen">
     <KioskHeader isOnline={isOnline} />
     <main className="qhs-reading-content kiosk-faq-content">
       <div className="qhs-reading-heading"><p>NU FAIRVIEW HEALTH SERVICES OFFICE</p><h1>Frequently Asked Questions</h1></div>
       <section className="qhs-reading-panel kiosk-faq-list">
         {FAQS.map(([question, answer]) => <details key={question}><summary>{question}</summary>{Array.isArray(answer) ? <ol className="kiosk-faq-bp-steps">{answer.map((step) => <li key={step}>{step}</li>)}</ol> : <p>{answer}</p>}</details>)}
+        <details><summary>Medical clearance requirements by purpose</summary>{requirementsLoading ? <p role="status">Loading HSO requirements…</p> : requirementsError ? <p role="alert">{requirementsError}</p> : ["Student", "Employee"].map((affiliation) => <div key={affiliation}><h2>{affiliation}</h2>{requirements.filter((item) => item.affiliation === affiliation).map((item) => <section key={item.purpose}><h3>{item.purpose}</h3><ul>{item.requirements.map((requirement) => <li key={requirement.text}><strong>{requirement.kind === "document" && requirement.required ? "Required document: " : requirement.kind === "action" ? "Next step: " : "When applicable: "}</strong>{requirement.text}</li>)}</ul></section>)}</div>)}</details>
       </section>
       <button className="qhs-done qhs-back" onClick={onBack}>&lt;&lt; Back</button>
     </main>

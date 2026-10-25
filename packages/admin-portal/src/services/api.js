@@ -19,6 +19,7 @@ export const getQueueHistory = ({ from = "", to = "", page = 1 } = {}) =>
 export const getQueueBoard = () => api.get("/queue/board").then((r) => r.data);
 export const getAppointments = (filters = {}) => api.get("/appointments", { params: filters }).then((r) => r.data);
 export const getAppointment = (id) => api.get(`/appointments/${encodeURIComponent(id)}`).then((r) => r.data);
+export const getClearanceRequirements = () => api.get("/appointments/clearance-requirements").then((r) => r.data);
 export const getAppointmentNotifications = (id) => api.get(`/appointments/${encodeURIComponent(id)}/notifications`).then((r) => r.data);
 export const retryAppointmentEmail = (id, notificationId) => api.post(`/appointments/${encodeURIComponent(id)}/notifications/${encodeURIComponent(notificationId)}/retry`).then((r) => r.data);
 export const getProviderOptions = (params = {}) => api.get("/appointments/provider-options", { params }).then((r) => r.data);

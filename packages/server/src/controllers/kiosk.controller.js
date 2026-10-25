@@ -5,6 +5,7 @@ import ExternalDocument from "../models/ExternalDocument.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
 import { areDocumentNotificationsConfigured, sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
+import { findClearanceRequirement, findDocumentPurposeRequirement } from "../services/clearanceRequirements.js";
 
 // Per HSO-TAP_SYSTEM_NOTES: Hypothermia < 35.5, Normal 35.5-37.5, Fever >= 37.8
 // (37.6-37.7 is undefined in the notes; treated as Normal here)
@@ -40,6 +41,17 @@ export async function submitIntake(req, res) {
     $or: [{ studentId }, { rfidTagUid: studentId?.toUpperCase() }],
   });
   if (!student) return res.status(404).json({ message: "Unknown student" });
+  if (serviceType === "Medical Clearance") {
+    const requirement = findClearanceRequirement(student.affiliation, reason);
+    let details = requestDetails;
+    if (typeof details === "string") { try { details = JSON.parse(details); } catch { details = null; } }
+    if (!requirement) return res.status(400).json({ message: "Choose a medical clearance purpose that matches the patient's affiliation." });
+    const checkedDocuments = new Set(Array.isArray(details?.documents) ? details.documents : []);
+    const missingDocument = requirement.requirements.find((item) => item.kind === "document" && item.required && !checkedDocuments.has(item.text));
+    if (details?.acknowledged !== true || missingDocument) {
+      return res.status(400).json({ message: "Confirm the clearance requirements and check each required document before joining the queue." });
+    }
+  }
 
   let bmi;
   if (heightCm && weightKg) {
@@ -106,6 +118,10 @@ export async function submitDocument(req, res) {
   }
   const student = await Student.findOne({ $or: [{ studentId }, { rfidTagUid: String(studentId).toUpperCase() }] });
   if (!student) return res.status(404).json({ message: "No student or employee record matched that ID." });
+  const purpose = submissionDetails?.purpose;
+  if (purpose && !findDocumentPurposeRequirement(student.affiliation, purpose)) {
+    return res.status(400).json({ message: "Choose a document purpose that matches the patient's affiliation." });
+  }
 
   const bytes = Buffer.from(fileData, "base64");
   if (!bytes.length) return res.status(400).json({ message: "The uploaded file is empty." });

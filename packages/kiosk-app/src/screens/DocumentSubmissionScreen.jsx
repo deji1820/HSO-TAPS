@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
-import { lookupStudent, submitKioskDocument } from "../services/api.js";
-import { DOCUMENT_PURPOSES, DOCUMENT_PURPOSE_REQUIREMENTS } from "../data/documentPurposes.js";
+import { getClearanceRequirements, lookupStudent, submitKioskDocument } from "../services/api.js";
 import HealthDeclarationFormScreen from "./HealthDeclarationFormScreen.jsx";
 import "../styles/screens/DocumentSubmission.css";
 
@@ -62,7 +61,22 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
   const [error, setError] = useState("");
   const [completed, setCompleted] = useState(false);
   const [emailNoticeSent, setEmailNoticeSent] = useState(false);
+  const [requirementItems, setRequirementItems] = useState([]);
+  const [requirementsLoading, setRequirementsLoading] = useState(true);
+  const [requirementsError, setRequirementsError] = useState("");
   const latestAllowedDateOfBirth = localDateInputValue();
+
+  useEffect(() => {
+    let active = true;
+    getClearanceRequirements()
+      .then(({ items = [] }) => { if (active) setRequirementItems(items); })
+      .catch(() => { if (active) setRequirementsError("The HSO requirements list is unavailable. Please try again before submitting."); })
+      .finally(() => { if (active) setRequirementsLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const purposes = requirementItems.filter((item) => item.affiliation === affiliation && (item.clearance || item.documentSubmission));
+  const selectedRequirements = purposes.find((item) => item.purpose === purpose)?.requirements || [];
 
   async function verifyIdentity(event) {
     event.preventDefault();
@@ -107,6 +121,10 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
 
   async function submit(event) {
     event.preventDefault();
+    if (requirementsLoading || requirementsError) {
+      setError(requirementsError || "Wait for the HSO requirements list to finish loading.");
+      return;
+    }
     if (!student?._id || !verified) {
       setError("Verify your student or employee ID before submitting.");
       return;
@@ -226,9 +244,11 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
             <label>Sex assigned at birth<select required value={sex} onChange={(event) => setSex(event.target.value)}><option value="">Select</option><option>Male</option><option>Female</option></select></label>
             <label>Date of birth<input required type="date" max={latestAllowedDateOfBirth} value={dateOfBirth} onChange={(event) => { setDateOfBirth(event.target.value); setError(""); }} /></label>
             <label>{affiliation === "Student" ? "Academic program / grade level" : "Department"}<input required value={institutionalAffiliation} onChange={(event) => setInstitutionalAffiliation(event.target.value)} /></label>
-            <label className="document-field-wide">Purpose<select required value={purpose} onChange={(event) => { const nextPurpose = event.target.value; setPurpose(nextPurpose); setDocumentType(""); setOtherType(""); setExamDate(""); setFiles([]); setHealthDeclaration(null); }}><option value="" disabled>Choose a purpose</option>{DOCUMENT_PURPOSES[affiliation].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label className="document-field-wide">Purpose<select required disabled={requirementsLoading || Boolean(requirementsError)} value={purpose} onChange={(event) => { const nextPurpose = event.target.value; setPurpose(nextPurpose); setDocumentType(""); setOtherType(""); setExamDate(""); setFiles([]); setHealthDeclaration(null); }}><option value="" disabled>Choose a purpose</option>{purposes.map((item) => <option key={item.purpose} value={item.purpose}>{item.purpose}</option>)}</select></label>
           </div>
-          {purpose && <div className="document-requirements"><h3>Requirements for this purpose</h3><ul>{(DOCUMENT_PURPOSE_REQUIREMENTS[purpose] || []).map((item) => <li key={item}>{item}</li>)}</ul></div>}
+          {requirementsLoading && <p className="document-progress" role="status">Loading HSO requirements…</p>}
+          {requirementsError && <p className="document-error" role="alert">{requirementsError}</p>}
+          {purpose && <div className="document-requirements"><h3>Requirements for this purpose</h3><ul>{selectedRequirements.map((item) => <li key={item.text}><strong>{item.kind === "document" && item.required ? "Required document: " : item.kind === "action" ? "Next step: " : "When applicable: "}</strong>{item.text}</li>)}</ul></div>}
         </fieldset>
 
         <fieldset className="document-card" disabled={!verified || loading}>
@@ -253,7 +273,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
 
         {error && <p className="document-error" role="alert">{error}</p>}
         {progress && <p className="document-progress" aria-live="polite">{progress}</p>}
-        <div className="document-actions"><button type="button" className="document-secondary" onClick={onBack || (() => window.location.assign(window.location.pathname))} disabled={loading}>Back / Cancel</button><button type="submit" disabled={loading || !verified}>{loading ? "Submitting…" : "Submit documents"}</button></div>
+        <div className="document-actions"><button type="button" className="document-secondary" onClick={onBack || (() => window.location.assign(window.location.pathname))} disabled={loading}>Back / Cancel</button><button type="submit" disabled={loading || !verified || requirementsLoading || Boolean(requirementsError)}>{loading ? "Submitting…" : "Submit documents"}</button></div>
       </form>
     </main>
   </div>;

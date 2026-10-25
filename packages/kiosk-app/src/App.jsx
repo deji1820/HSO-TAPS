@@ -99,6 +99,7 @@ export default function App() {
   const [checkInInfo, setCheckInInfo] = useState(null); // shown on CheckedInScreen
   const [appointmentSelection, setAppointmentSelection] = useState(null);
   const [clearanceAppointmentPurpose, setClearanceAppointmentPurpose] = useState(null);
+  const [clearanceAppointmentRequirements, setClearanceAppointmentRequirements] = useState([]);
   const [clearanceQueueNumber, setClearanceQueueNumber] = useState(null);
   const [walkInComplaints, setWalkInComplaints] = useState([]); // array of complaint keys
   const [medicineSymptoms, setMedicineSymptoms] = useState([]);
@@ -1071,13 +1072,13 @@ async function handleAppointmentProceed(selection) {
   setStep("appointmentConfirmed");
 }
 
-async function handleClearanceSubmit({ purpose, documents }) {
+async function handleClearanceSubmit({ purpose, documents, requirements, acknowledged }) {
   const result = await submitIntake({
     studentId: student?.studentId || student?.rfidTagUid,
     serviceType: "Medical Clearance",
     source: "kiosk",
     reason: purpose,
-    requestDetails: JSON.stringify({ purpose, documents }),
+    requestDetails: JSON.stringify({ purpose, documents, requirements, acknowledged }),
   });
   setClearanceQueueNumber(result?.queueEntry?.queueNumber ?? null);
   setStep("clearanceResult");
@@ -1735,6 +1736,7 @@ async function handleScreeningOptionSelect(mode) {
     onWalkIn={() => setStep("clearanceIntake")}
     onBookAppointment={() => {
       setClearanceAppointmentPurpose(null);
+      setClearanceAppointmentRequirements([]);
       setStep("clearanceAppointmentPurpose");
     }}
     onBack={() => {
@@ -1750,8 +1752,9 @@ async function handleScreeningOptionSelect(mode) {
   <ClearanceIntakeScreen
     isAppointment
     affiliation={student?.affiliation || "Student"}
-    onSubmit={({ purpose }) => {
+    onSubmit={({ purpose, requirements }) => {
       setClearanceAppointmentPurpose(purpose);
+      setClearanceAppointmentRequirements(requirements);
       setStep("clearanceAppointmentBooking");
     }}
     onBack={() => setStep("clearanceEntry")}
@@ -1826,6 +1829,7 @@ async function handleScreeningOptionSelect(mode) {
   <AppointmentConfirmedScreen
     serviceLabel="MEDICAL CLEARANCE"
     purposeLabel={clearanceAppointmentPurpose}
+    requirements={clearanceAppointmentRequirements}
     dateLabel={appointmentSelection.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
     timeLabel={appointmentSelection.time}
     pendingEmailSent={appointmentSelection.pendingEmailSent}
