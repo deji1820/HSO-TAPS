@@ -11,7 +11,7 @@ const consultationRecordSchema = new mongoose.Schema(
     attendingStaff: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     visitType: {
       type: String,
-      enum: ["Walk-in Medical Consultation", "Dental Consultation", "Medication and Relief", "General Inquiry"],
+      enum: ["Walk-in Medical Consultation", "Dental Consultation", "Medical Clearance", "Medication and Relief", "General Inquiry"],
       required: true,
     },
 

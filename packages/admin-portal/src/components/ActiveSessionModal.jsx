@@ -15,6 +15,7 @@ const PRIORITY_BADGE = {
 const CLINICAL_VISIT_TYPE = {
   "Medical Consultation": "Walk-in Medical Consultation",
   "Dental Consultation": "Dental Consultation",
+  "Medical Clearance": "Medical Clearance",
 };
 
 const TABS = [

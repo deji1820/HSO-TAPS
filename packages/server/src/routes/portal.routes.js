@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import Student from "../models/Student.js";
 import QueueEntry from "../models/QueueEntry.js";
+import Appointment from "../models/Appointment.js";
 import ConsultationRecord from "../models/ConsultationRecord.js";
 import VitalsLog from "../models/VitalsLog.js";
 import ExternalDocument from "../models/ExternalDocument.js";
@@ -73,6 +74,16 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
   queueEntry.status = "completed";
   queueEntry.completedAt = new Date();
   await queueEntry.save();
+  if (queueEntry.appointment) {
+    const completedAppointment = await Appointment.findOneAndUpdate(
+      { _id: queueEntry.appointment, queueEntry: queueEntry._id, status: "checked_in" },
+      { $set: { status: "completed" } },
+      { new: true }
+    ).select("_id status");
+    if (completedAppointment) {
+      req.app.get("io")?.emit("appointment:update", { _id: completedAppointment._id, status: completedAppointment.status, queueEntry: queueEntry._id });
+    }
+  }
   const updated = await QueueEntry.findById(queueEntry._id).populate("student").populate("linkedVitals");
   req.app.get("io")?.to("clinical-queue").emit("queue:update", updated);
   req.app.get("io")?.to("frontdesk-queue").emit("queue:update", { _id: updated._id, status: updated.status, calledAt: updated.calledAt, startedAt: updated.startedAt, completedAt: updated.completedAt });

@@ -1,7 +1,12 @@
+import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import Appointment from "../models/Appointment.js";
+import QueueEntry from "../models/QueueEntry.js";
+import ConsultationRecord from "../models/ConsultationRecord.js";
 import { sendAppointmentDecisionNotification } from "../services/documentNotifications.service.js";
 import { escapeRegex, parseAppointmentListFilters } from "../services/appointmentListFilters.js";
+import { checkInEligibility } from "../services/appointmentCheckIn.js";
+import { nextQueueNumber } from "../services/queueNumbering.service.js";
 
 const SERVICES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance"]);
 const SERVICE_DAYS = {
@@ -55,7 +60,7 @@ export async function getAvailability(req, res) {
   if (!SERVICES.has(serviceType) || !serviceAllowsDate(serviceType, date) || date < todayInManila()) {
     return res.status(400).json({ message: "Choose a valid service and a date when that service accepts appointments." });
   }
-  const appointments = await Appointment.find({ serviceType, dateKey: date, status: "scheduled" }).select("timeSlot -_id");
+  const appointments = await Appointment.find({ serviceType, dateKey: date, status: { $in: ["scheduled", "checked_in"] } }).select("timeSlot -_id");
   const unavailableTimes = appointments.map(({ timeSlot }) => timeSlot);
   res.json({ unavailableTimes: [...new Set([...unavailableTimes, ...[...TIMES].filter((time) => !slotIsInFuture(date, time))])] });
 }
@@ -78,6 +83,14 @@ export async function createAppointment(req, res) {
     isActive: { $ne: false },
   });
   if (!student) return res.status(404).json({ message: "Unknown student." });
+
+  const slotUnavailable = await Appointment.exists({
+    serviceType,
+    dateKey: date,
+    timeSlot,
+    status: { $in: ["scheduled", "checked_in"] },
+  });
+  if (slotUnavailable) return res.status(409).json({ message: "That appointment time is no longer available. Please choose another time." });
 
   try {
     const appointment = await Appointment.create({
@@ -158,9 +171,82 @@ export async function listAppointments(req, res) {
 export async function getAppointment(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ message: "Invalid appointment ID." });
   const appointment = await Appointment.findById(req.params.id)
-    .populate("student", "studentId employeeId affiliation firstName lastName program department email");
+    .populate("student", "studentId employeeId affiliation firstName lastName program department email")
+    .populate("queueEntry", "queueNumber serviceType status createdAt completedAt")
+    .populate("checkedInBy", "name");
   if (!appointment) return res.status(404).json({ message: "Appointment not found." });
-  return res.json({ appointment });
+  const encounter = appointment.queueEntry
+    ? await ConsultationRecord.findOne({ queueEntry: appointment.queueEntry._id }).select("_id visitType visitDate")
+    : null;
+  return res.json({ appointment, encounter });
+}
+
+export async function checkInAppointment(req, res) {
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ message: "Invalid appointment ID." });
+  const io = req.app.get("io");
+  const existing = await Appointment.findById(req.params.id)
+    .populate("student", "studentId firstName lastName")
+    .populate("queueEntry", "queueNumber serviceType status createdAt completedAt")
+    .populate("checkedInBy", "name");
+  if (!existing) return res.status(404).json({ message: "Appointment not found." });
+  const eligibility = checkInEligibility(existing, todayInManila());
+  if (eligibility.alreadyCheckedIn) return res.json({ appointment: existing, queueEntry: existing.queueEntry, alreadyCheckedIn: true });
+  if (!eligibility.eligible) return res.status(409).json({ message: eligibility.reason });
+
+  const session = await mongoose.startSession();
+  let appointment;
+  let queueEntry;
+  try {
+    await session.withTransaction(async () => {
+      const current = await Appointment.findOne({ _id: req.params.id, status: "scheduled", decisionStatus: "accepted" }).session(session);
+      if (!current) {
+        const conflict = new Error("This appointment is no longer eligible for check-in.");
+        conflict.appointmentConflict = true;
+        throw conflict;
+      }
+      const checkedInAt = new Date();
+      const created = await QueueEntry.create([{
+        appointment: current._id,
+        student: current.student,
+        queueNumber: await nextQueueNumber(current.serviceType, { session }),
+        priorityLevel: "Standard Priority",
+        serviceType: current.serviceType,
+        reason: current.purpose || "Scheduled appointment",
+      }], { session });
+      queueEntry = created[0];
+      appointment = await Appointment.findOneAndUpdate(
+        { _id: current._id, status: "scheduled", decisionStatus: "accepted", $or: [{ queueEntry: { $exists: false } }, { queueEntry: null }] },
+        { $set: { status: "checked_in", checkedInAt, checkedInBy: req.user.id, queueEntry: queueEntry._id } },
+        { new: true, runValidators: true, session }
+      );
+      if (!appointment) {
+        const conflict = new Error("This appointment has already been checked in or changed.");
+        conflict.appointmentConflict = true;
+        throw conflict;
+      }
+    });
+  } catch (error) {
+    if (error.appointmentConflict) {
+      const latest = await Appointment.findById(req.params.id)
+        .populate("student", "studentId firstName lastName")
+        .populate("queueEntry", "queueNumber serviceType status createdAt completedAt")
+        .populate("checkedInBy", "name");
+      if (latest?.status === "checked_in" && latest.queueEntry) {
+        return res.json({ appointment: latest, queueEntry: latest.queueEntry, alreadyCheckedIn: true });
+      }
+      return res.status(409).json({ message: "This appointment has already changed or is no longer eligible for check-in." });
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+
+  await appointment.populate("student", "studentId firstName lastName");
+  await appointment.populate("queueEntry", "queueNumber serviceType status createdAt completedAt");
+  await appointment.populate("checkedInBy", "name");
+  io?.to("clinical-queue").to("frontdesk-queue").emit("queue:new", { _id: queueEntry._id });
+  io?.emit("appointment:update", { _id: appointment._id, status: appointment.status, queueEntry: queueEntry._id });
+  return res.json({ appointment, queueEntry, alreadyCheckedIn: false });
 }
 
 export async function updateAppointmentDecision(req, res) {

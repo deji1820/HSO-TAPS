@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getAppointment, updateAppointmentDecision } from "../services/api.js";
+import { checkInAppointment, getAppointment, updateAppointmentDecision } from "../services/api.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/AppointmentDetails.css";
 
@@ -19,6 +19,12 @@ function displayTimestamp(value) {
   return Number.isNaN(date.valueOf()) ? "—" : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
+function todayInManila() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const fields = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${fields.year}-${fields.month}-${fields.day}`;
+}
+
 function LabelValue({ label, children }) {
   return <div className="appointment-detail-field"><dt>{label}</dt><dd>{children}</dd></div>;
 }
@@ -31,17 +37,20 @@ function Status({ value, group }) {
 export default function AppointmentDetailsPage({ user }) {
   const { appointmentId } = useParams();
   const [appointment, setAppointment] = useState(null);
+  const [encounter, setEncounter] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [decisionBusy, setDecisionBusy] = useState(false);
   const [decisionNotice, setDecisionNotice] = useState("");
+  const [checkInBusy, setCheckInBusy] = useState(false);
+  const [checkInNotice, setCheckInNotice] = useState("");
 
   const loadAppointment = useCallback(() => {
     let active = true;
     setLoading(true);
     setError("");
     getAppointment(appointmentId)
-      .then(({ appointment: result }) => { if (active) setAppointment(result); })
+      .then(({ appointment: result, encounter: linkedEncounter }) => { if (active) { setAppointment(result); setEncounter(linkedEncounter); } })
       .catch((requestError) => {
         if (active) setError(requestError.response?.data?.message || "Could not load this appointment. Try again.");
       })
@@ -61,6 +70,24 @@ export default function AppointmentDetailsPage({ user }) {
   const canViewEmr = ["nurse", "supervisor", "physician", "dentist"].includes(normalizeRole(user?.role));
   const decision = appointment.decisionStatus || "pending";
   const decisionIsOpen = decision === "pending" && appointment.status === "scheduled";
+  const checkInIsOpen = decision === "accepted" && appointment.status === "scheduled" && appointment.dateKey === todayInManila();
+
+  async function markAsArrived() {
+    setCheckInBusy(true);
+    setCheckInNotice("");
+    setError("");
+    try {
+      const result = await checkInAppointment(appointment._id);
+      setAppointment(result.appointment);
+      setEncounter(null);
+      setCheckInNotice(result.alreadyCheckedIn ? "This appointment was already checked in. Its queue entry is shown below." : "Patient checked in and added to the live queue.");
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Could not check in this appointment.");
+      if (requestError.response?.status === 409) getAppointment(appointment._id).then(({ appointment: latest }) => setAppointment(latest)).catch(() => {});
+    } finally {
+      setCheckInBusy(false);
+    }
+  }
 
   async function decide(decisionStatus) {
     if (decisionStatus === "rejected" && !window.confirm("Reject this appointment? Its time slot will become available again.")) return;
@@ -121,9 +148,23 @@ export default function AppointmentDetailsPage({ user }) {
             </dl>
           </section>
 
+          <section className="appointment-detail-card" aria-labelledby="appointment-attendance-title">
+            <h2 id="appointment-attendance-title">Check-in and Queue</h2>
+            {appointment.queueEntry && ["checked_in", "completed"].includes(appointment.status) ? <dl className="appointment-detail-grid">
+              <LabelValue label="Attendance">{appointment.status === "completed" ? "Completed" : "Checked in"}</LabelValue>
+              <LabelValue label="Checked in at">{displayTimestamp(appointment.checkedInAt)}</LabelValue>
+              <LabelValue label="Recorded by">{valueOrDash(appointment.checkedInBy?.name)}</LabelValue>
+              <LabelValue label="Queue number">{valueOrDash(appointment.queueEntry?.queueNumber)}</LabelValue>
+              <LabelValue label="Queue status">{valueOrDash(appointment.queueEntry?.status?.replaceAll("_", " "))}</LabelValue>
+              {appointment.queueEntry?.completedAt && <LabelValue label="Completed at">{displayTimestamp(appointment.queueEntry.completedAt)}</LabelValue>}
+              <LabelValue label="Clinical encounter">{encounter ? `${encounter.visitType} · ${displayTimestamp(encounter.visitDate)}` : appointment.status === "completed" ? "No encounter record linked" : "Created when the clinical queue session is completed"}</LabelValue>
+            </dl> : <p className="appointment-detail-muted">{appointment.status === "checked_in" ? "This appointment is checked in, but its linked queue entry is unavailable. Contact a supervisor." : appointment.status === "completed" ? "This appointment is completed." : appointment.status === "cancelled" ? "This appointment is cancelled." : decision !== "accepted" ? "Check-in is available after the appointment is accepted." : appointment.dateKey !== todayInManila() ? "Check-in becomes available on the appointment date." : "The patient has not arrived yet."}</p>}
+            {appointment.status === "checked_in" && appointment.queueEntry?._id && <Link className="btn btn-outline btn-sm" to="/dashboard">Open live queue</Link>}
+          </section>
+
           <section className="appointment-detail-card" aria-labelledby="appointment-not-recorded-title">
             <h2 id="appointment-not-recorded-title">Additional workflow information</h2>
-            <p className="appointment-detail-muted">Provider and room assignments, appointment event history, attendance timestamps, and email delivery logs are not currently stored on this appointment record, so they are not shown here.</p>
+            <p className="appointment-detail-muted">Provider and room assignments, general appointment event history, and email delivery logs are not currently stored on this appointment record, so they are not shown here.</p>
           </section>
         </div>
         <aside className="appointment-detail-aside" aria-label="Appointment actions">
@@ -135,6 +176,9 @@ export default function AppointmentDetailsPage({ user }) {
               <button type="button" className="btn btn-danger appointment-detail-action" disabled={decisionBusy} onClick={() => decide("rejected")}>Reject appointment</button>
             </> : decision !== "pending" ? <p className="appointment-detail-locked" role="status">Decision locked: {decision[0].toUpperCase() + decision.slice(1)}{appointment.decisionAt ? ` on ${displayTimestamp(appointment.decisionAt)}` : ""}. This decision cannot be changed.</p> : <p className="appointment-detail-muted" role="status">A decision is unavailable because this appointment is {appointment.status.replaceAll("_", " ")}.</p>}
             {decisionNotice && <p className="appointments-notice" role="status">{decisionNotice}</p>}
+            {checkInIsOpen && <button type="button" className="btn btn-primary appointment-detail-action" disabled={checkInBusy} onClick={markAsArrived}>{checkInBusy ? "Checking in…" : "Mark as Arrived"}</button>}
+            {appointment.status === "checked_in" && appointment.queueEntry?.queueNumber && <Link className="btn btn-primary appointment-detail-action" to="/dashboard">Queue {appointment.queueEntry.queueNumber} · Open queue</Link>}
+            {checkInNotice && <p className="appointments-notice" role="status">{checkInNotice}</p>}
             {error && <p className="appointments-error" role="alert">{error}</p>}
             {canViewEmr && patient?.studentId && <Link className="btn btn-outline appointment-detail-action" to={`/emr?studentId=${encodeURIComponent(patient.studentId)}`}>Open Patient EMR</Link>}
             <Link className="btn btn-outline appointment-detail-action" to="/appointments">Return to Appointments</Link>

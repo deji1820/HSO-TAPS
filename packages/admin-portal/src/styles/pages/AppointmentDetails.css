@@ -22,6 +22,7 @@
 .appointment-detail-locked { margin: 0; padding: 11px 12px; border-radius: var(--radius-sm); background: #edf0f4; color: #44546a; font-size: .88rem; line-height: 1.5; }
 .appointment-detail-aside { position: sticky; top: 16px; }
 .appointment-detail-action { display: flex; justify-content: center; width: 100%; margin-top: 10px; text-decoration: none; }
+.appointment-detail-card .appointment-detail-grid + .btn { margin-top: 2px; }
 .appointment-badge--booking-scheduled { background: var(--success-bg); color: var(--success); }
 .appointment-badge--booking-checked_in { background: #e8f1ff; color: #174b89; }
 .appointment-badge--booking-cancelled, .appointment-badge--decision-rejected { background: var(--danger-bg); color: var(--danger); }

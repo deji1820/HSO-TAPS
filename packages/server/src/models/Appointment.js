@@ -16,6 +16,8 @@ const appointmentSchema = new mongoose.Schema(
     decisionStatus: { type: String, enum: ["pending", "accepted", "rejected"], default: "pending", index: true },
     decisionAt: Date,
     queueEntry: { type: mongoose.Schema.Types.ObjectId, ref: "QueueEntry" },
+    checkedInAt: Date,
+    checkedInBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );

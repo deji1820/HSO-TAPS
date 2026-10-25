@@ -8,6 +8,7 @@ router.get("/availability", requireKioskKey, ctrl.getAvailability);
 router.post("/", requireKioskKey, ctrl.createAppointment);
 router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), ctrl.listAppointments);
 router.get("/:id", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), ctrl.getAppointment);
+router.post("/:id/check-in", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), ctrl.checkInAppointment);
 router.patch("/:id/decision", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), ctrl.updateAppointmentDecision);
 
 export default router;

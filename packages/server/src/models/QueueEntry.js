@@ -9,6 +9,7 @@ import mongoose from "mongoose";
 const queueEntrySchema = new mongoose.Schema(
   {
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
+    appointment: { type: mongoose.Schema.Types.ObjectId, ref: "Appointment" },
     queueNumber: String, // e.g. "R0003", "M0001"
     priorityLevel: { type: String, enum: ["High Priority", "Standard Priority", "Routine Check"], required: true },
     serviceType: {
@@ -45,5 +46,7 @@ const queueEntrySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+queueEntrySchema.index({ appointment: 1 }, { unique: true, partialFilterExpression: { appointment: { $type: "objectId" } } });
 
 export default mongoose.model("QueueEntry", queueEntrySchema);
