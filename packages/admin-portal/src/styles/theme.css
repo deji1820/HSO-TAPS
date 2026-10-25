@@ -97,6 +97,8 @@ table.data-table th {
   text-align: left; background: var(--nu-blue-light); color: var(--nu-blue-dark);
   padding: 12px 16px; font-weight: 700; border-bottom: 2px solid var(--nu-blue-dark);
 }
+.table-sort-button { border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.table-sort-button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 table.data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
 table.data-table tr:last-child td { border-bottom: none; }
 table.data-table tr:hover td { background: #f7f9fc; }

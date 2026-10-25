@@ -3,6 +3,9 @@ import { getMedicalDocuments, getStudents, uploadMedicalDocument, updateMedicalD
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
 
+const STATUS_ORDER = { Pending: 0, Rejected: 1, Verified: 2, Accepted: 2 };
+const statusLabel = (status) => status === "Verified" ? "Accepted" : status || "Pending";
+
 export default function MedicalDocumentsPage() {
   const [files, setFiles] = useState([]);
   const [notice, setNotice] = useState("");
@@ -11,8 +14,14 @@ export default function MedicalDocumentsPage() {
   const [matches, setMatches] = useState([]);
   const [saving, setSaving] = useState(false);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
+  const [statusSortDirection, setStatusSortDirection] = useState("asc");
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const canReviewDocuments = ["nurse", "supervisor"].includes(normalizeRole(user.role));
+  const sortedFiles = [...files].sort((left, right) => {
+    const statusDifference = (STATUS_ORDER[left.status || "Pending"] ?? 3) - (STATUS_ORDER[right.status || "Pending"] ?? 3);
+    if (statusDifference) return statusSortDirection === "asc" ? statusDifference : -statusDifference;
+    return new Date(right.submittedAt || right.createdAt) - new Date(left.submittedAt || left.createdAt);
+  });
 
   useEffect(() => { getMedicalDocuments().then(setFiles).catch(() => setNotice("Could not load submitted documents from the server.")); }, []);
 
@@ -53,7 +62,7 @@ export default function MedicalDocumentsPage() {
     try {
       const updated = await updateMedicalDocumentStatus(file._id, status);
       setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated } : item));
-      setNotice(updated.notificationQueued ? `Document status changed to ${status}. The email send was started.` : `Document status changed to ${status}, but the email could not be started. ${updated.notificationMessage || "Check the backend email settings."}`);
+      setNotice(updated.notificationQueued ? `Document status changed to ${statusLabel(status)}. The email send was started.` : `Document status changed to ${statusLabel(status)}, but the email could not be started. ${updated.notificationMessage || "Check the backend email settings."}`);
     } catch (error) {
       setNotice(error?.response?.data?.message || "Could not update this document status.");
     } finally {
@@ -75,8 +84,8 @@ export default function MedicalDocumentsPage() {
       {notice && <p role="status" className="page-subtitle">{notice}</p>}
     </form>
     <h2 className="section-title">Submission List</h2>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-      {files.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name || "—"}</td><td>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${file.documentTitle || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingStatusId === file._id || ["Verified", "Rejected"].includes(file.status)} onChange={(event) => updateStatus(file, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <span className={`badge ${file.status === "Verified" ? "badge-routine" : file.status === "Rejected" ? "badge-high" : "badge-standard"}`}>{file.status || "Pending"}</span>}</td><td>{file.name ? <div className="document-actions"><button className="btn btn-outline btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button className="btn btn-primary btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}
+    <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th aria-sort={statusSortDirection === "asc" ? "ascending" : "descending"}><button type="button" className="table-sort-button" onClick={() => setStatusSortDirection((direction) => direction === "asc" ? "desc" : "asc")}>Status <span aria-hidden="true">{statusSortDirection === "asc" ? "↑" : "↓"}</span></button></th><th>Actions</th></tr></thead><tbody>
+      {sortedFiles.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name || "—"}</td><td>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${file.documentTitle || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingStatusId === file._id || ["Verified", "Rejected"].includes(file.status)} onChange={(event) => updateStatus(file, event.target.value)}><option>Pending</option><option value="Verified">Accepted</option><option>Rejected</option></select> : <span className={`badge ${file.status === "Verified" ? "badge-routine" : file.status === "Rejected" ? "badge-high" : "badge-standard"}`}>{statusLabel(file.status)}</span>}</td><td>{file.name ? <div className="document-actions"><button className="btn btn-outline btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button className="btn btn-primary btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></div> : "—"}</td></tr>)}
     </tbody></table>{!files.length && <div className="table-empty">No document submissions in this browser.</div>}</div>
   </div>;
 }
