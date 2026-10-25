@@ -152,6 +152,9 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
   if (!allowedStatuses.includes(req.body.status)) return res.status(400).json({ message: "Invalid document status" });
   const document = await ExternalDocument.findById(req.params.id).select("-fileData").populate("student", "studentId firstName lastName email");
   if (!document) return res.status(404).json({ message: "Document not found" });
+  if (["Verified", "Rejected"].includes(document.status)) {
+    return res.status(409).json({ message: "This document has already been decided and its status cannot be changed." });
+  }
   const statusChanged = document.status !== req.body.status;
   document.status = req.body.status;
   await document.save();

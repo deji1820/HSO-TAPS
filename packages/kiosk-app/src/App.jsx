@@ -1749,6 +1749,7 @@ async function handleScreeningOptionSelect(mode) {
 {step === "clearanceAppointmentPurpose" && (
   <ClearanceIntakeScreen
     isAppointment
+    affiliation={student?.affiliation || "Student"}
     onSubmit={({ purpose }) => {
       setClearanceAppointmentPurpose(purpose);
       setStep("clearanceAppointmentBooking");
@@ -1761,6 +1762,7 @@ async function handleScreeningOptionSelect(mode) {
 
 {step === "clearanceIntake" && (
   <ClearanceIntakeScreen
+    affiliation={student?.affiliation || "Student"}
     onSubmit={handleClearanceSubmit}
     onBack={() => setStep("clearanceEntry")}
     onFaq={openFaq}

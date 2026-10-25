@@ -7,8 +7,7 @@ export const CLEARANCE_PURPOSES = Object.entries(DOCUMENT_PURPOSES).flatMap(([af
   purposes.filter((label) => label !== "Health Status Declaration Form").map((label) => ({ id: `${affiliation}:${label}`, affiliation, label }))
 );
 
-export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnline, isAppointment = false }) {
-  const [affiliation, setAffiliation] = useState("Student");
+export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnline, isAppointment = false, affiliation = "Student" }) {
   const [purposeId, setPurposeId] = useState("");
   const [checkedDocuments, setCheckedDocuments] = useState([]);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -50,14 +49,6 @@ export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnlin
     setError("");
   }
 
-  function handleAffiliationChange(event) {
-    setAffiliation(event.target.value);
-    setPurposeId("");
-    setCheckedDocuments([]);
-    setShowWarning(false);
-    setError("");
-  }
-
   return (
     <div className="kiosk-shell clearance-screen clearance-intake">
       <KioskHeader isOnline={isOnline} />
@@ -72,7 +63,7 @@ export default function ClearanceIntakeScreen({ onSubmit, onBack, onFaq, isOnlin
           <h2>MEDICAL CLEARANCE PURPOSE</h2>
           <p className="clearance-hint">Select medical clearance purpose and review the required documents.</p>
           <label className="clearance-field-label">Affiliation
-            <select value={affiliation} onChange={handleAffiliationChange} aria-label="Student or employee affiliation">
+            <select value={affiliation} disabled aria-label="Affiliation from verified profile">
               <option>Student</option><option>Employee</option>
             </select>
           </label>
