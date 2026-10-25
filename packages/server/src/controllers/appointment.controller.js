@@ -191,7 +191,7 @@ export async function updateAppointmentDecision(req, res) {
   if (!appointment) {
     const exists = await Appointment.exists({ _id: req.params.id });
     return exists
-      ? res.status(409).json({ message: "This appointment has already been decided or is no longer active." })
+      ? res.status(409).json({ message: "This appointment's decision is already locked, or it is no longer eligible for a decision." })
       : res.status(404).json({ message: "Appointment not found." });
   }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getAppointment } from "../services/api.js";
+import { getAppointment, updateAppointmentDecision } from "../services/api.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/AppointmentDetails.css";
 
@@ -33,6 +33,8 @@ export default function AppointmentDetailsPage({ user }) {
   const [appointment, setAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [decisionBusy, setDecisionBusy] = useState(false);
+  const [decisionNotice, setDecisionNotice] = useState("");
 
   const loadAppointment = useCallback(() => {
     let active = true;
@@ -58,6 +60,26 @@ export default function AppointmentDetailsPage({ user }) {
   const patientIdentifier = patient?.employeeId || patient?.studentId;
   const canViewEmr = ["nurse", "supervisor", "physician", "dentist"].includes(normalizeRole(user?.role));
   const decision = appointment.decisionStatus || "pending";
+  const decisionIsOpen = decision === "pending" && appointment.status === "scheduled";
+
+  async function decide(decisionStatus) {
+    if (decisionStatus === "rejected" && !window.confirm("Reject this appointment? Its time slot will become available again.")) return;
+    setDecisionBusy(true);
+    setDecisionNotice("");
+    setError("");
+    try {
+      const result = await updateAppointmentDecision(appointment._id, decisionStatus);
+      setAppointment(result.appointment);
+      setDecisionNotice(result.notificationSent
+        ? `Decision saved as ${decisionStatus}. The notification was sent to ${appointment.notificationEmail || patient?.email || "the patient's saved email"}.`
+        : `Decision saved as ${decisionStatus}. ${result.notificationMessage || "The notification could not be sent."}`);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Could not save the appointment decision.");
+      if (requestError.response?.status === 409) getAppointment(appointment._id).then(({ appointment: latest }) => setAppointment(latest)).catch(() => {});
+    } finally {
+      setDecisionBusy(false);
+    }
+  }
 
   return (
     <main className="appointment-details-page">
@@ -93,6 +115,7 @@ export default function AppointmentDetailsPage({ user }) {
               <LabelValue label="Time">{valueOrDash(appointment.timeSlot)}</LabelValue>
               <LabelValue label="Booking status"><Status value={appointment.status} group="booking" /></LabelValue>
               <LabelValue label="Decision"><Status value={decision} group="decision" /></LabelValue>
+              <LabelValue label="Decision recorded">{displayTimestamp(appointment.decisionAt)}</LabelValue>
               <LabelValue label="Created">{displayTimestamp(appointment.createdAt)}</LabelValue>
               <LabelValue label="Last updated">{displayTimestamp(appointment.updatedAt)}</LabelValue>
             </dl>
@@ -106,7 +129,14 @@ export default function AppointmentDetailsPage({ user }) {
         <aside className="appointment-detail-aside" aria-label="Appointment actions">
           <section className="appointment-detail-card">
             <h2>Actions</h2>
-            {canViewEmr && patient?.studentId ? <Link className="btn btn-primary appointment-detail-action" to={`/emr?studentId=${encodeURIComponent(patient.studentId)}`}>Open Patient EMR</Link> : <p className="appointment-detail-muted">No additional action is available for this record.</p>}
+            {decisionIsOpen ? <>
+              <p className="appointment-detail-muted">Choose a decision for this request. Once saved, it cannot be changed.</p>
+              <button type="button" className="btn btn-primary appointment-detail-action" disabled={decisionBusy} onClick={() => decide("accepted")}>{decisionBusy ? "Saving…" : "Accept appointment"}</button>
+              <button type="button" className="btn btn-danger appointment-detail-action" disabled={decisionBusy} onClick={() => decide("rejected")}>Reject appointment</button>
+            </> : decision !== "pending" ? <p className="appointment-detail-locked" role="status">Decision locked: {decision[0].toUpperCase() + decision.slice(1)}{appointment.decisionAt ? ` on ${displayTimestamp(appointment.decisionAt)}` : ""}. This decision cannot be changed.</p> : <p className="appointment-detail-muted" role="status">A decision is unavailable because this appointment is {appointment.status.replaceAll("_", " ")}.</p>}
+            {decisionNotice && <p className="appointments-notice" role="status">{decisionNotice}</p>}
+            {error && <p className="appointments-error" role="alert">{error}</p>}
+            {canViewEmr && patient?.studentId && <Link className="btn btn-outline appointment-detail-action" to={`/emr?studentId=${encodeURIComponent(patient.studentId)}`}>Open Patient EMR</Link>}
             <Link className="btn btn-outline appointment-detail-action" to="/appointments">Return to Appointments</Link>
           </section>
         </aside>

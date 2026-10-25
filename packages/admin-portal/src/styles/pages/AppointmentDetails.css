@@ -19,6 +19,7 @@
 .appointment-detail-field dt { margin-bottom: 5px; color: var(--text-muted); font-size: .78rem; }
 .appointment-detail-field dd { margin: 0; color: var(--text-primary, #1b2b43); font-size: .9rem; font-weight: 600; overflow-wrap: anywhere; }
 .appointment-detail-muted { margin: 0; color: var(--text-muted); line-height: 1.55; }
+.appointment-detail-locked { margin: 0; padding: 11px 12px; border-radius: var(--radius-sm); background: #edf0f4; color: #44546a; font-size: .88rem; line-height: 1.5; }
 .appointment-detail-aside { position: sticky; top: 16px; }
 .appointment-detail-action { display: flex; justify-content: center; width: 100%; margin-top: 10px; text-decoration: none; }
 .appointment-badge--booking-scheduled { background: var(--success-bg); color: var(--success); }
