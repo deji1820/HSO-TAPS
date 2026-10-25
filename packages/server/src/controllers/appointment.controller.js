@@ -1,11 +1,12 @@
 import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import Appointment from "../models/Appointment.js";
+import AppointmentNotification from "../models/AppointmentNotification.js";
 import QueueEntry from "../models/QueueEntry.js";
 import ConsultationRecord from "../models/ConsultationRecord.js";
 import User from "../models/User.js";
 import ProviderSchedule from "../models/ProviderSchedule.js";
-import { sendAppointmentDecisionNotification } from "../services/documentNotifications.service.js";
+import { sendAppointmentDecisionNotification, retryAppointmentNotification } from "../services/documentNotifications.service.js";
 import { escapeRegex, parseAppointmentListFilters } from "../services/appointmentListFilters.js";
 import { checkInEligibility } from "../services/appointmentCheckIn.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
@@ -310,6 +311,35 @@ export async function getAppointment(req, res) {
     ? await ProviderSchedule.findOne({ provider: appointment.assignedProvider._id, serviceType: appointment.serviceType, isActive: true }).select("weekdays startTime endTime slotMinutes")
     : null;
   return res.json({ appointment, encounter, providerSchedule });
+}
+
+export async function getAppointmentNotifications(req, res) {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid appointment ID." });
+  const exists = await Appointment.exists({ _id: req.params.id });
+  if (!exists) return res.status(404).json({ message: "Appointment not found." });
+  const notifications = await AppointmentNotification.find({ appointment: req.params.id })
+    .select("type recipient subject status attempts queuedAt attemptedAt sentAt failureReason createdAt")
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+  return res.json({ items: notifications });
+}
+
+export async function retryAppointmentEmail(req, res) {
+  if (!mongoose.isValidObjectId(req.params.id) || !mongoose.isValidObjectId(req.params.notificationId)) {
+    return res.status(400).json({ message: "Invalid appointment or notification ID." });
+  }
+  const appointment = await Appointment.findById(req.params.id).populate("student", "firstName lastName");
+  if (!appointment) return res.status(404).json({ message: "Appointment not found." });
+  const notification = await AppointmentNotification.findOne({ _id: req.params.notificationId, appointment: appointment._id });
+  if (!notification) return res.status(404).json({ message: "Notification record not found." });
+  if (notification.status !== "failed") return res.status(409).json({ message: "Only failed appointment emails can be retried." });
+  if (notification.attempts >= 4) return res.status(409).json({ message: "This email reached its retry limit. Check the email settings before sending a new notification." });
+  const result = await retryAppointmentNotification(appointment, notification);
+  const updated = await AppointmentNotification.findById(notification._id)
+    .select("type recipient subject status attempts queuedAt attemptedAt sentAt failureReason createdAt");
+  if (result.sent) return res.json({ notification: updated });
+  return res.status(502).json({ message: result.reason || "The email provider could not send the notification.", notification: updated });
 }
 
 export async function checkInAppointment(req, res) {

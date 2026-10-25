@@ -10,6 +10,13 @@
 .appointment-detail-main { display: grid; gap: 18px; min-width: 0; }
 .appointment-detail-card { min-width: 0; padding: 20px; background: var(--bg-card, #fff); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); }
 .appointment-detail-card h2 { margin: 0 0 18px; color: var(--nu-blue-dark, #15365d); font-size: 1rem; }
+.appointment-email-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.appointment-email-heading h2 { margin-bottom: 12px; }
+.appointment-badge--email-sent { background: var(--success-bg); color: var(--success); }
+.appointment-badge--email-queued, .appointment-badge--email-sending { background: var(--warning-bg); color: #855900; }
+.appointment-badge--email-failed, .appointment-badge--email-unknown { background: var(--danger-bg); color: var(--danger); }
+.appointment-detail-card .table-wrap { overflow-x: auto; }
+.appointment-detail-card .data-table { min-width: 650px; }
 .appointment-detail-patient { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }
 .appointment-detail-avatar { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border-radius: 50%; color: #174b89; background: #e8f1ff; font-size: 1.25rem; font-weight: 700; }
 .appointment-detail-patient h3 { margin: 0 0 4px; color: var(--text-primary, #1b2b43); }
@@ -33,4 +40,4 @@
 .appointment-badge--decision-accepted { background: var(--success-bg); color: var(--success); }
 .appointment-badge--booking-unknown, .appointment-badge--decision-unknown { background: #edf0f4; color: #44546a; }
 @media (max-width: 900px) { .appointment-detail-layout { grid-template-columns: minmax(0, 1fr); } .appointment-detail-aside { position: static; } }
-@media (max-width: 600px) { .appointment-detail-heading { align-items: flex-start; flex-direction: column; } .appointment-detail-grid { grid-template-columns: minmax(0, 1fr); } .appointment-detail-card { padding: 16px; } }
+@media (max-width: 600px) { .appointment-detail-heading { align-items: flex-start; flex-direction: column; } .appointment-detail-grid { grid-template-columns: minmax(0, 1fr); } .appointment-detail-card { padding: 16px; } .appointment-email-heading { align-items: flex-start; } }

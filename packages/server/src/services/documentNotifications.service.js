@@ -1,3 +1,5 @@
+import AppointmentNotification from "../models/AppointmentNotification.js";
+
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GMAIL_SEND_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
@@ -148,9 +150,6 @@ export async function sendAppointmentDecisionNotification(appointment, decisionS
   const from = process.env.EMAIL_FROM;
   const gmailUser = process.env.GMAIL_USER;
   const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
-  if (!email || !areDocumentNotificationsConfigured()) {
-    return { sent: false, reason: "Appointment email settings or the student's school email are missing." };
-  }
   const descriptions = {
     pending: "Your appointment request has been received and is pending review by the Health Services Office. Please wait for an email with the decision before coming to the clinic.",
     accepted: "Your appointment request has been accepted by the Health Services Office.",
@@ -164,6 +163,59 @@ export async function sendAppointmentDecisionNotification(appointment, decisionS
   const description = descriptions[decisionStatus];
   const subject = subjects[decisionStatus];
   if (!description || !subject) return { sent: false, reason: "Unsupported appointment notification." };
+  const type = decisionStatus === "pending" ? "booking_received" : `decision_${decisionStatus}`;
+  let notification;
+  try {
+    notification = await AppointmentNotification.create({
+      appointment: appointment._id,
+      type,
+      recipient: email || undefined,
+      subject,
+      status: "queued",
+    });
+  } catch (error) {
+    console.error("[Email] Appointment notification history could not be saved: " + error.message);
+    return { sent: false, reason: "The appointment was saved, but email history could not be recorded." };
+  }
+  return deliverAppointmentNotification(appointment, notification, { email, provider, apiKey, from, gmailUser, gmailAppPassword, description, subject });
+}
+
+export async function retryAppointmentNotification(appointment, notification) {
+  const descriptions = {
+    booking_received: "Your appointment request has been received and is pending review by the Health Services Office. Please wait for an email with the decision before coming to the clinic.",
+    decision_accepted: "Your appointment request has been accepted by the Health Services Office.",
+    decision_rejected: "Your appointment request was rejected by the Health Services Office. Please contact the office to arrange another time.",
+  };
+  const description = descriptions[notification.type];
+  if (!description) return { sent: false, reason: "This notification type cannot be retried." };
+  const provider = String(process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
+  return deliverAppointmentNotification(appointment, notification, {
+    email: String(notification.recipient || "").trim().toLowerCase(),
+    provider,
+    apiKey: process.env.RESEND_API_KEY,
+    from: process.env.EMAIL_FROM,
+    gmailUser: process.env.GMAIL_USER,
+    gmailAppPassword: process.env.GMAIL_APP_PASSWORD,
+    description,
+    subject: notification.subject,
+  });
+}
+
+async function deliverAppointmentNotification(appointment, notification, { email, provider, apiKey, from, gmailUser, gmailAppPassword, description, subject }) {
+  const claimed = await AppointmentNotification.findOneAndUpdate(
+    { _id: notification._id, status: { $in: ["queued", "failed"] } },
+    { $set: { status: "sending", attemptedAt: new Date() }, $unset: { failureReason: 1 }, $inc: { attempts: 1 } },
+    { new: true }
+  );
+  if (!claimed) return { sent: false, reason: "This notification is already being sent or has already been sent." };
+
+  const fail = async (reason) => {
+    await AppointmentNotification.updateOne({ _id: claimed._id, status: "sending" }, { $set: { status: "failed", failureReason: reason } });
+    return { sent: false, reason };
+  };
+  if (!email) return fail("No student email address is on file.");
+  if (!areDocumentNotificationsConfigured()) return fail("Appointment email settings are not configured on the server.");
+  if (!(["gmail", "gmail-api", "resend"].includes(provider))) return fail("Unsupported email provider.");
   const firstName = appointment.student?.firstName || "student";
   const purpose = appointment.purpose ? "\nPurpose: " + appointment.purpose : "";
   const text = "Hello " + firstName + ",\n\n" + description + "\n\nService: " + appointment.serviceType + "\nDate: " + appointment.dateKey + "\nTime: " + appointment.timeSlot + purpose + "\n\nIf you have questions, please contact the Health Services Office.";
@@ -180,7 +232,7 @@ export async function sendAppointmentDecisionNotification(appointment, decisionS
       await transporter.sendMail({ ...message, from: "HSO Health Services <" + gmailUser + ">" });
     } else if (provider === "gmail-api") {
       const sent = await sendWithGmailApi(message);
-      if (!sent) return { sent: false, reason: "The email provider could not send the appointment notice." };
+      if (!sent) return fail("The email provider could not send the appointment notice.");
     } else {
       const response = await fetch(RESEND_ENDPOINT, {
         method: "POST",
@@ -188,13 +240,14 @@ export async function sendAppointmentDecisionNotification(appointment, decisionS
         body: JSON.stringify({ ...message, from, to: [email] }),
       });
       if (!response.ok) {
-        console.error("[Email] Appointment " + decisionStatus + " notice failed (HTTP " + response.status + ").");
-        return { sent: false, reason: "The email provider could not send the appointment notice." };
+        console.error("[Email] Appointment " + notification.type + " notice failed (HTTP " + response.status + ").");
+        return fail("The email provider could not send the appointment notice.");
       }
     }
-    return { sent: true };
+    await AppointmentNotification.updateOne({ _id: claimed._id, status: "sending" }, { $set: { status: "sent", sentAt: new Date(), failureReason: "" } });
+    return { sent: true, notificationId: claimed._id };
   } catch (error) {
-    console.error("[Email] Appointment " + decisionStatus + " notice failed: " + error.message);
-    return { sent: false, reason: "The email provider could not send the appointment notice." };
+    console.error("[Email] Appointment " + notification.type + " notice failed: " + error.message);
+    return fail("The email provider could not send the appointment notice.");
   }
 }

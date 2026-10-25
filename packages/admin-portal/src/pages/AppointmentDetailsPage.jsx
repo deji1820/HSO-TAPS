@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { assignAppointmentProvider, checkInAppointment, getAppointment, getProviderOptions, updateAppointmentDecision } from "../services/api.js";
+import { assignAppointmentProvider, checkInAppointment, getAppointment, getAppointmentNotifications, getProviderOptions, retryAppointmentEmail, updateAppointmentDecision } from "../services/api.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/AppointmentDetails.css";
 
@@ -34,6 +34,10 @@ function Status({ value, group }) {
   return <span className={`appointment-badge appointment-badge--${group}-${value || "unknown"}`}>{label}</span>;
 }
 
+function notificationTypeLabel(type) {
+  return ({ booking_received: "Booking acknowledgment", decision_accepted: "Appointment accepted", decision_rejected: "Appointment rejected" })[type] || "Appointment email";
+}
+
 export default function AppointmentDetailsPage({ user }) {
   const { appointmentId } = useParams();
   const [appointment, setAppointment] = useState(null);
@@ -48,6 +52,10 @@ export default function AppointmentDetailsPage({ user }) {
   const [providerConfigured, setProviderConfigured] = useState(false);
   const [providerSchedule, setProviderSchedule] = useState(null);
   const [providerBusy, setProviderBusy] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [notificationsError, setNotificationsError] = useState("");
+  const [retryingNotificationId, setRetryingNotificationId] = useState("");
 
   const loadAppointment = useCallback(() => {
     let active = true;
@@ -63,6 +71,21 @@ export default function AppointmentDetailsPage({ user }) {
   }, [appointmentId]);
 
   useEffect(() => loadAppointment(), [loadAppointment]);
+
+  const loadNotifications = useCallback(async () => {
+    setNotificationsLoading(true);
+    setNotificationsError("");
+    try {
+      const result = await getAppointmentNotifications(appointmentId);
+      setNotifications(result.items || []);
+    } catch (requestError) {
+      setNotificationsError(requestError.response?.data?.message || "Could not load appointment email history.");
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, [appointmentId]);
+
+  useEffect(() => { loadNotifications(); }, [loadNotifications]);
 
   const canAssignProvider = ["nurse", "supervisor"].includes(normalizeRole(user?.role));
   useEffect(() => {
@@ -108,6 +131,23 @@ export default function AppointmentDetailsPage({ user }) {
     }
   }
 
+  async function retryEmail(notificationId) {
+    setRetryingNotificationId(notificationId);
+    setNotificationsError("");
+    try {
+      await retryAppointmentEmail(appointment._id, notificationId);
+      await loadNotifications();
+    } catch (requestError) {
+      if (requestError.response?.data?.notification) {
+        setNotifications((current) => current.map((item) => item._id === notificationId ? requestError.response.data.notification : item));
+      }
+      setNotificationsError(requestError.response?.data?.message || "Could not retry this email.");
+      await loadNotifications();
+    } finally {
+      setRetryingNotificationId("");
+    }
+  }
+
   async function markAsArrived() {
     setCheckInBusy(true);
     setCheckInNotice("");
@@ -133,6 +173,7 @@ export default function AppointmentDetailsPage({ user }) {
     try {
       const result = await updateAppointmentDecision(appointment._id, decisionStatus);
       setAppointment(result.appointment);
+      await loadNotifications();
       setDecisionNotice(result.notificationSent
         ? `Decision saved as ${decisionStatus}. The notification was sent to ${appointment.notificationEmail || patient?.email || "the patient's saved email"}.`
         : `Decision saved as ${decisionStatus}. ${result.notificationMessage || "The notification could not be sent."}`);
@@ -214,9 +255,11 @@ export default function AppointmentDetailsPage({ user }) {
             {appointment.status === "checked_in" && appointment.queueEntry?._id && <Link className="btn btn-outline btn-sm" to="/dashboard">Open live queue</Link>}
           </section>
 
-          <section className="appointment-detail-card" aria-labelledby="appointment-not-recorded-title">
-            <h2 id="appointment-not-recorded-title">Additional workflow information</h2>
-            <p className="appointment-detail-muted">Room assignments, general appointment event history, and email delivery logs are not currently stored on this appointment record, so they are not shown here.</p>
+          <section className="appointment-detail-card" aria-labelledby="appointment-email-title">
+            <div className="appointment-email-heading"><h2 id="appointment-email-title">Email Notifications</h2><button className="btn btn-outline btn-sm" type="button" onClick={loadNotifications} disabled={notificationsLoading}>{notificationsLoading ? "Refreshing…" : "Refresh"}</button></div>
+            {notificationsError && <p className="appointments-error" role="alert">{notificationsError}</p>}
+            {notificationsLoading ? <p className="appointment-detail-muted" role="status">Loading email history…</p> : notifications.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Email</th><th>Recipient</th><th>Attempted</th><th>Status</th><th>Attempts</th><th>Action</th></tr></thead><tbody>{notifications.map((notification) => <tr key={notification._id}><td><strong>{notificationTypeLabel(notification.type)}</strong><span className="appointment-cell-secondary">{notification.subject}</span></td><td>{valueOrDash(notification.recipient)}</td><td>{displayTimestamp(notification.attemptedAt || notification.queuedAt)}</td><td><Status value={notification.status} group="email" />{notification.failureReason && <span className="appointment-cell-secondary" title={notification.failureReason}>{notification.failureReason}</span>}</td><td>{notification.attempts || 0}</td><td>{notification.status === "failed" && notification.attempts < 4 && canAssignProvider ? <button className="btn btn-outline btn-sm" type="button" disabled={retryingNotificationId === notification._id} onClick={() => retryEmail(notification._id)}>{retryingNotificationId === notification._id ? "Retrying…" : "Retry"}</button> : "—"}</td></tr>)}</tbody></table></div> : <p className="appointment-detail-muted">No appointment emails have been recorded yet. Email history is available for notifications sent after this feature is deployed.</p>}
+            <p className="appointment-detail-muted">“Sent” means the email provider accepted the message. Delivery confirmation is not available from the configured email flow.</p>
           </section>
         </div>
         <aside className="appointment-detail-aside" aria-label="Appointment actions">
