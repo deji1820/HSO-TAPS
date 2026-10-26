@@ -87,7 +87,7 @@ export default function AppointmentDetailsPage({ user }) {
 
   useEffect(() => { loadNotifications(); }, [loadNotifications]);
 
-  const canAssignProvider = ["nurse", "supervisor"].includes(normalizeRole(user?.role));
+  const canAssignProvider = ["nurse", "supervisor", "staff"].includes(normalizeRole(user?.role));
   useEffect(() => {
     if (!appointment || !canAssignProvider || appointment.status !== "scheduled" || appointment.decisionStatus !== "accepted" || !["Medical Consultation", "Dental Consultation"].includes(appointment.serviceType)) {
       setProviderOptions([]);
