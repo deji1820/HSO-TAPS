@@ -49,6 +49,8 @@ const consultationRecordSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+consultationRecordSchema.index({ queueEntry: 1 }, { unique: true, partialFilterExpression: { queueEntry: { $type: "objectId" } } });
+
 export default mongoose.model("ConsultationRecord", consultationRecordSchema);
 
 

@@ -12,6 +12,7 @@ import AppointmentDetailsPage from "./pages/AppointmentDetailsPage.jsx";
 import ProviderSchedulesPage from "./pages/ProviderSchedulesPage.jsx";
 import ControlCenterPage from "./pages/ControlCenterPage.jsx";
 import NewMedicalRecordPage from "./pages/NewMedicalRecordPage.jsx";
+import MedicalWorkflowsPage from "./pages/MedicalWorkflowsPage.jsx";
 import { normalizeRole } from "./utils/roles.js";
 import MedicalDocumentsPage from "./pages/MedicalDocumentsPage.jsx";
 import InventoryPage from "./pages/InventoryPage.jsx";
@@ -73,6 +74,7 @@ export default function App() {
           </RoleRoute>
         }
       />
+      <Route path="/medical-workflows" element={<RoleRoute user={user} allowed={["nurse", "supervisor", "physician", "dentist"]}><MedicalWorkflowsPage user={user} /></RoleRoute>} />
       <Route
         path="/emr"
         element={

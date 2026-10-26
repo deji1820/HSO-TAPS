@@ -137,6 +137,13 @@ export async function submitDocument(req, res) {
     try {
       const declaration = JSON.parse(bytes.toString("utf8"));
       if (!declaration || typeof declaration !== "object" || Array.isArray(declaration)) throw new Error("Invalid form payload");
+      const dobText = String(declaration.dateOfBirth || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dobText)) throw new Error("Date of birth is required");
+      const [year, month, day] = dobText.split("-").map(Number);
+      const dob = new Date(Date.UTC(year, month - 1, day));
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      if (dob.getUTCFullYear() !== year || dob.getUTCMonth() !== month - 1 || dob.getUTCDate() !== day || dobText > today) throw new Error("Date of birth is invalid");
       storedBytes = healthDeclarationToPdf(declaration);
       storedContentType = "application/pdf";
       storedName = name.replace(/\.json$/i, ".pdf");

@@ -66,6 +66,7 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
 
   const student = entry.student || {};
   const vitals = entry.linkedVitals || {};
+  const initialRecordFields = Object.entries(entry.medicalWorkflow?.initialFields || {}).filter(([key, value]) => !["diagnosis", "treatment", "treatment_remarks"].includes(key) && String(value ?? "").trim());
 
   async function handleComplete() {
     setSaving(true);
@@ -131,7 +132,7 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
               <div><span className="field-label-inline">Name:</span> {student.lastName}, {student.firstName}</div>
               <div><span className="field-label-inline">Student ID:</span> {student.studentId}</div>
               <div><span className="field-label-inline">Program:</span> {student.program || "—"}</div>
-              <div><span className="field-label-inline">Age:</span> {student.age ?? "—"}</div>
+              <div><span className="field-label-inline">Date of Birth:</span> {student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : "—"}</div>
               <div><span className="field-label-inline">Sex:</span> {student.sex || "—"}</div>
               <div><span className="field-label-inline">Guardian's Contact:</span> {student.guardianContact || "—"}</div>
             </div>
@@ -182,6 +183,8 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
               </div>
             </div>
           </div>
+
+          {entry.medicalWorkflow && <section className="card" aria-label="New medical record intake"><h3 className="vitals-block-title">New Medical Record · Nurse Intake</h3><p>Purpose: {entry.medicalWorkflow.purpose}</p>{initialRecordFields.length ? <div className="patient-info-grid">{initialRecordFields.map(([key, value]) => <div key={key}><span className="field-label-inline">{key.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}:</span> {String(value)}</div>)}</div> : <p>No additional intake findings were entered.</p>}</section>}
 
           {entry.nursingAssessment && <section className="card" aria-label="Nursing handoff"><h3 className="vitals-block-title">Nursing assessment and handoff</h3><div className="vitals-rows">{entry.nursingAssessment.physicalExam && <p><strong>Physical examination:</strong> {entry.nursingAssessment.physicalExam}</p>}{entry.nursingAssessment.laboratoryExamination && <p><strong>Laboratory examination:</strong> {entry.nursingAssessment.laboratoryExamination}</p>}{entry.nursingAssessment.notes && <p><strong>Nursing notes:</strong> {entry.nursingAssessment.notes}</p>}</div></section>}
 
@@ -267,12 +270,13 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
           )}
 
           {error && <p className="error-text" style={{ marginTop: 12 }}>{error}</p>}
+          {tab === "clinical" && (!assessment.trim() || !plan.trim()) && <p className="field-hint">Enter the diagnosis or clinical assessment and the treatment plan before completing this consultation.</p>}
 
           <div className="active-session-actions">
             <button className="btn btn-outline" onClick={() => navigate(`/emr?studentId=${student.studentId}`)}>
               View Full EMR
             </button>
-            <button className="btn btn-primary" onClick={handleComplete} disabled={saving}>
+            <button className="btn btn-primary" onClick={handleComplete} disabled={saving || (tab === "clinical" && (!assessment.trim() || !plan.trim()))}>
               {saving ? "Saving…" : "Complete and Save Session"}
             </button>
           </div>

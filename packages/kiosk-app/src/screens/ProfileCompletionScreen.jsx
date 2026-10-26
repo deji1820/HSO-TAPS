@@ -2,9 +2,14 @@ import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
 import "../styles/screens/ProfileCompletion.css";
 
+function localDateInputValue() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function profileFrom(student) {
   return {
-    age: student?.age ?? "",
+    dateOfBirth: student?.dateOfBirth?.slice?.(0, 10) ?? "",
     sex: student?.sex ?? "",
     email: student?.email ?? "",
     program: student?.program ?? "",
@@ -27,7 +32,7 @@ export default function ProfileCompletionScreen({ student, mobile = false, isOnl
 
   async function submit(event) {
     event.preventDefault();
-    await onSave({ ...profile, age: Number(profile.age) });
+    await onSave(profile);
   }
 
   return (
@@ -45,8 +50,8 @@ export default function ProfileCompletionScreen({ student, mobile = false, isOnl
           </div>
 
           <div className="profile-fields-grid">
-            <label>Age <em>Required</em>
-              <input type="number" min="1" max="120" step="1" required value={profile.age} onChange={(event) => update("age", event.target.value)} />
+            <label>Date of birth <em>Required</em>
+              <input type="date" max={localDateInputValue()} required value={profile.dateOfBirth} onChange={(event) => update("dateOfBirth", event.target.value)} />
             </label>
             <label>Sex <em>Required</em>
               <select required value={profile.sex} onChange={(event) => update("sex", event.target.value)}>

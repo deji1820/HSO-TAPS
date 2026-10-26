@@ -11,6 +11,11 @@ const DOCUMENT_TYPES = [
   "Laboratory Test (CBC, urinalysis, lipid profile, etc.)",
   "Other",
 ];
+const DOCUMENT_SUBTYPES = {
+  [DOCUMENT_TYPES[0]]: ["Medical Certificate", "Medical Clearance"],
+  [DOCUMENT_TYPES[1]]: ["Chest X-ray", "ECG", "Ultrasound", "Other diagnostic test"],
+  [DOCUMENT_TYPES[2]]: ["Complete Blood Count (CBC)", "Urinalysis", "Fecalysis", "Lipid Profile", "Other laboratory test"],
+};
 const HEALTH_DECLARATION_TYPE = "Health Status Declaration Form";
 
 async function encodeFile(file) {
@@ -47,6 +52,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
   const [institutionalAffiliation, setInstitutionalAffiliation] = useState(initialStudent?.program || "");
   const [purpose, setPurpose] = useState("");
   const [documentType, setDocumentType] = useState("");
+  const [documentSubtype, setDocumentSubtype] = useState("");
   const [healthDeclaration, setHealthDeclaration] = useState(null);
   const [showHealthDeclaration, setShowHealthDeclaration] = useState(false);
   const [otherType, setOtherType] = useState("");
@@ -146,7 +152,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       setError("Enter a valid email address so we can send your submission status.");
       return;
     }
-    if (!fullName.trim() || !sex || !dateOfBirth || !institutionalAffiliation.trim() || !purpose || (!isHealthDeclaration && !documentType) || (!isHealthDeclaration && !examDate) || (documentType === "Other" && !otherType.trim())) {
+    if (!fullName.trim() || !sex || !dateOfBirth || !institutionalAffiliation.trim() || !purpose || (!isHealthDeclaration && !documentType) || (!isHealthDeclaration && !examDate) || (documentType !== "Other" && !documentSubtype) || (documentType === "Other" && !otherType.trim())) {
       setError("Complete all required identity and document details.");
       return;
     }
@@ -159,6 +165,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       fullName: fullName.trim(), sex, dateOfBirth, affiliation,
       institutionalAffiliation: institutionalAffiliation.trim(),
       studentOrEmployeeId: studentId.trim(), purpose, examDate,
+      documentKind: documentType === "Other" ? otherType.trim() : documentSubtype,
       privacyAccepted, mediaConsent, declarationAccepted,
     };
     try {
@@ -244,7 +251,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
             <label>Sex assigned at birth<select required value={sex} onChange={(event) => setSex(event.target.value)}><option value="">Select</option><option>Male</option><option>Female</option></select></label>
             <label>Date of birth<input required type="date" max={latestAllowedDateOfBirth} value={dateOfBirth} onChange={(event) => { setDateOfBirth(event.target.value); setError(""); }} /></label>
             <label>{affiliation === "Student" ? "Academic program / grade level" : "Department"}<input required value={institutionalAffiliation} onChange={(event) => setInstitutionalAffiliation(event.target.value)} /></label>
-            <label className="document-field-wide">Purpose<select required disabled={requirementsLoading || Boolean(requirementsError)} value={purpose} onChange={(event) => { const nextPurpose = event.target.value; setPurpose(nextPurpose); setDocumentType(""); setOtherType(""); setExamDate(""); setFiles([]); setHealthDeclaration(null); }}><option value="" disabled>Choose a purpose</option>{purposes.map((item) => <option key={item.purpose} value={item.purpose}>{item.purpose}</option>)}</select></label>
+            <label className="document-field-wide">Purpose<select required disabled={requirementsLoading || Boolean(requirementsError)} value={purpose} onChange={(event) => { const nextPurpose = event.target.value; setPurpose(nextPurpose); setDocumentType(""); setDocumentSubtype(""); setOtherType(""); setExamDate(""); setFiles([]); setHealthDeclaration(null); }}><option value="" disabled>Choose a purpose</option>{purposes.map((item) => <option key={item.purpose} value={item.purpose}>{item.purpose}</option>)}</select></label>
           </div>
           {requirementsLoading && <p className="document-progress" role="status">Loading HSO requirements…</p>}
           {requirementsError && <p className="document-error" role="alert">{requirementsError}</p>}
@@ -255,7 +262,8 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           <legend>2. {purpose === HEALTH_DECLARATION_TYPE ? "Health Status Declaration" : "Medical document details"}</legend>
           <div className="document-form-grid">
             {purpose === HEALTH_DECLARATION_TYPE ? <div className="document-field-wide"><p>Complete the health information on a separate page, then return here to submit it to your health record.</p><button type="button" onClick={() => setShowHealthDeclaration(true)}>{healthDeclaration ? "Review or edit health declaration" : "Proceed to Health Status Declaration Form"}</button>{healthDeclaration && <span className="document-verified">Form completed and ready to submit</span>}</div> : <>
-              <label>Document type<select required value={documentType} onChange={(event) => { setDocumentType(event.target.value); setHealthDeclaration(null); }}><option value="" disabled>Choose a document type</option>{DOCUMENT_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+              <label>Document category<select required value={documentType} onChange={(event) => { setDocumentType(event.target.value); setDocumentSubtype(""); setOtherType(""); setHealthDeclaration(null); }}><option value="" disabled>Choose a document type</option>{DOCUMENT_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+              {documentType && documentType !== "Other" && <label>Specific document / test<select required value={documentSubtype} onChange={(event) => setDocumentSubtype(event.target.value)}><option value="" disabled>Choose the specific document</option>{DOCUMENT_SUBTYPES[documentType].map((item) => <option key={item}>{item}</option>)}</select></label>}
               {documentType === "Other" && <label>Specify document type<input required value={otherType} onChange={(event) => setOtherType(event.target.value)} /></label>}
               <label>Date of examination, test, or issuance<input required type="date" value={examDate} onChange={(event) => setExamDate(event.target.value)} /></label>
               <label className="document-field-wide">Upload medical document(s)<input required type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={updateFiles} /><small>PDF, JPG, PNG, or DOCX. Name files LastName_FirstName. Up to 10 files. Current system limit: 12 MB per file.</small>{files.length > 0 && <span>{files.length} file(s) selected</span>}</label>

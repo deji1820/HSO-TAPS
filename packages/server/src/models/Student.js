@@ -14,7 +14,8 @@ const studentSchema = new mongoose.Schema(
     rfidTagUid: { type: String, unique: true, sparse: true, index: true },
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
-    age: Number,
+    dateOfBirth: Date,
+    age: Number, // Derived from dateOfBirth for compatibility with existing clinical records.
     sex: { type: String, enum: ["Male", "Female", "Other", "Prefer not to say"] },
     program: String, // e.g. "BS Information Technology"
     yearLevel: String, // e.g. "2nd Year"

@@ -46,6 +46,11 @@ const TREATMENT_NOTICE = "I/We hereby grant permission to the nurse, physician, 
 const TRAVEL_NOTICE = "Please declare any past medical advice against travel or health-related issues experienced during travel.";
 const DECLARATION_NOTICE = "I/We hereby declare and certify that all information disclosed is true and accurate to the best of my knowledge. I/We understand that I/we may be liable for disqualification for any false declaration or concealment of information. I/We hereby authorize National University Health Services to conduct examinations necessary for assessment.\n\nI/We fully understand that the Health Services Office has limited facilities to accommodate and attend to cases; thus, should I / my son / my daughter have a pre-existing condition, I/we shall provide an updated medical clearance and coordinate with the attending physician regarding activity limitations/precautions.\n\nFurthermore, I/We hereby give my consent to National University Health Services to release results/examinations to the authorized office if necessary.";
 
+function localDateInputValue() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function ageFromDate(date) {
   if (!date) return "";
   const birth = new Date(`${date}T00:00:00`);
@@ -53,7 +58,7 @@ function ageFromDate(date) {
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
-  return age > 0 ? String(age) : "";
+  return age >= 0 ? String(age) : "";
 }
 
 export default function HealthDeclarationFormScreen({ initialData, onBack, onComplete, isOnline }) {
@@ -61,7 +66,8 @@ export default function HealthDeclarationFormScreen({ initialData, onBack, onCom
     ...initialData,
     studentId: initialData.studentId || "",
     fullName: initialData.fullName || "",
-    age: initialData.age || ageFromDate(initialData.dateOfBirth),
+    dateOfBirth: initialData.dateOfBirth || "",
+    age: ageFromDate(initialData.dateOfBirth),
     sexAssignedAtBirth: initialData.sexAssignedAtBirth || initialData.sex || "",
     religion: "",
     homeAddress: "",
@@ -100,6 +106,10 @@ export default function HealthDeclarationFormScreen({ initialData, onBack, onCom
 
   function submit(event) {
     event.preventDefault();
+    if (!form.dateOfBirth || form.dateOfBirth > localDateInputValue()) {
+      setError("Enter a valid date of birth that is not in the future.");
+      return;
+    }
     if (form.medicalConditions.length === 0) {
       setError("Select a medical history option. Choose Not Applicable if none of the conditions apply.");
       return;
@@ -109,7 +119,7 @@ export default function HealthDeclarationFormScreen({ initialData, onBack, onCom
       return;
     }
     setError("");
-    onComplete({ ...form, submittedAt: new Date().toISOString() });
+    onComplete({ ...form, age: Number(ageFromDate(form.dateOfBirth)), submittedAt: new Date().toISOString() });
   }
 
   const field = (label, name, props = {}) => <label className="health-declaration-field">{label}<input value={form[name]} onChange={(event) => update(name, event.target.value)} {...props} /></label>;
@@ -129,7 +139,7 @@ export default function HealthDeclarationFormScreen({ initialData, onBack, onCom
           <div className="health-declaration-grid">
             {field("Student ID Number", "studentId", { required: true, readOnly: true, placeholder: "2026-*******" })}
             {field("Full Name (Last Name, First Name, Middle Initial)", "fullName", { required: true })}
-            {field("Age", "age", { required: true, type: "number", min: 1, step: 1 })}
+            <label className="health-declaration-field">Date of Birth<input required type="date" max={localDateInputValue()} value={form.dateOfBirth} onChange={(event) => update("dateOfBirth", event.target.value)} /></label>
             <label className="health-declaration-field">Sex Assigned at Birth<select required value={form.sexAssignedAtBirth} onChange={(event) => update("sexAssignedAtBirth", event.target.value)}><option value="">Select</option><option>Male</option><option>Female</option></select></label>
             <label className="health-declaration-field">Religion<select required value={form.religion} onChange={(event) => update("religion", event.target.value)}><option value="">Select</option>{RELIGIONS.map((religion) => <option key={religion}>{religion}</option>)}</select></label>
             <label className="health-declaration-field health-declaration-wide">Home Address<textarea required rows={2} value={form.homeAddress} onChange={(event) => update("homeAddress", event.target.value)} placeholder="Complete street address, city, province" /></label>

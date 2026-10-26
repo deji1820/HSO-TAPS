@@ -42,7 +42,7 @@ const KIOSK_IDLE_PROMPT_MS = 60_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
 const standaloneDocumentSubmission = new URLSearchParams(window.location.search).get("documentSubmission") === "1";
 function hasCompleteProfile(person) {
-  const baseComplete = Number.isInteger(Number(person?.age)) && Number(person.age) > 0
+  const baseComplete = Boolean(person?.dateOfBirth)
     && Boolean(person?.sex && person?.email && person?.guardianContact);
   return person?.affiliation === "Employee"
     ? baseComplete && Boolean(person?.department)

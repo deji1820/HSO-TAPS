@@ -51,8 +51,9 @@ export default function NursingAssessmentModal({ entry, onClose, onRouted, onSav
         <textarea id="nursing-lab" className="text-input" rows={4} value={laboratoryExamination} onChange={(event) => setLaboratoryExamination(event.target.value)} />
         <label className="field-label" htmlFor="nursing-notes">Nursing notes / handoff</label>
         <textarea id="nursing-notes" className="text-input" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        {!(physicalExam.trim() || laboratoryExamination.trim()) && <p className="field-hint">Record a physical or laboratory examination before routing to the provider. Notes alone do not complete the initial assessment.</p>}
         {error && <p className="error-text" role="alert">{error}</p>}
-        <div className="active-session-actions"><button className="btn btn-outline" onClick={saveDraft} disabled={saving}>{saving ? "Saving…" : "Save draft"}</button><button className="btn btn-primary" disabled={saving || !(physicalExam.trim() || laboratoryExamination.trim() || notes.trim())} onClick={routeToProvider}>{saving ? "Saving…" : "Save and route to provider"}</button></div>
+        <div className="active-session-actions"><button className="btn btn-outline" onClick={saveDraft} disabled={saving}>{saving ? "Saving…" : "Save draft"}</button><button className="btn btn-primary" disabled={saving || !(physicalExam.trim() || laboratoryExamination.trim())} onClick={routeToProvider}>{saving ? "Saving…" : "Save and route to provider"}</button></div>
       </div>
     </section>
   </div>;

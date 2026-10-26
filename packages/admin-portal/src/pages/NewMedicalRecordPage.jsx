@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { getClearanceRequirements, getStudents, saveMedicalProfile } from "../services/api.js";
+import { getClearanceRequirements, getStudents, saveMedicalProfile, startMedicalWorkflow } from "../services/api.js";
 import useMedicineInventory, { inventoryItemLabel, isInventoryItemUnavailable } from "../hooks/useMedicineInventory.js";
 import "../styles/pages/NewMedicalRecord.css";
 
 const PURPOSES = ["Medical Consultation", "Dental Consultation", "Prescription & Medicine", "Medical Clearance"];
 const EXAM_FIELDS = ["Height (cm)", "Weight (kg)", "Abdomen", "Ears", "Eyes, Pupils", "Heart", "Lungs", "Nose", "Skin", "Thorax", "Extremities", "Deformities"];
+function newRequestKey() { return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 function fieldKey(label) { return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""); }
 function patientAffiliation(person) {
   return person?.affiliation || person?.occupation || person?.patientType || person?.userType || (person?.employeeId ? "Employee" : "Student");
@@ -25,6 +26,8 @@ export default function NewMedicalRecordPage() {
   const [saveNotice, setSaveNotice] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [startedWorkflow, setStartedWorkflow] = useState(null);
+  const submissionKey = useRef(newRequestKey());
   const [clearanceRequirements, setClearanceRequirements] = useState([]);
   const [clearanceRequirementsLoading, setClearanceRequirementsLoading] = useState(true);
   const [clearanceRequirementsError, setClearanceRequirementsError] = useState("");
@@ -64,10 +67,15 @@ export default function NewMedicalRecordPage() {
     setSaving(true);
     setSaveError("");
     try {
-      await saveMedicalProfile(student._id, { purpose, provider: user.name || "", physicalExamIncluded: physicalOn, laboratoryExamIncluded: labOn, fields, examinedAt: new Date().toISOString() });
+      if (["Medical Consultation", "Dental Consultation", "Medical Clearance"].includes(purpose)) {
+        const workflow = await startMedicalWorkflow(student._id, { service: purpose, purpose: purpose === "Medical Clearance" ? clearancePurpose : fields.visit_purpose || purpose, fields, physicalExamIncluded: physicalOn, laboratoryExamIncluded: labOn, requestKey: submissionKey.current });
+        setStartedWorkflow(workflow);
+      } else {
+        await saveMedicalProfile(student._id, { purpose, provider: user.name || "", physicalExamIncluded: physicalOn, laboratoryExamIncluded: labOn, fields, examinedAt: new Date().toISOString() });
+      }
       setSaveNotice(true);
-    } catch {
-      setSaveError("Could not save this medical profile. Check the server connection and try again.");
+    } catch (error) {
+      setSaveError(error.response?.data?.message || "Could not save this medical profile. Check the server connection and try again.");
     } finally { setSaving(false); }
   }
 
@@ -75,10 +83,10 @@ export default function NewMedicalRecordPage() {
     <header className="new-record-heading"><h1>New Medical Record</h1><Link to="/dashboard">⌂ &gt;&gt; Dashboard</Link></header>
     {!showForm ? <Section title="Patient and Visit Details">
       <div className="new-record-grid">
-        <label>Patient Name<input className="text-input" value={student ? `${student.firstName} ${student.lastName}` : query} onChange={(event) => { setStudent(null); setQuery(event.target.value); }} placeholder="Search student name or ID" /></label>
+        <label>Patient Name<input className="text-input" value={student ? `${student.firstName} ${student.lastName}` : query} onChange={(event) => { submissionKey.current = newRequestKey(); setSaveNotice(false); setStartedWorkflow(null); setStudent(null); setQuery(event.target.value); }} placeholder="Search student name or ID" /></label>
         <label>Patient Type<select className="text-input" value={student ? clearanceAffiliation : "Student"} disabled><option>Student</option><option>Employee</option></select></label>
-        {matches.length > 0 && <div className="student-suggestions">{matches.map((candidate) => <button type="button" key={candidate._id} onClick={() => { setStudent(candidate); setQuery(`${candidate.firstName} ${candidate.lastName}`); setMatches([]); }}>{candidate.firstName} {candidate.lastName} <small>({candidate.studentId})</small></button>)}</div>}
-        <label>Purpose<select className="text-input" value={purpose} onChange={(event) => setPurpose(event.target.value)}><option value="">Select purpose</option>{PURPOSES.map((item) => <option key={item}>{item}</option>)}</select></label>
+        {matches.length > 0 && <div className="student-suggestions">{matches.map((candidate) => <button type="button" key={candidate._id} onClick={() => { submissionKey.current = newRequestKey(); setSaveNotice(false); setStartedWorkflow(null); setStudent(candidate); setQuery(`${candidate.firstName} ${candidate.lastName}`); setMatches([]); }}>{candidate.firstName} {candidate.lastName} <small>({candidate.studentId})</small></button>)}</div>}
+        <label>Purpose<select className="text-input" value={purpose} onChange={(event) => { submissionKey.current = newRequestKey(); setSaveNotice(false); setStartedWorkflow(null); setPurpose(event.target.value); }}><option value="">Select purpose</option>{PURPOSES.map((item) => <option key={item}>{item}</option>)}</select></label>
       </div>
       <div className="record-footer-actions"><Link className="btn btn-outline" to="/dashboard">&lt;&lt; Back</Link><button className="btn btn-primary" onClick={proceed} disabled={!student || !purpose}>Proceed &gt;&gt;</button></div>
       {!student && query.length > 1 && matches.length === 0 && <p className="record-hint">Choose a matching student from the search results to continue.</p>}
@@ -93,9 +101,9 @@ export default function NewMedicalRecordPage() {
         <Section title="Medical Result"><div className="result-fields"><label>Findings<input name="medical_findings" className="text-input" /></label><label>Diagnosis<select name="diagnosis" className="text-input"><option value="">Select diagnosis</option><option>Pending assessment</option></select></label><label>Treatment / Remarks<textarea name="treatment_remarks" className="text-input" rows={2} /></label><label>Medicine Issued<select name="medicine_issued" className="text-input"><option value="">{inventoryLoading ? "Loading inventory…" : "Select medicine"}</option>{inventoryItems.map((item) => <option key={item._id} value={item.name} disabled={isInventoryItemUnavailable(item)}>{inventoryItemLabel(item)}</option>)}</select>{inventoryError && <small className="error-text">{inventoryError}</small>}{!inventoryLoading && !inventoryItems.length && <small className="record-hint">No active inventory items are available.</small>}</label></div></Section>
       </>}
       </div>
-      {saveNotice && <p className="record-save-notice" role="status">Medical profile saved. It will appear in this student's EMR history.</p>}
+      {saveNotice && <div className="record-save-notice" role="status">{startedWorkflow ? <>{purpose === "Medical Clearance" ? "Clearance workflow started. Complete the assessment and requirement checks before provider approval." : `${purpose} added to the clinical queue; the nurse and ${purpose === "Dental Consultation" ? "dentist" : "physician"} workflow must be completed there.`} <Link to={`/medical-workflows?workflowId=${startedWorkflow._id}`}>Open workflow</Link> · <Link to="/medical-workflows">View all workflows</Link></> : "Medical profile saved. It will appear in this patient's EMR history."}</div>}
       {saveError && <p className="error-text" role="alert">{saveError}</p>}
-      <div className="record-footer-actions"><Link className="btn btn-primary" to={`/emr?studentId=${student.studentId}`}>Full EMR</Link><Link className="btn btn-danger" to="/dashboard">Cancel</Link><button type="button" className="btn btn-success" onClick={saveRecord} disabled={saving || (purpose === "Medical Clearance" && (!selectedClearance || clearanceRequirementsLoading || Boolean(clearanceRequirementsError)))}>{saving ? "Saving…" : "Save"}</button></div>
+      <div className="record-footer-actions"><Link className="btn btn-primary" to={`/emr?studentId=${student.studentId}`}>Full EMR</Link><Link className="btn btn-danger" to="/dashboard">Cancel</Link><button type="button" className="btn btn-success" onClick={saveRecord} disabled={saving || saveNotice || (purpose === "Medical Clearance" && (!selectedClearance || clearanceRequirementsLoading || Boolean(clearanceRequirementsError)))}>{saving ? "Saving…" : saveNotice ? "Saved" : "Save"}</button></div>
     </>}
   </main>;
 }

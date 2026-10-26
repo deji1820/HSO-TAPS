@@ -58,7 +58,7 @@ function sectionsFor(payload) {
   const rows = [
     section("1. Personal Information", [
       ["Student ID Number", payload.studentId], ["Full Name (Last Name, First Name, Middle Initial)", payload.fullName],
-      ["Age", payload.age], ["Sex Assigned at Birth", payload.sexAssignedAtBirth], ["Religion", payload.religion],
+      ["Date of Birth", payload.dateOfBirth || (payload.age != null ? `Age ${payload.age} (legacy record)` : "")], ["Sex Assigned at Birth", payload.sexAssignedAtBirth], ["Religion", payload.religion],
       ["Home Address", payload.homeAddress], ["Degree Program / Strand", payload.degreeProgram],
       ["Student Mobile Number", payload.studentMobileNumber], ["Entry Status", payload.entryStatus],
       ["Academic Year", payload.academicYear], ["Term", payload.term], ["Parent / Guardian's Name", payload.parentGuardianName],

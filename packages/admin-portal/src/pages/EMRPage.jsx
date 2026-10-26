@@ -249,6 +249,8 @@ function MedicalProfileSections({ entry, vitals = [], editable = false, onFieldC
   const latestVitals = vitals[0] || {};
   const profileField = (key, label, fallback = "") => <ProfileValue key={key} label={label} value={fields[key] ?? fallback} editable={editable} name={key} onChange={onFieldChange} />;
   return <div className="emr-profile-sections">
+    {fields.nursingAssessment && <section className="emr-profile-section"><h3>Nursing Assessment and Handoff</h3><div className="emr-profile-fields"><ProfileValue label="Physical Examination" value={fields.nursingAssessment.physicalExam} /><ProfileValue label="Laboratory Examination" value={fields.nursingAssessment.laboratoryExamination} /><ProfileValue label="Nursing Notes" value={fields.nursingAssessment.notes} /><ProfileValue label="Recorded At" value={fields.nursingAssessment.recordedAt ? formatDate(fields.nursingAssessment.recordedAt) : ""} /></div></section>}
+    {fields.clearancePurpose && <section className="emr-profile-section emr-clearance-profile"><h3>Medical Clearance</h3><div className="emr-profile-fields"><ProfileValue label="Clearance Purpose" value={fields.clearancePurpose} /><ProfileValue label="Provider Determination" value={fields.providerStatement} /><ProfileValue label="Approved By" value={`${fields.providerRole || "Provider"} - ${entry.provider || ""}`} /><ProfileValue label="Clearance Assessment" value={[fields.clearanceAssessment?.physicalExam, fields.clearanceAssessment?.laboratoryExamination, fields.clearanceAssessment?.notes].filter(Boolean).join(" | ")} /></div><h4>Requirement Review</h4><ul>{(fields.requirementChecks || []).map((item, index) => <li key={`${item.text}-${index}`}>{item.text} - {item.status?.replaceAll("_", " ")}{item.evidence ? ` (${item.evidence})` : ""}</li>)}</ul></section>}
     <section className="emr-profile-section">
       <h3>Physical Examination</h3>
       <div className="emr-physical-layout">
@@ -278,7 +280,7 @@ function MedicalProfileSections({ entry, vitals = [], editable = false, onFieldC
       <div className="emr-profile-fields emr-result-fields">
         {profileField("medical_findings", "Findings")}
         {profileField("diagnosis", "Diagnosis")}
-        {profileField("treatment_remarks", "Treatment / Remarks")}
+        {profileField("treatment_remarks", "Treatment / Remarks", fields.treatment || fields.providerStatement || "")}
         {profileField("medicine_issued", "Medicine Issued")}
       </div>
     </section>
@@ -647,7 +649,7 @@ export default function EMRPage() {
               <div><span className="field-label-inline">Official Email:</span> {patientEmail(record.student)}</div>
               <div><span className="field-label-inline">Year Level:</span> {record.student.yearLevel || "—"}</div>
               <div><span className="field-label-inline">School Year:</span> {record.student.schoolYear || "—"}</div>
-              <div><span className="field-label-inline">Age:</span> {record.student.age ?? "—"}</div>
+              <div><span className="field-label-inline">Date of Birth:</span> {record.student.dateOfBirth ? new Date(record.student.dateOfBirth).toLocaleDateString() : "—"}</div>
               <div><span className="field-label-inline">Sex:</span> {record.student.sex || "—"}</div>
               <div><span className="field-label-inline">Guardian Contact:</span> {record.student.guardianContact || "—"}</div>
             </div><p className="page-subtitle">Profile data is sourced from the student master-data import.</p></div>}

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import QueueEntry from "../models/QueueEntry.js";
+import MedicalWorkflow from "../models/MedicalWorkflow.js";
 
 const router = Router();
 const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -41,7 +42,7 @@ router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "de
   let query = QueueEntry.find(queryFilter)
     .populate("student", "studentId firstName lastName program department")
     .sort({ createdAt: 1 });
-  if (clinicalRole) query = query.populate("linkedVitals");
+  if (clinicalRole) query = query.populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded");
   const entries = await query;
   if (clinicalRole) return res.json(entries);
   res.json(entries.map((entry) => {
@@ -86,7 +87,7 @@ router.get("/history", requireAuth, requireRole("nurse", "supervisor", "physicia
     .sort({ createdAt: -1 })
     .skip((page - 1) * pageSize)
     .limit(pageSize);
-  if (clinicalRole) entriesQuery = entriesQuery.populate("linkedVitals");
+  if (clinicalRole) entriesQuery = entriesQuery.populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded");
   const [total, entries] = await Promise.all([
     QueueEntry.countDocuments(match),
     entriesQuery,
@@ -128,7 +129,7 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
       recordedBy: req.user.id,
       recordedAt: new Date(),
     };
-    const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: "in_session" }, { nursingAssessment }, { new: true }).populate("student").populate("linkedVitals");
+    const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: "in_session" }, { nursingAssessment }, { new: true }).populate("student").populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded");
     if (!entry) return res.status(409).json({ message: "This queue entry has already changed" });
     io?.to("clinical-queue").emit("queue:update", entry);
     io?.to("frontdesk-queue").emit("queue:update", { _id: entry._id, status: entry.status, calledAt: entry.calledAt, startedAt: entry.startedAt, completedAt: entry.completedAt });
@@ -149,13 +150,19 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
     const physicalExam = String(assessment.physicalExam || "").trim().slice(0, 4000);
     const laboratoryExamination = String(assessment.laboratoryExamination || "").trim().slice(0, 4000);
     const notes = String(assessment.notes || "").trim().slice(0, 4000);
-    if (!physicalExam && !laboratoryExamination && !notes) {
-      return res.status(400).json({ message: "Save the nursing examination or assessment notes before routing to the provider." });
+    if (!physicalExam && !laboratoryExamination) {
+      return res.status(400).json({ message: "Record a physical or laboratory examination before routing the patient to a provider." });
     }
     update.nursingAssessment = { physicalExam, laboratoryExamination, notes, recordedBy: req.user.id, recordedAt: new Date() };
   }
-  const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: current.status }, update, { new: true }).populate("student").populate("linkedVitals");
+  const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: current.status }, update, { new: true }).populate("student").populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded");
   if (!entry) return res.status(409).json({ message: "This queue entry has already changed" });
+  const workflow = await MedicalWorkflow.findOne({ queueEntry: entry._id });
+  if (workflow) {
+    workflow.status = status === "cancelled" ? "cancelled" : ["awaiting_provider", "provider_in_session"].includes(status) ? "provider_review" : status === "in_session" ? "assessment" : "queued";
+    workflow.events.push({ type: "queue", description: `Clinical queue advanced to ${status.replaceAll("_", " ")}.`, actor: req.user.id, at: new Date() });
+    await workflow.save();
+  }
   io?.to("clinical-queue").emit("queue:update", entry);
   io?.to("frontdesk-queue").emit("queue:update", { _id: entry._id, status: entry.status, calledAt: entry.calledAt, startedAt: entry.startedAt, completedAt: entry.completedAt });
   if (isNurse || isProvider) return res.json(entry);

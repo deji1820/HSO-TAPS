@@ -61,7 +61,7 @@ export async function resetRosterProfile(req, res) {
   const person = await findRosterPerson(req.params.personId);
   if (!person) return res.status(404).json({ message: "Roster record not found." });
   if (person.isActive === false) return res.status(409).json({ message: "This roster record is archived. Restore it before resetting the profile." });
-  for (const field of ["rfidTagUid", "age", "sex", "program", "department", "yearLevel", "guardianContact", "email", "schoolYear"]) {
+  for (const field of ["rfidTagUid", "age", "dateOfBirth", "sex", "program", "department", "yearLevel", "guardianContact", "email", "schoolYear"]) {
     person[field] = undefined;
   }
   await person.save();
@@ -144,10 +144,21 @@ export async function completeKioskProfile(req, res) {
   const person = await Student.findOne({ $or: [{ studentId: personId }, { employeeId: personId }], isActive: true });
   if (!person) return res.status(404).json({ message: "Student or employee record not found." });
 
-  const { age, sex, email, program, yearLevel, department, guardianContact, schoolYear } = req.body || {};
-  const parsedAge = Number(age);
+  const { dateOfBirth, sex, email, program, yearLevel, department, guardianContact, schoolYear } = req.body || {};
+  const dob = String(dateOfBirth || "").trim();
+  const today = new Date();
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || dob > todayString || dob < `${today.getFullYear() - 120}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`) {
+    return res.status(400).json({ message: "Enter a valid date of birth within the last 120 years." });
+  }
+  const [birthYear, birthMonth, birthDay] = dob.split("-").map(Number);
+  const birthDate = new Date(Date.UTC(birthYear, birthMonth - 1, birthDay));
+  if (birthDate.getUTCFullYear() !== birthYear || birthDate.getUTCMonth() !== birthMonth - 1 || birthDate.getUTCDate() !== birthDay) {
+    return res.status(400).json({ message: "Enter a valid date of birth." });
+  }
+  let parsedAge = today.getFullYear() - birthYear;
+  if (today.getMonth() + 1 < birthMonth || (today.getMonth() + 1 === birthMonth && today.getDate() < birthDay)) parsedAge -= 1;
   const allowedSex = ["Male", "Female", "Other", "Prefer not to say"];
-  if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) return res.status(400).json({ message: "Enter a valid age." });
   if (!allowedSex.includes(sex)) return res.status(400).json({ message: "Select a valid sex option." });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim())) return res.status(400).json({ message: "Enter a valid email address." });
   if (!String(guardianContact || "").trim() || String(guardianContact).length > 40) return res.status(400).json({ message: "Enter a guardian or emergency contact number." });
@@ -156,6 +167,7 @@ export async function completeKioskProfile(req, res) {
     return res.status(400).json({ message: "Program, year level, and school year are required for student profiles." });
   }
 
+  person.dateOfBirth = birthDate;
   person.age = parsedAge;
   person.sex = sex;
   person.email = String(email).trim().toLowerCase();
@@ -213,6 +225,18 @@ export async function bulkUpsertStudents(req, res) {
       if (!personId || !row.firstName || !row.lastName) throw new Error("ID, first name, and last name are required.");
       if (!["Student", "Employee"].includes(affiliation)) throw new Error("Affiliation must be Student or Employee.");
       const normalized = { ...row, studentId: personId, affiliation };
+      if (normalized.dateOfBirth) {
+        const dobText = String(normalized.dateOfBirth).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dobText)) throw new Error("Date of birth must use YYYY-MM-DD format.");
+        const [year, month, day] = dobText.split("-").map(Number);
+        const dob = new Date(Date.UTC(year, month - 1, day));
+        if (dob.getUTCFullYear() !== year || dob.getUTCMonth() !== month - 1 || dob.getUTCDate() !== day || dob > new Date()) throw new Error("Date of birth is invalid or in the future.");
+        const today = new Date();
+        let age = today.getFullYear() - year;
+        if (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day)) age--;
+        normalized.dateOfBirth = dob;
+        normalized.age = age;
+      }
       normalized.isActive = true;
       if (affiliation === "Employee") normalized.employeeId = personId;
       else delete normalized.employeeId;
@@ -225,7 +249,7 @@ export async function bulkUpsertStudents(req, res) {
         // A complete roster replacement clears profile fields omitted from the
         // import and unlinks any RFID card, while preserving the Mongo record
         // identity and separate clinical-history documents.
-        const profileFields = ["age", "sex", "program", "department", "yearLevel", "guardianContact", "schoolYear", "email"];
+        const profileFields = ["age", "dateOfBirth", "sex", "program", "department", "yearLevel", "guardianContact", "schoolYear", "email"];
         const unset = { rfidTagUid: 1 };
         delete normalized.rfidTagUid;
         for (const field of profileFields) {

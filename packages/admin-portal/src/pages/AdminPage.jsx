@@ -52,7 +52,7 @@ function parseCsv(text) {
 
 // Roster fields accepted for both students and employees.
 const EXPECTED_COLUMNS = [
-  "affiliation", "studentId", "employeeId", "firstName", "lastName", "age", "sex",
+  "affiliation", "studentId", "employeeId", "firstName", "lastName", "dateOfBirth", "sex",
   "program", "department", "yearLevel", "guardianContact", "schoolYear", "email",
 ];
 

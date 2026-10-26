@@ -45,7 +45,7 @@ export default function MedicalDocumentsPage() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = "";
       for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      const created = await uploadMedicalDocument(patient._id, { title: form.get("title"), category: form.get("category"), notificationEmail: form.get("notificationEmail"), name: file.name, contentType: file.type || "application/octet-stream", fileData: btoa(binary) });
+      const created = await uploadMedicalDocument(patient._id, { title: form.get("title"), category: form.get("category"), examDate: form.get("examDate"), notificationEmail: form.get("notificationEmail"), name: file.name, contentType: file.type || "application/octet-stream", fileData: btoa(binary) });
       setFiles((current) => [created, ...current]);
       formElement.reset();
       setPatient(null);
@@ -79,6 +79,7 @@ export default function MedicalDocumentsPage() {
       <label className="field-label">Student school email (Outlook)<input className="text-input" name="notificationEmail" type="email" autoComplete="email" value={patient?.email || ""} onChange={(event) => setPatient((current) => current ? { ...current, email: event.target.value } : current)} required placeholder="student@school.edu" /></label>
       <label className="field-label">Document category<select className="text-input" name="category" required><option value="">Select a category</option><option>Medical certificate</option><option>Diagnostic test</option><option>Laboratory result</option><option>Other</option></select></label>
       <label className="field-label">Document title<input className="text-input" name="title" placeholder="Enter a short document title" required /></label>
+      <label className="field-label">Date of examination, test, or issuance<input className="text-input" name="examDate" type="date" max={new Date().toISOString().slice(0, 10)} required /></label>
       <label className="field-label">File<input className="text-input" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png" required /></label>
       <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Uploading…" : "Add Submission"}</button>
       {notice && <p role="status" className="page-subtitle">{notice}</p>}
