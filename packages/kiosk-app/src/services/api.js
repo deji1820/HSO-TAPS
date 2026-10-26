@@ -28,3 +28,4 @@ export const createAppointment = (payload) =>
 
 export const submitKioskDocument = (payload) =>
   api.post("/kiosk/documents", payload).then((r) => r.data);
+export const getHealthDeclarationStatus = (studentId) => api.get(`/kiosk/documents/health-declaration/${encodeURIComponent(studentId)}`).then((r) => r.data);

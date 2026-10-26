@@ -29,7 +29,7 @@ const queueEntrySchema = new mongoose.Schema(
     requestDetails: String, // full free-text request (e.g. Prescription/OTC or General Inquiry details) — `reason` above is just a short display label, this is the durable record staff read
     status: {
       type: String,
-      enum: ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session", "completed", "cancelled"],
+      enum: ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session", "completed", "cancelled", "expired"],
       default: "waiting",
     },
     linkedVitals: { type: mongoose.Schema.Types.ObjectId, ref: "VitalsLog" },
@@ -37,6 +37,13 @@ const queueEntrySchema = new mongoose.Schema(
     startedAt: Date,
     providerStartedAt: Date,
     completedAt: Date,
+    expiredAt: Date,
+    expiredReason: String,
+    expirationExempt: { type: Boolean, default: false, index: true },
+    expirationExemptionReason: String,
+    expirationExemptionBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    expirationExemptionAt: Date,
+    statusHistory: [{ from: String, to: String, actor: String, at: Date, reason: String }],
     nursingAssessment: {
       physicalExam: { type: String, maxlength: 4000 },
       laboratoryExamination: { type: String, maxlength: 4000 },
@@ -49,5 +56,6 @@ const queueEntrySchema = new mongoose.Schema(
 );
 
 queueEntrySchema.index({ appointment: 1 }, { unique: true, partialFilterExpression: { appointment: { $type: "objectId" } } });
+queueEntrySchema.index({ status: 1, serviceType: 1, createdAt: 1 });
 
 export default mongoose.model("QueueEntry", queueEntrySchema);

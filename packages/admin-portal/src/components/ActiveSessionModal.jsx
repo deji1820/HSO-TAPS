@@ -108,8 +108,8 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
 
       const { queueEntry } = await completeSession(payload);
       onCompleted(queueEntry);
-    } catch {
-      setError("Could not save this session. Check that the server is running and try again.");
+    } catch (saveError) {
+      setError(saveError.response?.data?.message || "Could not save this session to the patient's EMR. Nothing was marked complete; review the required fields and try again.");
     } finally {
       setSaving(false);
     }

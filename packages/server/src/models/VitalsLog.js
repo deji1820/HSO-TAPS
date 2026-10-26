@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 const vitalsLogSchema = new mongoose.Schema(
   {
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
+    queueEntry: { type: mongoose.Schema.Types.ObjectId, ref: "QueueEntry" },
     source: { type: String, enum: ["kiosk", "manual_staff_entry"], default: "kiosk" },
     temperatureC: Number,
     bloodPressure: String,
@@ -25,5 +26,7 @@ const vitalsLogSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+vitalsLogSchema.index({ queueEntry: 1 }, { unique: true, partialFilterExpression: { queueEntry: { $type: "objectId" } } });
 
 export default mongoose.model("VitalsLog", vitalsLogSchema);

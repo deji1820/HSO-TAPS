@@ -24,7 +24,7 @@ export default function IdentityVerificationScreen({ student, profileRequired = 
               <div><dt>Department:</dt><dd>{student?.department || student?.program || "—"}</dd></div>
             ) : <>
               <div><dt>Program:</dt><dd>{student?.program ?? "—"}</dd></div>
-              <div><dt>Year Level:</dt><dd>{student?.yearLevel ?? "—"}</dd></div>
+              <div><dt>Year Level:</dt><dd>{student?.displayYearLevel || student?.yearLevel || "—"}</dd></div>
             </>}
           </dl>
         </article>

@@ -125,3 +125,12 @@ In `packages/kiosk-app/src/services/supabase.js` and `HSO-TAP.ino`:
 
 - **Supabase URL**: `https://schwdhhqngrfjkhobwuo.supabase.co`
 - **Supabase Service Key**: Defined in `packages/kiosk-app/src/services/supabase.js`.
+# Health declaration and patient baseline migration
+
+Before deploying the server version that enforces one Health Status Declaration per patient, run the idempotent migration from `packages/server` with the production MongoDB connection configured:
+
+```sh
+npm run migrate:health-declarations
+```
+
+It preserves duplicate legacy submissions as ordinary historical document records, selects a patient's verified declaration when available (otherwise the earliest pending/rejected eligible declaration) as the canonical one-time record, synchronizes valid declaration data into the existing patient record, removes stored legacy age values, and creates the partial unique index. Review its reported duplicate counts before deploying. Set the current academic year in Admin → Academic Calendar after deployment (or configure `HSO_CURRENT_ACADEMIC_YEAR` as a fallback); year-level progression is not derived until a valid academic year is configured.

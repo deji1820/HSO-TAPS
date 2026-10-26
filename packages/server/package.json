@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "seed:test-users": "node scripts/seedTestUsers.js"
+    "seed:test-users": "node scripts/seedTestUsers.js",
+    "migrate:health-declarations": "node scripts/migrateHealthDeclarations.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

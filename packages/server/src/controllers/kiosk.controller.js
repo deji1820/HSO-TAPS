@@ -6,6 +6,7 @@ import { nextQueueNumber } from "../services/queueNumbering.service.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
 import { areDocumentNotificationsConfigured, sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
 import { findClearanceRequirement, findDocumentPurposeRequirement } from "../services/clearanceRequirements.js";
+import { applyDeclarationToPatient, declarationStatusLabel, declarationSubmissionAction, materialDeclarationChanges, normalizeDeclaration, validateDeclaration } from "../services/patientInformation.js";
 
 // Per HSO-TAP_SYSTEM_NOTES: Hypothermia < 35.5, Normal 35.5-37.5, Fever >= 37.8
 // (37.6-37.7 is undefined in the notes; treated as Normal here)
@@ -132,25 +133,98 @@ export async function submitDocument(req, res) {
   let storedBytes = bytes;
   let storedContentType = contentType;
   let storedName = name;
+  let declarationPayload = null;
   if (contentType === "application/json") {
     if (!/health status declaration/i.test(title)) return res.status(415).json({ message: "JSON uploads are only accepted for Health Status Declaration forms." });
     try {
-      const declaration = JSON.parse(bytes.toString("utf8"));
-      if (!declaration || typeof declaration !== "object" || Array.isArray(declaration)) throw new Error("Invalid form payload");
-      const dobText = String(declaration.dateOfBirth || "");
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dobText)) throw new Error("Date of birth is required");
-      const [year, month, day] = dobText.split("-").map(Number);
-      const dob = new Date(Date.UTC(year, month - 1, day));
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      if (dob.getUTCFullYear() !== year || dob.getUTCMonth() !== month - 1 || dob.getUTCDate() !== day || dobText > today) throw new Error("Date of birth is invalid");
-      storedBytes = healthDeclarationToPdf(declaration);
+      const parsedDeclaration = JSON.parse(bytes.toString("utf8"));
+      if (!parsedDeclaration || typeof parsedDeclaration !== "object" || Array.isArray(parsedDeclaration)) throw new Error("Invalid form payload");
+      const declaration = normalizeDeclaration(parsedDeclaration, student);
+      const validationError = validateDeclaration(declaration, student);
+      if (validationError) return res.status(400).json({ message: validationError });
+      declarationPayload = declaration;
+      storedBytes = healthDeclarationToPdf(declarationPayload);
       storedContentType = "application/pdf";
       storedName = name.replace(/\.json$/i, ".pdf");
       if (storedName === name) storedName = "Health_Status_Declaration.pdf";
     } catch {
       return res.status(400).json({ message: "The health declaration form data is invalid." });
     }
+  }
+
+  if (declarationPayload) {
+    const legacyDeclarationQuery = {
+      student: student._id,
+      $or: [
+        { recordType: "health_declaration" },
+        { documentTitle: /health status declaration/i },
+      ],
+    };
+    let document = await ExternalDocument.findOne({ student: student._id, recordType: "health_declaration" }).sort({ submittedAt: 1, createdAt: 1 });
+    if (!document) document = await ExternalDocument.findOne({ ...legacyDeclarationQuery, recordType: { $ne: "health_declaration" } }).sort({ submittedAt: 1, createdAt: 1 });
+    const existingAction = declarationSubmissionAction(document?.status);
+    if (document && existingAction === "block") {
+      if (document.submissionDetails?.healthDeclaration) {
+        applyDeclarationToPatient(student, document.submissionDetails.healthDeclaration, document, document.status);
+        await student.save();
+      }
+      return res.status(409).json({
+        message: document.status === "Verified" ? "Your Health Status Declaration is already verified. The existing declaration is shown below." : "A Health Status Declaration is already awaiting verification. Please do not submit another copy.",
+        existing: { id: document._id, status: document.status, statusLabel: declarationStatusLabel(document.status), submittedAt: document.submittedAt, declaration: document.submissionDetails?.healthDeclaration || null },
+      });
+    }
+    const createdNew = !document;
+    const now = new Date();
+    if (document) {
+      document.recordType = "health_declaration";
+      const previousDeclaration = document.submissionDetails?.healthDeclaration || {};
+      document.declarationHistory.push({ declaration: previousDeclaration, changedFields: materialDeclarationChanges(previousDeclaration, declarationPayload), source: "patient_resubmission", at: now });
+      document.submissionDetails = { ...(document.submissionDetails || {}), healthDeclaration: declarationPayload };
+      document.fileData = storedBytes;
+      document.name = storedName;
+      document.contentType = storedContentType;
+      document.status = "Pending";
+      document.notificationEmail = notificationEmail;
+      document.examDate = new Date(examDate);
+      document.verificationHistory.push({ status: "Pending", remarks: "Patient resubmitted the rejected declaration for review.", at: now });
+      document.verifiedBy = undefined;
+      document.verifiedAt = undefined;
+      document.verificationRemarks = "";
+      try {
+        await document.save();
+      } catch (error) {
+        if (error?.name === "VersionError") return res.status(409).json({ message: "This declaration was submitted or updated in another request. Refresh to see its current status." });
+        throw error;
+      }
+    } else {
+      try {
+        document = await ExternalDocument.create({
+          student: student._id,
+          recordType: "health_declaration",
+          documentTitle: title,
+          formSource: "Kiosk Document Submission",
+          category,
+          name: storedName,
+          contentType: storedContentType,
+          fileData: storedBytes,
+          examDate: new Date(examDate),
+          submissionDetails: { ...(submissionDetails || {}), healthDeclaration: declarationPayload },
+          status: "Pending",
+          notificationEmail,
+          submittedAt: now,
+          declarationHistory: [{ declaration: declarationPayload, changedFields: Object.keys(declarationPayload), source: "patient_submission", at: now }],
+        });
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+        const existing = await ExternalDocument.findOne({ student: student._id, recordType: "health_declaration" }).sort({ submittedAt: 1, createdAt: 1 });
+        return res.status(409).json({ message: "A Health Status Declaration has already been submitted. Refresh to view its current status.", existing: existing ? { id: existing._id, status: existing.status, statusLabel: declarationStatusLabel(existing.status), submittedAt: existing.submittedAt, declaration: existing.submissionDetails?.healthDeclaration || null } : null });
+      }
+    }
+    applyDeclarationToPatient(student, declarationPayload, document, "Pending");
+    await student.save();
+    const notificationQueued = areDocumentNotificationsConfigured();
+    if (notificationQueued) void sendDocumentStatusNotification(document, "Pending", notificationEmail);
+    return res.status(createdNew ? 201 : 200).json({ id: document._id, status: document.status, statusLabel: declarationStatusLabel(document.status), notificationQueued });
   }
 
   const document = await ExternalDocument.create({
@@ -176,4 +250,19 @@ export async function submitDocument(req, res) {
     console.warn(`[Email] Pending notice not started for document ${document._id}: email settings are incomplete.`);
   }
   res.status(201).json({ id: document._id, name: document.name, category: document.category, status: document.status, notificationQueued, notificationMessage: notificationQueued ? undefined : "Email settings are incomplete on the server." });
+}
+
+export async function getHealthDeclarationStatus(req, res) {
+  const studentId = String(req.params.studentId || "").trim();
+  const student = await Student.findOne({ $or: [{ studentId }, { employeeId: studentId }, { rfidTagUid: studentId.toUpperCase() }], isActive: true });
+  if (!student) return res.status(404).json({ message: "Student or employee not found." });
+  let document = await ExternalDocument.findOne({ student: student._id, recordType: "health_declaration" }).sort({ submittedAt: 1, createdAt: 1 }).select("status submittedAt submissionDetails declarationHistory verificationRemarks verifiedAt");
+  if (!document) document = await ExternalDocument.findOne({ student: student._id, documentTitle: /health status declaration/i }).sort({ submittedAt: 1, createdAt: 1 }).select("status submittedAt submissionDetails declarationHistory verificationRemarks verifiedAt");
+  if (!document) return res.json({ status: "Not Submitted", statusLabel: "Not Submitted", declaration: null });
+  const declaration = document.submissionDetails?.healthDeclaration || null;
+  if (declaration) {
+    applyDeclarationToPatient(student, declaration, document, document.status);
+    await student.save();
+  }
+  return res.json({ id: document._id, status: document.status, statusLabel: declarationStatusLabel(document.status), submittedAt: document.submittedAt, verifiedAt: document.verifiedAt, verificationRemarks: document.verificationRemarks, declaration });
 }

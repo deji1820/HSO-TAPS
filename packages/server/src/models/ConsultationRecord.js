@@ -8,6 +8,8 @@ const consultationRecordSchema = new mongoose.Schema(
   {
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
     queueEntry: { type: mongoose.Schema.Types.ObjectId, ref: "QueueEntry" },
+    serviceType: String,
+    requestDetails: String,
     attendingStaff: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     visitType: {
       type: String,

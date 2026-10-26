@@ -17,6 +17,7 @@
 .appointment-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 9px; font-size: .76rem; font-weight: 700; white-space: nowrap; }
 .appointment-badge--scheduled, .appointment-badge--decision-accepted { background: var(--success-bg); color: var(--success); }
 .appointment-badge--checked_in { background: #e8f1ff; color: #174b89; }
+.appointment-badge--no_show { background: var(--warning-bg); color: #855900; }
 .appointment-badge--cancelled, .appointment-badge--decision-rejected { background: var(--danger-bg); color: var(--danger); }
 .appointment-badge--completed { background: #edf0f4; color: #44546a; }
 .appointment-badge--decision-pending { background: var(--warning-bg); color: #855900; }

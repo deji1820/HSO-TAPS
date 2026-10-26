@@ -27,7 +27,7 @@ export default function ConfirmScreen({ student, onConfirm, onNotMe, isOnline })
           </div>
           <div className="confirm-detail-row">
             <span className="confirm-detail-label">Year Level:</span>
-            <span className="confirm-detail-value">{student?.yearLevel ?? "—"}</span>
+            <span className="confirm-detail-value">{student?.displayYearLevel || student?.yearLevel || "—"}</span>
           </div>
         </div>
 

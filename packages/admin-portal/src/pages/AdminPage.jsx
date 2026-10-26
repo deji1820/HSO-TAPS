@@ -1,12 +1,15 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   archiveRosterRecord,
   bulkUpload,
   deleteRosterRecord,
+  getAcademicCalendar,
   getRosterRecord,
   resetRosterProfile,
   resetRosterRfid,
   restoreRosterRecord,
+  updateAcademicCalendar,
+  updateYearLevelOverride,
 } from "../services/api.js";
 import "../styles/pages/Admin.css";
 
@@ -77,8 +80,33 @@ export default function AdminPage() {
   const [rosterAction, setRosterAction] = useState(false);
   const [rosterError, setRosterError] = useState("");
   const [rosterNotice, setRosterNotice] = useState("");
+  const [academicYear, setAcademicYear] = useState("");
+  const [academicCalendarSource, setAcademicCalendarSource] = useState("unconfigured");
+  const [calendarSaving, setCalendarSaving] = useState(false);
+  const [calendarError, setCalendarError] = useState("");
+  const [calendarNotice, setCalendarNotice] = useState("");
   const fileInputRef = useRef(null);
   const unrecognizedHeaders = headers.filter((header) => !EXPECTED_COLUMNS.includes(header));
+
+  useEffect(() => {
+    getAcademicCalendar().then((calendar) => {
+      setAcademicYear(calendar.currentAcademicYear || "");
+      setAcademicCalendarSource(calendar.source || "unconfigured");
+    }).catch(() => setCalendarError("Could not load the academic calendar setting."));
+  }, []);
+
+  async function saveAcademicYear(event) {
+    event.preventDefault();
+    setCalendarSaving(true); setCalendarError(""); setCalendarNotice("");
+    try {
+      const saved = await updateAcademicCalendar(academicYear);
+      setAcademicYear(saved.currentAcademicYear);
+      setAcademicCalendarSource("database");
+      setCalendarNotice("Academic year saved. Expected year levels will recalculate on the next patient lookup or record refresh.");
+    } catch (saveError) {
+      setCalendarError(saveError.response?.data?.message || "Could not save the academic year.");
+    } finally { setCalendarSaving(false); }
+  }
 
   function processFile(file) {
     if (!file) return;
@@ -136,6 +164,23 @@ export default function AdminPage() {
     }
   }
 
+  async function editYearLevelOverride() {
+    if (!rosterRecord?.person || rosterRecord.person.affiliation !== "Student") return;
+    const next = window.prompt("Official year-level override (leave blank to use the cohort expectation):", rosterRecord.person.yearLevelOverride || "");
+    if (next === null) return;
+    const override = next.trim();
+    const reason = override ? window.prompt("Reason for this authorized override:", rosterRecord.person.yearLevelOverrideReason || "") : "";
+    if (override && reason === null) return;
+    try {
+      await updateYearLevelOverride(rosterRecord.person.personId, override, reason || "");
+      setRosterRecord(await getRosterRecord(rosterRecord.person.personId));
+      setRosterNotice(override ? "Year-level override saved." : "Year-level override removed.");
+      setRosterError("");
+    } catch (overrideError) {
+      setRosterError(overrideError.response?.data?.message || "Could not save the year-level override.");
+    }
+  }
+
   async function runRosterAction(action) {
     if (!rosterRecord || rosterAction) return;
     const person = rosterRecord.person;
@@ -184,6 +229,17 @@ export default function AdminPage() {
         </svg>
         <h1>Admin</h1>
       </div>
+
+      <h2 className="section-title">Academic Calendar</h2>
+      <section className="card roster-management" aria-label="Academic calendar configuration">
+        <p>Set the current academic year used to calculate expected student year levels from valid cohort years in student numbers. Student year-level overrides remain in effect.</p>
+        <form className="roster-search-form" onSubmit={saveAcademicYear}>
+          <label htmlFor="current-academic-year">Current academic year</label>
+          <div className="roster-search-row"><input id="current-academic-year" className="text-input" value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} placeholder="2026-2027" pattern="\\d{4}-\\d{4}" required /><button className="btn btn-primary" type="submit" disabled={calendarSaving}>{calendarSaving ? "Saving…" : "Save academic year"}</button></div>
+        </form>
+        <p className="page-subtitle">Source: {academicCalendarSource}. A year level is calculated only when a valid academic year and student number are available.</p>
+        {calendarError && <p className="error-text" role="alert">{calendarError}</p>}{calendarNotice && <p className="roster-notice" role="status">{calendarNotice}</p>}
+      </section>
 
       <h2 className="section-title">Upload Student &amp; Employee Master Data</h2>
 
@@ -334,9 +390,12 @@ export default function AdminPage() {
               <strong>{rosterRecord.person.firstName} {rosterRecord.person.lastName}</strong>
               <span>{rosterRecord.person.personId} · {rosterRecord.person.affiliation}</span>
               <span>{rosterRecord.person.isActive ? "Active record" : "Archived record"} · {rosterRecord.person.hasRfid ? "RFID linked" : "No RFID linked"}</span>
+              {rosterRecord.person.affiliation === "Student" && <span>Expected year level: {rosterRecord.person.expectedYearLevel || "Unavailable"} · Displayed: {rosterRecord.person.displayYearLevel || "Not assigned"}</span>}
+              {rosterRecord.person.yearLevelOverride && <span>Authorized override: {rosterRecord.person.yearLevelOverride} · {rosterRecord.person.yearLevelOverrideReason}</span>}
             </div>
             {rosterRecord.hasLinkedRecords && <p className="roster-history-note">This record has linked clinical history. Permanent deletion is disabled; archive it to remove it from the active roster.</p>}
             <div className="roster-actions">
+              {rosterRecord.person.affiliation === "Student" && <button className="btn btn-outline" type="button" disabled={rosterAction} onClick={editYearLevelOverride}>{rosterRecord.person.yearLevelOverride ? "Edit / remove year-level override" : "Set year-level override"}</button>}
               <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.isActive} onClick={() => runRosterAction("resetProfile")}>{rosterAction ? "Working…" : "Reset profile &amp; RFID"}</button>
               <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.hasRfid} onClick={() => runRosterAction("resetRfid")}>Reset RFID only</button>
               {rosterRecord.person.isActive

@@ -14,6 +14,7 @@ api.interceptors.request.use((config) => {
 
 export const login = (email, password) => api.post("/auth/login", { email, password }).then((r) => r.data);
 export const getQueue = () => api.get("/queue").then((r) => r.data);
+export const getQuickScreeningAlerts = () => api.get("/queue/screening-alerts").then((r) => r.data);
 export const getQueueHistory = ({ from = "", to = "", page = 1 } = {}) =>
   api.get("/queue/history", { params: { from: from || undefined, to: to || undefined, page } }).then((r) => r.data);
 export const getQueueBoard = () => api.get("/queue/board").then((r) => r.data);
@@ -29,7 +30,9 @@ export const disableProviderSchedule = (id) => api.patch(`/appointments/provider
 export const assignAppointmentProvider = (id, providerId) => api.patch(`/appointments/${encodeURIComponent(id)}/provider`, { providerId }).then((r) => r.data);
 export const checkInAppointment = (id) => api.post(`/appointments/${encodeURIComponent(id)}/check-in`).then((r) => r.data);
 export const updateAppointmentDecision = (id, decisionStatus) => api.patch("/appointments/" + id + "/decision", { decisionStatus }).then((r) => r.data);
+export const updateAppointmentNoShowException = (id, exempt, reason = "") => api.patch(`/appointments/${encodeURIComponent(id)}/no-show-exemption`, { exempt, reason }).then((r) => r.data);
 export const updateQueueStatus = (id, status, details = {}) => api.patch(`/queue/${id}/status`, { status, ...details }).then((r) => r.data);
+export const updateQueueExpirationExemption = (id, exempt, reason = "") => api.patch(`/queue/${encodeURIComponent(id)}/expiration-exemption`, { exempt, reason }).then((r) => r.data);
 export const completeSession = (payload) => api.post("/consultations", payload).then((r) => r.data);
 export const saveMedicalProfile = (id, payload) => api.post(`/students/${id}/medical-profiles`, payload).then((r) => r.data);
 export const startMedicalWorkflow = (id, payload) => api.post(`/students/${id}/medical-workflows`, payload).then((r) => r.data);
@@ -45,7 +48,8 @@ export const getPatientHistory = (id) => api.get(`/students/${id}/history`).then
 export const savePatientHistory = (id, payload) => api.put(`/students/${id}/history`, payload).then((r) => r.data);
 export const uploadMedicalDocument = (id, payload) => api.post(`/students/${id}/documents`, payload).then((r) => r.data);
 export const getMedicalDocuments = () => api.get("/documents").then((r) => r.data);
-export const updateMedicalDocumentStatus = (id, status) => api.patch(`/documents/${id}/status`, { status }).then((r) => r.data);
+export const updateMedicalDocumentStatus = (id, status, remarks) => api.patch(`/documents/${id}/status`, { status, remarks }).then((r) => r.data);
+export const updateHealthDeclaration = (id, declaration) => api.patch(`/documents/${encodeURIComponent(id)}/health-declaration`, { declaration }).then((r) => r.data);
 export const getMedicalDocumentFile = (id) => api.get(`/documents/${id}/file`, { responseType: "blob" }).then((r) => r.data);
 export const getAnnouncement = () => api.get("/announcement").then((r) => r.data);
 export const saveAnnouncement = (text) => api.put("/announcement", { text }).then((r) => r.data);
@@ -57,6 +61,9 @@ export const getStudents = (q) => api.get("/students", { params: { q } }).then((
 export const getFullEmr = (id) => api.get(`/students/${id}/emr`).then((r) => r.data);
 export const bulkUpload = (rows, mode) => api.post("/students/bulk-upload", { rows, mode }).then((r) => r.data);
 export const getRosterRecord = (personId) => api.get(`/students/roster/${encodeURIComponent(personId)}`).then((r) => r.data);
+export const getAcademicCalendar = () => api.get("/students/academic-calendar").then((r) => r.data);
+export const updateAcademicCalendar = (currentAcademicYear) => api.patch("/students/academic-calendar", { currentAcademicYear }).then((r) => r.data);
+export const updateYearLevelOverride = (personId, yearLevelOverride, reason = "") => api.patch(`/students/roster/${encodeURIComponent(personId)}/year-level-override`, { yearLevelOverride, reason }).then((r) => r.data);
 export const resetRosterRfid = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/rfid`).then((r) => r.data);
 export const resetRosterProfile = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/reset-profile`).then((r) => r.data);
 export const archiveRosterRecord = (personId) => api.patch(`/students/roster/${encodeURIComponent(personId)}/archive`).then((r) => r.data);

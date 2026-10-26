@@ -18,6 +18,7 @@ router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "de
 router.get("/:id", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), ctrl.getAppointment);
 router.post("/:id/check-in", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), ctrl.checkInAppointment);
 router.patch("/:id/provider", requireAuth, requireRole("nurse", "supervisor", "staff"), ctrl.assignAppointmentProvider);
+router.patch("/:id/no-show-exemption", requireAuth, requireRole("nurse", "supervisor"), ctrl.updateAppointmentNoShowException);
 router.patch("/:id/decision", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), ctrl.updateAppointmentDecision);
 
 export default router;

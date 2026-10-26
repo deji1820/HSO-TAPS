@@ -17,6 +17,7 @@ import Announcement from "../models/Announcement.js";
 import MedicineInventory from "../models/MedicineInventory.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
 import { areDocumentNotificationsConfigured, sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
+import { applyDeclarationToPatient, declarationRequiresReview, materialDeclarationChanges, normalizeDeclaration, validateDeclaration } from "../services/patientInformation.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -65,6 +66,9 @@ function hasUnresolvedRequirements(workflow) {
 function isWorkflowManagedPurpose(purpose) {
   return /clearance|consultation/i.test(String(purpose || ""));
 }
+function isHealthDeclarationDocument(document) {
+  return document?.recordType === "health_declaration" || (Boolean(document?.submissionDetails?.healthDeclaration) && /health status declaration/i.test(document?.documentTitle || ""));
+}
 
 router.get("/medical-workflows", requireWorkflowRole, async (_req, res) => {
   const workflows = await MedicalWorkflow.find().populate("student", "studentId affiliation firstName lastName department program").populate("queueEntry", "queueNumber status").populate("providerApproval.approvedBy", "name role").sort({ createdAt: -1 }).limit(100);
@@ -72,7 +76,7 @@ router.get("/medical-workflows", requireWorkflowRole, async (_req, res) => {
 });
 router.get("/medical-workflows/:id", requireWorkflowRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
-  const workflow = await MedicalWorkflow.findById(req.params.id).populate("student", "studentId affiliation firstName lastName department program email").populate("queueEntry", "queueNumber status nursingAssessment").populate("medicalProfile").populate("providerApproval.approvedBy", "name role").populate("events.actor", "name role");
+  const workflow = await MedicalWorkflow.findById(req.params.id).populate("student", "studentId affiliation firstName lastName department program email").populate("queueEntry", "queueNumber status nursingAssessment appointment").populate("medicalProfile").populate("medicalFile").populate("providerApproval.approvedBy", "name role").populate("events.actor", "name role");
   if (!workflow) return res.status(404).json({ message: "Medical workflow not found" });
   res.json(workflow);
 });
@@ -200,45 +204,78 @@ router.post("/medical-workflows/:id/approve", requireRole("physician"), async (r
     );
     if (!claimed) return res.status(409).json({ message: "This clearance is already being approved or has changed." });
   }
-  let profile = await MedicalProfile.findOne({ "fields.medicalWorkflowId": workflow._id });
-  const approvalDate = profile?.fields?.approvedAt ? new Date(profile.fields.approvedAt) : new Date();
-  try {
-    if (!profile) {
-      const student = await Student.findById(workflow.student).select("studentId");
-      if (!student) throw new Error("Patient record no longer exists.");
-      profile = await MedicalProfile.create({
-        student: workflow.student, studentId: student.studentId,
-        purpose: `Medical Clearance — ${workflow.purpose}`, provider: provider.name,
-        physicalExamIncluded: workflow.physicalExamIncluded, laboratoryExamIncluded: workflow.laboratoryExamIncluded,
-        fields: {
-          ...workflow.initialFields,
-          medicalWorkflowId: workflow._id,
-          clearancePurpose: workflow.purpose,
-          clearanceAssessment: workflow.assessment,
-          requirementChecks: workflow.requirements.map((item) => ({ text: item.text, status: item.status, evidence: item.evidence })),
-          providerStatement,
-          providerRole: provider.role,
-          approvedAt: approvalDate,
+  const existingCertificate = await ExternalDocument.findOne({ sourceWorkflow: workflow._id }).select("_id submittedAt");
+  const approvalDate = existingCertificate?.submittedAt || workflow.certificateIssuedAt || new Date();
+  const student = await Student.findById(workflow.student).select("studentId affiliation firstName lastName program department");
+  if (!student) return res.status(409).json({ message: "Patient record no longer exists; the clearance cannot be saved to Medical Files." });
+  const certificate = await ExternalDocument.findOneAndUpdate(
+    { sourceWorkflow: workflow._id },
+    { $setOnInsert: {
+      student: student._id,
+      recordType: "clearance_certificate",
+      sourceWorkflow: workflow._id,
+      documentTitle: `Medical Clearance Certificate — ${workflow.purpose}`,
+      formSource: "HSO Clearance Workflow",
+      category: "Medical Clearance Certificate",
+      status: "Issued",
+      submittedAt: approvalDate,
+      verificationHistory: [{ status: "Issued", remarks: "Issued after authorized provider approval and completion of required assessments and document verification.", actor: provider._id, at: approvalDate }],
+      verifiedBy: provider._id,
+      verifiedAt: approvalDate,
+      submissionDetails: {
+        clearance: {
+          workflowId: workflow._id,
+          purpose: workflow.purpose,
+          patient: { studentId: student.studentId, affiliation: student.affiliation, name: `${student.firstName} ${student.lastName}`, program: student.program, department: student.department },
+          assessment: workflow.assessment,
+          requirements: workflow.requirements.map((item) => ({ text: item.text, kind: item.kind, status: item.status, evidence: item.evidence, verifiedAt: item.verifiedAt, verifiedBy: item.verifiedBy })),
+          approval: { providerName: provider.name, providerRole: provider.role, providerId: provider._id, providerStatement, approvedAt: approvalDate },
+          certificateReference: String(workflow._id),
         },
-        examinedAt: approvalDate,
-      });
-    }
-  } catch (error) {
-    throw error;
-  }
+      },
+    } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+  );
+  if (!certificate) return res.status(500).json({ message: "The clearance certificate could not be saved to Medical Files. The workflow remains incomplete." });
   const approved = await MedicalWorkflow.findOneAndUpdate(
     { _id: workflow._id, status: "approval_in_progress", "providerApproval.approvedBy": provider._id },
-    { $set: { status: "approved", medicalProfile: profile._id, "providerApproval.approvedAt": approvalDate, certificateIssuedAt: approvalDate, certificateIssuedBy: provider._id }, $push: { events: { type: "approved", description: `Medical clearance approved by ${provider.name}; certificate issued.`, actor: provider._id, at: approvalDate } } },
+    { $set: { status: "approved", medicalFile: certificate._id, "providerApproval.approvedAt": approvalDate, certificateIssuedAt: approvalDate, certificateIssuedBy: provider._id }, $push: { events: { type: "approved", description: `Medical clearance approved by ${provider.name}; certificate saved to Full EMR Medical Files.`, actor: provider._id, at: approvalDate } } },
     { new: true }
   );
-  if (!approved) return res.status(409).json({ message: "The clearance approval state changed. Refresh and review the workflow." });
-  res.json(await approved.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalProfile"));
+  if (!approved) return res.status(409).json({ message: "The certificate was saved, but the approval state changed. Refresh and resume approval to finish the workflow." });
+  let queueCompletionWarning;
+  if (approved.queueEntry) {
+    const linkedQueue = await QueueEntry.findById(approved.queueEntry).select("status appointment");
+    if (linkedQueue && ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session"].includes(linkedQueue.status)) {
+      const completedAt = new Date();
+      const completedQueue = await QueueEntry.findOneAndUpdate(
+        { _id: linkedQueue._id, status: linkedQueue.status },
+        { $set: { status: "completed", completedAt }, $push: { statusHistory: { from: linkedQueue.status, to: "completed", actor: req.user.id, at: completedAt, reason: "Medical clearance approved and certificate saved to Medical Files." } } },
+        { new: true },
+      );
+      if (completedQueue) {
+        req.app.get("io")?.to("clinical-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
+        req.app.get("io")?.to("frontdesk-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
+        if (linkedQueue.appointment) {
+          const completedAppointment = await Appointment.findOneAndUpdate(
+            { _id: linkedQueue.appointment, queueEntry: completedQueue._id, status: "checked_in" },
+            { $set: { status: "completed" } },
+            { new: true },
+          ).select("_id status");
+          if (completedAppointment) req.app.get("io")?.emit("appointment:update", { _id: completedAppointment._id, status: completedAppointment.status, queueEntry: completedQueue._id });
+        }
+      } else queueCompletionWarning = "The clearance was saved and approved, but its queue entry changed. Please refresh the queue.";
+    }
+  }
+  const result = await approved.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile");
+  if (queueCompletionWarning) return res.status(200).json({ ...result.toObject(), queueCompletionWarning });
+  res.json(result);
 });
 router.get("/medical-workflows/:id/certificate", requireWorkflowRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
   const workflow = await MedicalWorkflow.findById(req.params.id).populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role");
   if (!workflow) return res.status(404).json({ message: "Medical workflow not found." });
-  if (workflow.service !== "Medical Clearance" || workflow.status !== "approved" || !workflow.certificateIssuedAt || !workflow.providerApproval?.approvedBy || !workflow.medicalProfile) return res.status(409).json({ message: "The certificate is unavailable until the record is saved and an authorized provider approves the completed clearance." });
+  if (workflow.service !== "Medical Clearance" || workflow.status !== "approved" || !workflow.certificateIssuedAt || !workflow.providerApproval?.approvedBy || !(workflow.medicalFile || workflow.medicalProfile)) return res.status(409).json({ message: "The certificate is unavailable until it is saved to the patient's EMR and an authorized provider approves the completed clearance." });
   res.json({ workflowId: workflow._id, purpose: workflow.purpose, issueDate: workflow.certificateIssuedAt, patient: workflow.student, provider: workflow.providerApproval, providerStatement: workflow.providerStatement });
 });
 
@@ -267,6 +304,8 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
   const { queueEntryId, visitType, secondaryVitals = {} } = req.body;
   const queueEntry = await QueueEntry.findById(queueEntryId).populate("student").populate("linkedVitals");
   if (!queueEntry) return res.status(404).json({ message: "Queue entry not found" });
+  const workflow = await MedicalWorkflow.findOne({ queueEntry: queueEntry._id });
+  if (queueEntry.serviceType === "Medical Clearance" || workflow?.service === "Medical Clearance") return res.status(409).json({ message: "Medical clearance sessions must be completed through assessment, requirement verification, provider approval, and certificate issuance." });
   const role = String(req.user.role || "").toLowerCase();
   const isConsultation = ["Medical Consultation", "Dental Consultation"].includes(queueEntry.serviceType);
   if (isConsultation) {
@@ -286,48 +325,88 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
   }
   const fields = ["bloodPressure", "pulseRate", "spo2"];
   const hasVitals = fields.some((field) => secondaryVitals[field] !== undefined && secondaryVitals[field] !== "");
-  if (hasVitals) await VitalsLog.create({ student: queueEntry.student._id, source: "manual_staff_entry", ...secondaryVitals });
+  if (hasVitals) await VitalsLog.findOneAndUpdate(
+    { queueEntry: queueEntry._id },
+    { $setOnInsert: { student: queueEntry.student._id, queueEntry: queueEntry._id, source: "manual_staff_entry", ...secondaryVitals } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+  );
   const { queueEntryId: _id, secondaryVitals: _vitals, ...recordFields } = req.body;
   const consultation = await ConsultationRecord.findOneAndUpdate(
     { queueEntry: queueEntry._id },
-    { $setOnInsert: {
-      ...recordFields, student: queueEntry.student._id, queueEntry: queueEntry._id,
-      attendingStaff: req.user.id, visitType,
+    { $set: {
+      subjective: String(recordFields.subjective || "").trim(),
+      objective: String(recordFields.objective || "").trim(),
+      assessment: String(recordFields.assessment || "").trim(),
+      plan: String(recordFields.plan || "").trim(),
+      otc: recordFields.otc || {},
+      firstAid: recordFields.firstAid || {},
+      safetyChecklist: recordFields.safetyChecklist || {},
+      sessionNotes: String(recordFields.sessionNotes || "").trim(),
+      natureOfInquiry: String(recordFields.natureOfInquiry || "").trim(),
+      inquiryResponse: String(recordFields.inquiryResponse || "").trim(),
+      serviceType: queueEntry.serviceType,
+      requestDetails: queueEntry.requestDetails || "",
+      student: queueEntry.student._id,
+      queueEntry: queueEntry._id,
+      attendingStaff: req.user.id,
+      visitType,
       vitalsSnapshot: { ...(queueEntry.linkedVitals?.toObject?.() || {}), ...secondaryVitals },
     } },
     { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
   );
-  queueEntry.status = "completed";
-  queueEntry.completedAt = new Date();
-  await queueEntry.save();
-  const workflow = await MedicalWorkflow.findOne({ queueEntry: queueEntry._id });
   if (workflow) {
     const attendingProvider = await User.findById(req.user.id).select("name");
-    const medicalProfile = await MedicalProfile.findOneAndUpdate(
-      { "fields.consultationRecordId": consultation._id },
-      { $setOnInsert: {
+    const profileFields = {
+      ...workflow.initialFields,
+      diagnosis: String(req.body.assessment || "").trim(),
+      treatment: String(req.body.plan || "").trim(),
+      visitType,
+      serviceType: queueEntry.serviceType,
+      requestDetails: queueEntry.requestDetails || "",
+      clinicalRecord: {
+        subjective: String(req.body.subjective || "").trim(),
+        objective: String(req.body.objective || "").trim(),
+        assessment: String(req.body.assessment || "").trim(),
+        treatment: String(req.body.plan || "").trim(),
+        medication: consultation.otc,
+        firstAid: consultation.firstAid,
+        notes: consultation.sessionNotes,
+        vitals: consultation.vitalsSnapshot,
+      },
+      nursingAssessment: {
+        physicalExam: queueEntry.nursingAssessment?.physicalExam || "",
+        laboratoryExamination: queueEntry.nursingAssessment?.laboratoryExamination || "",
+        notes: queueEntry.nursingAssessment?.notes || "",
+        recordedAt: queueEntry.nursingAssessment?.recordedAt || null,
+      },
+      consultationRecordId: consultation._id,
+    };
+    let medicalProfile = await MedicalProfile.findOne({ $or: [{ consultationRecord: consultation._id }, { "fields.consultationRecordId": consultation._id }, { "fields.medicalWorkflowId": workflow._id }] });
+    if (medicalProfile) {
+      medicalProfile.consultationRecord = consultation._id;
+      medicalProfile.student = queueEntry.student._id;
+      medicalProfile.studentId = queueEntry.student.studentId;
+      medicalProfile.purpose = workflow.service;
+      medicalProfile.provider = attendingProvider?.name || medicalProfile.provider || "";
+      medicalProfile.physicalExamIncluded = workflow.physicalExamIncluded;
+      medicalProfile.laboratoryExamIncluded = workflow.laboratoryExamIncluded;
+      medicalProfile.fields = { ...(medicalProfile.fields || {}), ...profileFields };
+      medicalProfile.examinedAt = new Date();
+      await medicalProfile.save();
+    } else {
+      medicalProfile = await MedicalProfile.create({
         student: queueEntry.student._id,
+        consultationRecord: consultation._id,
         studentId: queueEntry.student.studentId,
         purpose: workflow.service,
         provider: attendingProvider?.name || "",
         physicalExamIncluded: workflow.physicalExamIncluded,
         laboratoryExamIncluded: workflow.laboratoryExamIncluded,
-        fields: {
-          ...workflow.initialFields,
-          diagnosis: String(req.body.assessment || "").trim(),
-          treatment: String(req.body.plan || "").trim(),
-          nursingAssessment: {
-            physicalExam: queueEntry.nursingAssessment?.physicalExam || "",
-            laboratoryExamination: queueEntry.nursingAssessment?.laboratoryExamination || "",
-            notes: queueEntry.nursingAssessment?.notes || "",
-            recordedAt: queueEntry.nursingAssessment?.recordedAt || null,
-          },
-          consultationRecordId: consultation._id,
-        },
+        fields: { medicalWorkflowId: workflow._id, ...profileFields },
         examinedAt: new Date(),
-      } },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
-    );
+      });
+    }
+    if (!medicalProfile) return res.status(500).json({ message: "The clinical session was saved, but its Medical Profile entry could not be saved. The queue was not marked complete; retry completion." });
     workflow.status = "completed";
     workflow.medicalProfile = medicalProfile._id;
     workflow.diagnosis = String(req.body.assessment || "").trim();
@@ -335,6 +414,14 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
     pushWorkflowEvent(workflow, "completed", `${queueEntry.serviceType} assessment and provider consultation completed.`, req.user.id);
     await workflow.save();
   }
+  const completedAt = new Date();
+  const previousQueueStatus = queueEntry.status;
+  const completedQueueEntry = await QueueEntry.findOneAndUpdate(
+    { _id: queueEntry._id, status: queueEntry.status },
+    { $set: { status: "completed", completedAt }, $push: { statusHistory: { from: previousQueueStatus, to: "completed", actor: req.user.id, at: completedAt } } },
+    { new: true },
+  );
+  if (!completedQueueEntry) return res.status(409).json({ message: "The EMR session record was saved, but the queue state changed before completion. Refresh the queue and review the saved visit." });
   if (queueEntry.appointment) {
     const completedAppointment = await Appointment.findOneAndUpdate(
       { _id: queueEntry.appointment, queueEntry: queueEntry._id, status: "checked_in" },
@@ -351,7 +438,7 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
   res.status(201).json({ consultation, queueEntry: updated });
 });
 
-router.get("/students/:id/medical-profiles", requireClinicalRole, async (req, res) => {
+router.get("/students/:id/medical-profiles", requireRole("nurse", "supervisor", "physician", "dentist", "superadmin"), async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid student ID" });
   res.json(await MedicalProfile.find({ student: req.params.id }).sort({ examinedAt: -1 }));
 });
@@ -378,7 +465,7 @@ router.put("/medical-profiles/:id", requireClinicalRole, async (req, res) => {
   if (!profile) return res.status(404).json({ message: "Medical profile not found" });
   res.json(profile);
 });
-router.get("/students/:id/history", requireClinicalRole, async (req, res) => {
+router.get("/students/:id/history", requireRole("nurse", "supervisor", "physician", "dentist", "superadmin"), async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid student ID" });
   const history = await PatientHistory.findOne({ student: req.params.id });
   res.json(history || { familyHistory: { answers: {}, others: "" }, medicalHistory: { answers: {} } });
@@ -425,18 +512,80 @@ router.get("/documents", requireDocumentRole, async (_req, res) => {
     return result;
   }));
 });
+router.patch("/documents/:id/health-declaration", requireRole("superadmin"), async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid declaration ID." });
+  const document = await ExternalDocument.findById(req.params.id);
+  if (!document || !isHealthDeclarationDocument(document) || !document.submissionDetails?.healthDeclaration) return res.status(404).json({ message: "Health Status Declaration not found." });
+  const duplicateDeclaration = await ExternalDocument.findOne({ student: document.student, recordType: "health_declaration", _id: { $ne: document._id } }).select("_id");
+  if (duplicateDeclaration) return res.status(409).json({ message: "Another declaration is already the patient's active one-time record. Review that record before editing this historical copy." });
+  document.recordType = "health_declaration";
+  const student = await Student.findById(document.student);
+  if (!student) return res.status(404).json({ message: "The linked patient record no longer exists." });
+  const declaration = normalizeDeclaration(req.body?.declaration || {}, student);
+  const validationError = validateDeclaration(declaration, student);
+  if (validationError) return res.status(400).json({ message: validationError });
+  const previous = document.submissionDetails.healthDeclaration;
+  const changedFields = materialDeclarationChanges(previous, declaration);
+  if (!changedFields.length) {
+    applyDeclarationToPatient(student, declaration, document, document.status);
+    await student.save();
+    return res.json({ document: document.toObject(), patient: student.toObject({ virtuals: true }), message: "No declaration fields changed; patient profile synchronized." });
+  }
+  const wasVerified = declarationRequiresReview(document.status);
+  document.declarationHistory.push({ declaration: previous, changedFields, actor: req.user.id, source: "admin_correction", at: new Date() });
+  document.submissionDetails = { ...(document.submissionDetails || {}), healthDeclaration: declaration };
+  document.fileData = healthDeclarationToPdf(declaration);
+  document.name = "Health_Status_Declaration.pdf";
+  document.contentType = "application/pdf";
+  if (wasVerified) {
+    document.status = "Pending";
+    document.verificationRemarks = `Admin correction requires review: ${changedFields.join(", ")}`;
+    document.verificationHistory.push({ status: "Pending", remarks: "A material administrator correction was made; re-verification is required.", actor: req.user.id, at: new Date() });
+    document.verifiedBy = undefined;
+    document.verifiedAt = undefined;
+  }
+  try {
+    await document.save();
+  } catch (error) {
+    if (error?.name === "VersionError") return res.status(409).json({ message: "This declaration changed in another request. Reload it before making another correction." });
+    throw error;
+  }
+  applyDeclarationToPatient(student, declaration, document, document.status);
+  await student.save();
+  const result = document.toObject();
+  delete result.fileData;
+  result.fileUrl = `/api/documents/${document._id}/file`;
+  return res.json({ document: result, patient: student.toObject({ virtuals: true }), changedFields, message: wasVerified ? "The correction was saved. The declaration is Pending Verification until HSO staff re-review it." : "The existing declaration was corrected and the patient profile synchronized." });
+});
+
 router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });
   const allowedStatuses = ["Pending", "Verified", "Rejected"];
   if (!allowedStatuses.includes(req.body.status)) return res.status(400).json({ message: "Invalid document status" });
+  const remarks = String(req.body.remarks || "").trim().slice(0, 1000);
+  if (req.body.status !== "Pending" && remarks.length < 3) return res.status(400).json({ message: "Add a short verification or rejection remark before saving this decision." });
   const document = await ExternalDocument.findById(req.params.id).select("-fileData").populate("student", "studentId firstName lastName email");
   if (!document) return res.status(404).json({ message: "Document not found" });
+  if (document.recordType === "clearance_certificate" || document.status === "Issued") return res.status(409).json({ message: "Issued clearance certificates are part of the permanent Medical Files history and cannot be changed here." });
   if (["Verified", "Rejected"].includes(document.status)) {
     return res.status(409).json({ message: "This document has already been decided and its status cannot be changed." });
   }
   const statusChanged = document.status !== req.body.status;
   document.status = req.body.status;
+  document.verificationRemarks = remarks;
+  document.verifiedBy = req.user.id;
+  document.verifiedAt = new Date();
+  document.verificationHistory.push({ status: req.body.status, remarks, actor: req.user.id, at: document.verifiedAt });
   await document.save();
+  let healthDeclarationPatient = null;
+  if (isHealthDeclarationDocument(document) && document.submissionDetails?.healthDeclaration) {
+    const patient = await Student.findById(document.student._id || document.student);
+    if (patient) {
+      applyDeclarationToPatient(patient, document.submissionDetails.healthDeclaration, document, document.status);
+      await patient.save();
+      healthDeclarationPatient = patient.toObject({ virtuals: true });
+    }
+  }
   let notificationQueued = false;
   if (statusChanged || document.lastNotifiedStatus !== document.status) {
     notificationQueued = Boolean(document.notificationEmail || document.student?.email) && areDocumentNotificationsConfigured();
@@ -448,7 +597,7 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
   document.fileData = undefined;
   const result = document.toObject();
   if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
-  res.json({ ...result, notificationQueued, notificationMessage: notificationQueued ? undefined : "Email was not queued. Check the student's email and server email settings." });
+  res.json({ ...result, ...(healthDeclarationPatient ? { patient: healthDeclarationPatient } : {}), notificationQueued, notificationMessage: notificationQueued ? undefined : "Email was not queued. Check the student's email and server email settings." });
 });
 router.get("/documents/:id/file", requireDocumentRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });

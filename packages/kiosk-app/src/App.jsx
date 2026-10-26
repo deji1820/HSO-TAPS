@@ -46,7 +46,7 @@ function hasCompleteProfile(person) {
     && Boolean(person?.sex && person?.email && person?.guardianContact);
   return person?.affiliation === "Employee"
     ? baseComplete && Boolean(person?.department)
-    : baseComplete && Boolean(person?.program && person?.yearLevel && person?.schoolYear);
+    : baseComplete && Boolean(person?.program && person?.schoolYear);
 }
 
 // Which readings each screening mode needs before we can move to the result screen

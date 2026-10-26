@@ -8,7 +8,7 @@ function formatDate(dateKey) {
 }
 
 function labelForStatus(status) {
-  return ({ scheduled: "Scheduled", checked_in: "Checked in", cancelled: "Cancelled", completed: "Completed" })[status] || "Unknown";
+  return ({ scheduled: "Scheduled", checked_in: "Checked in", no_show: "No-show", cancelled: "Cancelled", completed: "Completed" })[status] || "Unknown";
 }
 
 function Badge({ value, kind }) {

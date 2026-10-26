@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import KioskHeader from "../components/KioskHeader.jsx";
-import { getClearanceRequirements, lookupStudent, submitKioskDocument } from "../services/api.js";
+import { getClearanceRequirements, getHealthDeclarationStatus, lookupStudent, submitKioskDocument } from "../services/api.js";
 import HealthDeclarationFormScreen from "./HealthDeclarationFormScreen.jsx";
 import "../styles/screens/DocumentSubmission.css";
 
@@ -54,6 +54,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
   const [documentType, setDocumentType] = useState("");
   const [documentSubtype, setDocumentSubtype] = useState("");
   const [healthDeclaration, setHealthDeclaration] = useState(null);
+  const [existingDeclaration, setExistingDeclaration] = useState(null);
   const [showHealthDeclaration, setShowHealthDeclaration] = useState(false);
   const [otherType, setOtherType] = useState("");
   const [examDate, setExamDate] = useState("");
@@ -90,6 +91,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     setError("");
     try {
       const found = await lookupStudent(studentId.trim());
+      const declarationStatus = await getHealthDeclarationStatus(found.studentId || found.employeeId || studentId.trim());
       const foundAffiliation = found.affiliation || affiliation;
       setStudent(found);
       setAffiliation(foundAffiliation);
@@ -98,6 +100,8 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       setSex(found.sex || "");
       setDateOfBirth(found.dateOfBirth?.slice?.(0, 10) || "");
       setInstitutionalAffiliation(foundAffiliation === "Student" ? found.program || "" : found.department || "");
+      setExistingDeclaration(declarationStatus.status === "Not Submitted" ? null : declarationStatus);
+      setHealthDeclaration(declarationStatus.declaration || null);
       setVerified(true);
     } catch (lookupError) {
       setError(lookupError?.response?.data?.message || "We couldn't verify that ID. Check the number or ask clinic staff for help.");
@@ -144,6 +148,10 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       setError("Complete the Health Status Declaration Form before submitting.");
       return;
     }
+    if (isHealthDeclaration && ["Pending", "Verified"].includes(existingDeclaration?.status)) {
+      setError(existingDeclaration.status === "Verified" ? "Your declaration is already verified. Review the existing declaration shown below." : "Your declaration is already awaiting HSO verification. Please do not submit another copy.");
+      return;
+    }
     if (dateOfBirth > latestAllowedDateOfBirth) {
       setError("Date of birth cannot be in the future.");
       return;
@@ -184,6 +192,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
           fileData: await encodeFile(file),
         });
         allNotificationsQueued = allNotificationsQueued && Boolean(result.notificationQueued);
+        setExistingDeclaration({ status: result.status || "Pending", statusLabel: result.statusLabel || "Pending Verification", declaration: healthDeclaration });
         onEmailSaved?.(notificationEmail.trim().toLowerCase());
         uploaded += 1;
       } else {
@@ -261,7 +270,9 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
         <fieldset className="document-card" disabled={!verified || loading}>
           <legend>2. {purpose === HEALTH_DECLARATION_TYPE ? "Health Status Declaration" : "Medical document details"}</legend>
           <div className="document-form-grid">
-            {purpose === HEALTH_DECLARATION_TYPE ? <div className="document-field-wide"><p>Complete the health information on a separate page, then return here to submit it to your health record.</p><button type="button" onClick={() => setShowHealthDeclaration(true)}>{healthDeclaration ? "Review or edit health declaration" : "Proceed to Health Status Declaration Form"}</button>{healthDeclaration && <span className="document-verified">Form completed and ready to submit</span>}</div> : <>
+            {purpose === HEALTH_DECLARATION_TYPE ? <div className="document-field-wide">
+              {existingDeclaration && ["Pending", "Verified"].includes(existingDeclaration.status) ? <section className="document-declaration-status" aria-live="polite"><strong>{existingDeclaration.statusLabel}</strong><p>{existingDeclaration.status === "Verified" ? "This declaration has already been verified. You cannot submit another declaration during your NU Fairview stay." : "Your declaration has been received and is awaiting HSO verification. Do not submit another copy."}</p><p>Submitted {existingDeclaration.submittedAt ? new Date(existingDeclaration.submittedAt).toLocaleString() : "during this session"}.</p>{existingDeclaration.declaration && <details><summary>View existing declaration</summary><pre>{JSON.stringify(existingDeclaration.declaration, null, 2)}</pre></details>}</section> : <><p>{existingDeclaration?.status === "Rejected" ? "Your previous declaration was rejected. Correct the existing declaration and resubmit it for review." : "Complete the health information on a separate page, then return here to submit it to your health record."}</p><button type="button" onClick={() => setShowHealthDeclaration(true)}>{existingDeclaration?.status === "Rejected" ? "Correct rejected declaration" : healthDeclaration ? "Review health declaration" : "Proceed to Health Status Declaration Form"}</button>{healthDeclaration && <span className="document-verified">Form completed and ready to submit</span>}</>}
+            </div> : <>
               <label>Document category<select required value={documentType} onChange={(event) => { setDocumentType(event.target.value); setDocumentSubtype(""); setOtherType(""); setHealthDeclaration(null); }}><option value="" disabled>Choose a document type</option>{DOCUMENT_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
               {documentType && documentType !== "Other" && <label>Specific document / test<select required value={documentSubtype} onChange={(event) => setDocumentSubtype(event.target.value)}><option value="" disabled>Choose the specific document</option>{DOCUMENT_SUBTYPES[documentType].map((item) => <option key={item}>{item}</option>)}</select></label>}
               {documentType === "Other" && <label>Specify document type<input required value={otherType} onChange={(event) => setOtherType(event.target.value)} /></label>}

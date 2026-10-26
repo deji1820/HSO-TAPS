@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { assignAppointmentProvider, checkInAppointment, getAppointment, getAppointmentNotifications, getProviderOptions, retryAppointmentEmail, updateAppointmentDecision } from "../services/api.js";
+import { assignAppointmentProvider, checkInAppointment, getAppointment, getAppointmentNotifications, getProviderOptions, retryAppointmentEmail, updateAppointmentDecision, updateAppointmentNoShowException } from "../services/api.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/AppointmentDetails.css";
 
@@ -111,7 +111,7 @@ export default function AppointmentDetailsPage({ user }) {
   const canViewEmr = ["nurse", "supervisor", "physician", "dentist"].includes(normalizeRole(user?.role));
   const decision = appointment.decisionStatus || "pending";
   const decisionIsOpen = decision === "pending" && appointment.status === "scheduled";
-  const checkInIsOpen = decision === "accepted" && appointment.status === "scheduled" && appointment.dateKey === todayInManila();
+  const checkInIsOpen = decision === "accepted" && appointment.status === "scheduled" && (appointment.dateKey === todayInManila() || appointment.noShowExempt === true);
   const usesProvider = ["Medical Consultation", "Dental Consultation"].includes(appointment.serviceType);
 
   async function updateProvider(providerId) {
@@ -128,6 +128,21 @@ export default function AppointmentDetailsPage({ user }) {
       setError(requestError.response?.data?.message || "Could not update the provider assignment.");
     } finally {
       setProviderBusy(false);
+    }
+  }
+
+  async function toggleNoShowException() {
+    const exempt = !appointment.noShowExempt;
+    const reason = exempt ? window.prompt("Reason for allowing a late check-in:") : "";
+    if (exempt && !reason?.trim()) return;
+    if (!exempt && !window.confirm("Remove this no-show exception? The appointment may be marked no-show after the configured grace period.")) return;
+    setError("");
+    try {
+      const { appointment: updated } = await updateAppointmentNoShowException(appointment._id, exempt, reason || "");
+      setAppointment(updated);
+      setDecisionNotice(exempt ? "Late check-in exception recorded." : "Late check-in exception removed.");
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Could not update the no-show exception.");
     }
   }
 
@@ -223,8 +238,14 @@ export default function AppointmentDetailsPage({ user }) {
               <LabelValue label="Decision recorded">{displayTimestamp(appointment.decisionAt)}</LabelValue>
               <LabelValue label="Created">{displayTimestamp(appointment.createdAt)}</LabelValue>
               <LabelValue label="Last updated">{displayTimestamp(appointment.updatedAt)}</LabelValue>
+              {appointment.noShowAt && <LabelValue label="No-show recorded">{displayTimestamp(appointment.noShowAt)}</LabelValue>}
             </dl>
           </section>
+
+          {!!appointment.statusHistory?.length && <section className="appointment-detail-card" aria-labelledby="appointment-status-history-title">
+            <h2 id="appointment-status-history-title">Status History</h2>
+            <ol className="appointment-status-history">{appointment.statusHistory.map((event, index) => <li key={`${event.at || index}-${index}`}><strong>{event.from === event.to ? `Exception recorded · ${event.to.replaceAll("_", " ")}` : `${event.from.replaceAll("_", " ")} → ${event.to.replaceAll("_", " ")}`}</strong><span>{displayTimestamp(event.at)} · {event.actor === "system" ? "System" : "Authorized staff"}</span>{event.reason && <p>{event.reason}</p>}</li>)}</ol>
+          </section>}
 
           {usesProvider && <section className="appointment-detail-card" aria-labelledby="appointment-provider-title">
             <h2 id="appointment-provider-title">Provider Assignment &amp; Schedule</h2>
@@ -272,6 +293,8 @@ export default function AppointmentDetailsPage({ user }) {
             </> : decision !== "pending" ? <p className="appointment-detail-locked" role="status">Decision locked: {decision[0].toUpperCase() + decision.slice(1)}{appointment.decisionAt ? ` on ${displayTimestamp(appointment.decisionAt)}` : ""}. This decision cannot be changed.</p> : <p className="appointment-detail-muted" role="status">A decision is unavailable because this appointment is {appointment.status.replaceAll("_", " ")}.</p>}
             {decisionNotice && <p className="appointments-notice" role="status">{decisionNotice}</p>}
             {checkInIsOpen && <button type="button" className="btn btn-primary appointment-detail-action" disabled={checkInBusy} onClick={markAsArrived}>{checkInBusy ? "Checking in…" : "Mark as Arrived"}</button>}
+            {["nurse", "supervisor"].includes(normalizeRole(user?.role)) && appointment.status === "scheduled" && decision === "accepted" && <button type="button" className="btn btn-outline appointment-detail-action" onClick={toggleNoShowException}>{appointment.noShowExempt ? "Remove Late Check-in Exception" : "Allow Late Check-in"}</button>}
+            {appointment.noShowExempt && <p className="appointment-detail-muted">Late check-in exception: {appointment.noShowExemptionReason || "Authorized by clinic staff"}</p>}
             {appointment.status === "checked_in" && appointment.queueEntry?.queueNumber && <Link className="btn btn-primary appointment-detail-action" to="/dashboard">Queue {appointment.queueEntry.queueNumber} · Open queue</Link>}
             {checkInNotice && <p className="appointments-notice" role="status">{checkInNotice}</p>}
             {error && <p className="appointments-error" role="alert">{error}</p>}

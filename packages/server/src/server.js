@@ -5,6 +5,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { createApp } from "./app.js";
 import { connectDB } from "./config/db.js";
 import { initQueueSocket } from "./sockets/queueSocket.js";
+import { startQueueExpirationScheduler } from "./services/queueExpiration.service.js";
 
 async function main() {
   await connectDB();
@@ -22,6 +23,7 @@ async function main() {
   });
   app.set("io", io);
   initQueueSocket(io);
+  startQueueExpirationScheduler(io);
 
   const port = process.env.PORT || 5000;
   httpServer.listen(port, () => console.log(`[server] listening on :${port}`));

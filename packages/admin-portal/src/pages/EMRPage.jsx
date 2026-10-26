@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, updateMedicalDocumentStatus, updateMedicalProfile } from "../services/api.js";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, updateHealthDeclaration, updateMedicalDocumentStatus, updateMedicalProfile } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/components/ActiveSessionModal.css";
@@ -104,6 +104,8 @@ function ConsultationEntry({ c, expanded, onToggle }) {
             </>
           ) : c.visitType === "Medication and Relief" ? (
             <>
+              {c.serviceType && <li>Service: {c.serviceType}</li>}
+              {c.requestDetails && <li>Patient request: {c.requestDetails}</li>}
               {c.otc?.itemDispensed && (
                 <li>Dispensed: {c.otc.itemDispensed} ({c.otc.quantity}) — {c.otc.instructions}</li>
               )}
@@ -151,9 +153,13 @@ function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentI
     <header><h3>{document.documentTitle || document.name || "Medical document"}</h3><span>{formatDate(document.submittedAt)}</span></header>
     <div className="emr-document-card-grid">
       <div><span>Form source</span><strong>{document.formSource || "—"}</strong></div>
-      <div><span>Status</span>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${document.documentTitle || document.name || "document"}`} value={document.status || "Pending"} disabled={updatingDocumentId === document._id || ["Verified", "Rejected"].includes(document.status)} onChange={(event) => onStatusChange(document._id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <strong>{document.status || "Pending"}</strong>}</div>
+      <div><span>Status</span>{canReviewDocuments && document.recordType !== "clearance_certificate" ? <select className="text-input document-status-select" aria-label={`Change status for ${document.documentTitle || document.name || "document"}`} value={document.status || "Pending"} disabled={updatingDocumentId === document._id || ["Verified", "Rejected", "Issued"].includes(document.status)} onChange={(event) => onStatusChange(document._id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <strong>{document.status || "Pending"}</strong>}</div>
     </div>
-    <div className="document-actions">{document.fileUrl ? document.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(document._id, document.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <a href={document.fileUrl} target="_blank" rel="noreferrer">View file</a> : <span>No file attached</span>}</div>
+    {document.verificationRemarks && <p className="emr-document-review-remarks"><strong>Review remarks:</strong> {document.verificationRemarks}</p>}
+    {document.submissionDetails?.clearance?.approval && <p className="emr-document-review-remarks"><strong>Approved by:</strong> {document.submissionDetails.clearance.approval.providerName} · {document.submissionDetails.clearance.approval.providerRole}. {document.submissionDetails.clearance.approval.providerStatement}</p>}
+    {document.verificationHistory?.length > 0 && <details className="emr-document-details"><summary>Review history</summary><ul>{document.verificationHistory.map((event, index) => <li key={`${event.at || index}-${index}`}>{event.status} · {formatDate(event.at)}{event.actor?.name ? ` · ${event.actor.name}` : ""}{event.remarks ? ` — ${event.remarks}` : ""}</li>)}</ul></details>}
+    {document.submissionDetails?.clearance?.requirements?.length > 0 && <details className="emr-document-details"><summary>Verified clearance requirements</summary><ul>{document.submissionDetails.clearance.requirements.map((requirement, index) => <li key={`${requirement.text}-${index}`}>{requirement.text}: {requirement.status?.replaceAll("_", " ")}{requirement.evidence ? ` — ${requirement.evidence}` : ""}</li>)}</ul></details>}
+    <div className="document-actions">{document.recordType === "clearance_certificate" ? <Link className="btn btn-outline btn-sm" to={`/medical-workflows?workflowId=${encodeURIComponent(document.sourceWorkflow || document.submissionDetails?.clearance?.workflowId || "")}`}>View / Print Certificate</Link> : document.fileUrl ? document.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(document._id, document.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <a href={document.fileUrl} target="_blank" rel="noreferrer">View file</a> : <span>No file attached</span>}</div>
   </article>)}</div>;
 }
 
@@ -193,13 +199,17 @@ function flattenFormPayload(payload, prefix = "") {
   });
 }
 
-function HealthStatusDeclarationTab({ submissions, canReviewDocuments, updatingDocumentId, onStatusChange }) {
+function HealthStatusDeclarationTab({ submissions, canReviewDocuments, canEditDeclaration, updatingDocumentId, onStatusChange, editingDeclarationId, declarationDraft, setDeclarationDraft, onEdit, onCancelEdit, onSaveEdit, savingDeclaration }) {
   return <div className="emr-health-declaration">
     <h2 className="section-title">Health Status Declaration</h2>
     {submissions.length ? submissions.map((submission) => {
       const answers = flattenFormPayload(submission.rawPayload || {}).filter(([label]) => !/^(id|response id|responder email)$/i.test(label));
       return <article className="emr-health-submission" key={submission._id}>
-        <header><strong>Submitted {formatDate(submission.createdAt)} · {submission.rawPayload?.responderName || submission.rawPayload?.name || "Health Status Declaration"}</strong>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for Health Status Declaration`} value={submission.status || "Pending"} disabled={updatingDocumentId === submission._id || ["Verified", "Rejected"].includes(submission.status)} onChange={(event) => onStatusChange(submission._id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <span>{submission.status || "Submitted"}</span>}</header>
+        <header><strong>Submitted {formatDate(submission.createdAt)} · {submission.rawPayload?.responderName || submission.rawPayload?.name || "Health Status Declaration"}</strong><span className={`badge ${submission.status === "Verified" ? "badge-routine" : submission.status === "Rejected" ? "badge-high" : "badge-standard"}`}>{submission.status === "Pending" ? "Pending Verification" : submission.status || "Submitted"}</span>{canReviewDocuments && submission.status === "Pending" && <select className="text-input document-status-select" aria-label="Verify or reject Health Status Declaration" value="Pending" disabled={updatingDocumentId === submission._id} onChange={(event) => onStatusChange(submission._id, event.target.value)}><option value="Pending">Choose decision</option><option>Verified</option><option>Rejected</option></select>}{canEditDeclaration && <button type="button" className="btn btn-outline btn-sm" disabled={savingDeclaration} onClick={() => onEdit(submission)}>{editingDeclarationId === submission._id ? "Editing" : "Edit existing declaration"}</button>}</header>
+        {submission.verificationRemarks && <p><strong>Verification remarks:</strong> {submission.verificationRemarks}</p>}
+        {submission.verificationHistory?.length > 0 && <details className="emr-document-details"><summary>Verification history</summary><ul>{submission.verificationHistory.map((event, index) => <li key={`${event.at || index}-${index}`}>{event.status} · {formatDate(event.at)}{event.actor?.name ? ` · ${event.actor.name}` : ""}{event.remarks ? ` — ${event.remarks}` : ""}</li>)}</ul></details>}
+        {submission.declarationHistory?.length > 0 && <details className="emr-document-details"><summary>Correction and submission history</summary><ul>{submission.declarationHistory.map((event, index) => <li key={`${event.at || index}-${index}`}>{event.source?.replaceAll("_", " ") || "Update"} · {formatDate(event.at)}{event.actor?.name ? ` · ${event.actor.name}` : ""}{event.changedFields?.length ? ` · Changed: ${event.changedFields.join(", ")}` : ""}</li>)}</ul></details>}
+        {editingDeclarationId === submission._id && <section className="emr-declaration-editor"><label htmlFor="emr-declaration-json">Correct declaration fields (JSON)</label><textarea id="emr-declaration-json" rows={16} value={declarationDraft} onChange={(event) => setDeclarationDraft(event.target.value)} spellCheck="false" /><p>Saving updates this existing record. A change to a verified declaration returns it to Pending Verification.</p><div><button type="button" className="btn btn-primary" disabled={savingDeclaration} onClick={() => onSaveEdit(submission)}>{savingDeclaration ? "Saving…" : "Save correction"}</button><button type="button" className="btn btn-outline" disabled={savingDeclaration} onClick={onCancelEdit}>Cancel</button></div></section>}
         {answers.length ? <dl>{answers.map(([question, answer]) => <div key={question}><dt>{question.includes("?") ? question : question.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{answer}</dd></div>)}</dl> : <p>No declaration answers were included in this submission.</p>}
       </article>;
     }) : <div className="table-empty">No Health Status Declaration has been submitted for this patient.</div>}
@@ -217,7 +227,9 @@ function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumen
       <div><span>File name</span><strong>{file.name || "N/A"}</strong></div>
       <div><span>Status</span>{canReviewDocuments ? <select className="text-input document-status-select" aria-label={`Change status for ${file.title || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingDocumentId === file.id || ["Verified", "Rejected"].includes(file.status)} onChange={(event) => onStatusChange(file.id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <strong>{file.status || "Pending"}</strong>}</div>
     </div>
+    {file.verificationRemarks && <p className="emr-document-review-remarks"><strong>Review remarks:</strong> {file.verificationRemarks}</p>}
     {Object.keys(file.details || {}).length > 0 && <details className="emr-document-details"><summary>View submitted details</summary><dl>{flattenFormPayload(file.details || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{value}</dd></div>)}</dl></details>}
+    {file.verificationHistory?.length > 0 && <details className="emr-document-details"><summary>Review history</summary><ul>{file.verificationHistory.map((event, index) => <li key={`${event.at || index}-${index}`}>{event.status} · {formatDate(event.at)}{event.actor?.name ? ` · ${event.actor.name}` : ""}{event.remarks ? ` — ${event.remarks}` : ""}</li>)}</ul></details>}
     <div className="document-actions">{file.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <span>No file attached</span>}</div>
   </article>)}</div>;
 }
@@ -432,8 +444,13 @@ export default function EMRPage() {
   const [tab, setTab] = useState("about");
   const [error, setError] = useState(null);
   const [updatingDocumentId, setUpdatingDocumentId] = useState(null);
+  const [editingDeclarationId, setEditingDeclarationId] = useState(null);
+  const [declarationDraft, setDeclarationDraft] = useState("");
+  const [savingDeclaration, setSavingDeclaration] = useState(false);
+  const [declarationNotice, setDeclarationNotice] = useState("");
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const canReviewDocuments = ["nurse", "supervisor"].includes(normalizeRole(user.role));
+  const canEditDeclaration = normalizeRole(user.role) === "superadmin";
 
   useEffect(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -490,11 +507,14 @@ export default function EMRPage() {
       const [full, profiles, histories] = await Promise.all([getFullEmr(id), getMedicalProfiles(id), getPatientHistory(id)]);
       setRecord(full);
       setProfileHistory(profiles.map((profile) => ({ ...profile, id: profile._id })));
-      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission" && !isHealthStatusDeclaration(file)).map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name, fileUrl: file.fileUrl, status: file.status, details: file.submissionDetails })));
+      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission" && !isHealthStatusDeclaration(file)).map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name, fileUrl: file.fileUrl, status: file.status, details: file.submissionDetails, verificationRemarks: file.verificationRemarks, verificationHistory: file.verificationHistory })));
       const kioskHealthForms = (full.documents || []).filter((document) => document.submissionDetails?.healthDeclaration).map((document) => ({
         _id: document._id,
         createdAt: document.submittedAt || document.createdAt,
         status: document.status,
+          verificationRemarks: document.verificationRemarks,
+          verificationHistory: document.verificationHistory,
+          declarationHistory: document.declarationHistory,
         rawPayload: document.submissionDetails.healthDeclaration,
       }));
       setHealthStatusSubmissions(kioskHealthForms);
@@ -510,17 +530,55 @@ export default function EMRPage() {
   }
 
   async function changeDocumentStatus(id, status) {
+    let remarks = "";
+    if (status !== "Pending") {
+      const enteredRemarks = window.prompt(`Add a brief ${status === "Verified" ? "verification" : "rejection"} remark:`);
+      if (enteredRemarks === null) return;
+      remarks = enteredRemarks.trim();
+      if (remarks.length < 3) {
+        window.alert("Enter at least 3 characters for the review remark.");
+        return;
+      }
+    }
     setUpdatingDocumentId(id);
     setError(null);
     try {
-      const updated = await updateMedicalDocumentStatus(id, status);
-      setRecord((current) => current ? { ...current, documents: (current.documents || []).map((document) => document._id === id ? { ...document, ...updated } : document) } : current);
-      setMedicalDocumentFiles((current) => current.map((file) => file.id === id ? { ...file, status: updated.status } : file));
-      setHealthStatusSubmissions((current) => current.map((submission) => submission._id === id ? { ...submission, status: updated.status } : submission));
+      const updated = await updateMedicalDocumentStatus(id, status, remarks);
+      setRecord((current) => current ? { ...current, ...(updated.patient ? { student: updated.patient } : {}), documents: (current.documents || []).map((document) => document._id === id ? { ...document, ...updated } : document) } : current);
+      setMedicalDocumentFiles((current) => current.map((file) => file.id === id ? { ...file, status: updated.status, verificationRemarks: updated.verificationRemarks, verificationHistory: updated.verificationHistory } : file));
+      setHealthStatusSubmissions((current) => current.map((submission) => submission._id === id ? { ...submission, status: updated.status, verificationRemarks: updated.verificationRemarks, verificationHistory: updated.verificationHistory } : submission));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || "Could not update this document status.");
     } finally {
       setUpdatingDocumentId(null);
+    }
+  }
+
+  function beginDeclarationEdit(submission) {
+    setEditingDeclarationId(submission._id);
+    setDeclarationDraft(JSON.stringify(submission.rawPayload || {}, null, 2));
+    setError(null);
+    setDeclarationNotice("");
+  }
+
+  async function saveDeclarationEdit(submission) {
+    let declaration;
+    try { declaration = JSON.parse(declarationDraft); }
+    catch { setError("The declaration correction is not valid JSON."); return; }
+    setSavingDeclaration(true);
+    setError(null);
+    try {
+      const result = await updateHealthDeclaration(submission._id, declaration);
+      setRecord((current) => current ? { ...current, student: result.patient, documents: (current.documents || []).map((document) => document._id === submission._id ? { ...document, ...result.document } : document) } : current);
+        setHealthStatusSubmissions((current) => current.map((item) => item._id === submission._id ? { ...item, status: result.document.status, rawPayload: result.document.submissionDetails?.healthDeclaration, verificationRemarks: result.document.verificationRemarks, verificationHistory: result.document.verificationHistory, declarationHistory: result.document.declarationHistory } : item));
+      setEditingDeclarationId(null);
+      setDeclarationDraft("");
+      setError(null);
+      setDeclarationNotice(result.message);
+    } catch (saveError) {
+      setError(saveError.response?.data?.message || "Could not save the correction to this declaration.");
+    } finally {
+      setSavingDeclaration(false);
     }
   }
 
@@ -595,6 +653,7 @@ export default function EMRPage() {
       </form>
 
       {error && <p className="error-text">{error}</p>}
+      {declarationNotice && <p className="emr-declaration-notice" role="status">{declarationNotice}</p>}
 
       {searched && (
         <div className="emr-search-results" aria-live="polite">
@@ -642,22 +701,34 @@ export default function EMRPage() {
 
           <div className="emr-tab-content">
             {tab === "about" && <div className="card patient-info-block"><h2>About Patient</h2><div className="patient-info-grid">
-              <div><span className="field-label-inline">Name:</span> {record.student.lastName}, {record.student.firstName}</div>
+              <div><span className="field-label-inline">Name:</span> {record.student.lastName}, {record.student.firstName}{record.student.middleName ? ` ${record.student.middleName}` : ""}</div>
               <div><span className="field-label-inline">Student ID:</span> {record.student.studentId}</div>
               <div><span className="field-label-inline">Patient Type:</span> {patientType(record.student)}</div>
               <div><span className="field-label-inline">Program / Department:</span> {patientDepartment(record.student)}</div>
               <div><span className="field-label-inline">Official Email:</span> {patientEmail(record.student)}</div>
-              <div><span className="field-label-inline">Year Level:</span> {record.student.yearLevel || "—"}</div>
+              <div><span className="field-label-inline">Year Level:</span> {record.student.displayYearLevel || record.student.yearLevel || "—"}{record.student.expectedYearLevel && record.student.yearLevelOverride && <small> (expected {record.student.expectedYearLevel}; authorized override)</small>}</div>
               <div><span className="field-label-inline">School Year:</span> {record.student.schoolYear || "—"}</div>
-              <div><span className="field-label-inline">Date of Birth:</span> {record.student.dateOfBirth ? new Date(record.student.dateOfBirth).toLocaleDateString() : "—"}</div>
+              <div><span className="field-label-inline">Date of Birth:</span> {record.student.dateOfBirth ? new Intl.DateTimeFormat([], { dateStyle: "medium", timeZone: "Asia/Manila" }).format(new Date(record.student.dateOfBirth)) : "—"}</div>
+              <div><span className="field-label-inline">Age:</span> {record.student.age ?? "—"}</div>
               <div><span className="field-label-inline">Sex:</span> {record.student.sex || "—"}</div>
+              <div><span className="field-label-inline">Religion:</span> {record.student.religion || "—"}</div>
+              <div><span className="field-label-inline">Home Address:</span> {record.student.homeAddress || "—"}</div>
+              <div><span className="field-label-inline">Mobile Number:</span> {record.student.mobileNumber || "—"}</div>
+              <div><span className="field-label-inline">Parent / Guardian:</span> {record.student.guardianName || "—"}</div>
               <div><span className="field-label-inline">Guardian Contact:</span> {record.student.guardianContact || "—"}</div>
-            </div><p className="page-subtitle">Profile data is sourced from the student master-data import.</p></div>}
+              <div><span className="field-label-inline">Health Status Declaration:</span> {record.student.healthDeclarationStatus === "Pending" ? "Pending Verification" : record.student.healthDeclarationStatus || "Not Submitted"}</div>
+              <div><span className="field-label-inline">Declared Health Conditions:</span> {record.student.healthFlags?.length ? record.student.healthFlags.join(", ") : "None declared"}</div>
+              <div><span className="field-label-inline">PWD Declaration:</span> {record.student.hasDisability ? record.student.specifiedDisability || "Yes" : record.student.hasDisability === false ? "No" : "—"}</div>
+              <div><span className="field-label-inline">Treatment Consent:</span> {record.student.treatmentConsent || "—"}</div>
+              <div><span className="field-label-inline">Travel Health Declaration:</span> {record.student.travelRestrictionsOrIssues || "—"}</div>
+            </div>
+            {Object.keys(record.student.healthIndicators || {}).length > 0 && <details className="emr-document-details"><summary>Declared health-screen answers</summary><dl>{Object.entries(record.student.healthIndicators).map(([question, answer]) => <div key={question}><dt>{question}</dt><dd>{answer}</dd></div>)}</dl></details>}
+            <p className="page-subtitle">Declaration status is shown above. Current patient details reflect the declaration where provided; fields it does not collect remain from their existing source.</p></div>}
             {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} studentMongoId={record.student._id} onSaved={replaceLatestMedicalProfile} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
-            {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />}
-            {tab === "files" && <><h2 className="section-title">Medical Document Submissions</h2><MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /><h2 className="section-title">Synced Medical Files</h2><DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document))} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /></>}
+            {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} />}
+            {tab === "files" && <><h2 className="section-title">Medical Document Submissions</h2><MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /><h2 className="section-title">Synced Medical Files</h2><DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && document.formSource !== "Kiosk Document Submission")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /></>}
           </div>
         </div>
       )}

@@ -13,7 +13,6 @@ function profileFrom(student) {
     sex: student?.sex ?? "",
     email: student?.email ?? "",
     program: student?.program ?? "",
-    yearLevel: student?.yearLevel ?? "",
     department: student?.department ?? "",
     guardianContact: student?.guardianContact ?? "",
     schoolYear: student?.schoolYear ?? "",
@@ -68,9 +67,7 @@ export default function ProfileCompletionScreen({ student, mobile = false, isOnl
               <label className="profile-field-wide">Program <em>Required</em>
                 <input type="text" required value={profile.program} onChange={(event) => update("program", event.target.value)} />
               </label>
-              <label className="profile-field-wide">Year level <em>Required</em>
-                <input type="text" required value={profile.yearLevel} onChange={(event) => update("yearLevel", event.target.value)} />
-              </label>
+              <p className="profile-field-wide">Year level: <strong>{student?.displayYearLevel || student?.yearLevel || "Set by the clinic from your student number and academic year"}</strong></p>
               <label className="profile-field-wide">School year <em>Required</em>
                 <input type="text" required value={profile.schoolYear} onChange={(event) => update("schoolYear", event.target.value)} placeholder="e.g. 2026-2027" />
               </label>

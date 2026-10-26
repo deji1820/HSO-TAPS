@@ -4,6 +4,7 @@ import Appointment from "../models/Appointment.js";
 import AppointmentNotification from "../models/AppointmentNotification.js";
 import QueueEntry from "../models/QueueEntry.js";
 import ConsultationRecord from "../models/ConsultationRecord.js";
+import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import User from "../models/User.js";
 import ProviderSchedule from "../models/ProviderSchedule.js";
 import { CLEARANCE_REQUIREMENTS, findClearanceRequirement } from "../services/clearanceRequirements.js";
@@ -13,6 +14,8 @@ import { checkInEligibility } from "../services/appointmentCheckIn.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 import { getAppointmentWeekdays, findAvailableProviders, isProviderSchedulingConfigured } from "../services/providerScheduling.service.js";
 import { PROVIDER_SERVICES, providerRoleMatches, slotFitsSchedule, validWeekdays } from "../services/providerAvailability.js";
+import { decoratePatientYearLevel } from "../services/patientInformation.js";
+import { getConfiguredAcademicYear } from "../services/academicYearDisplay.js";
 
 const SERVICES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance"]);
 const TIMES = new Set(Array.from({ length: 26 }, (_, index) => {
@@ -297,24 +300,29 @@ export async function listAppointments(req, res) {
   const appointmentFilter = conditions.length ? { $and: conditions } : {};
   const [appointments, total] = await Promise.all([
     Appointment.find(appointmentFilter)
-      .populate("student", "studentId employeeId affiliation firstName lastName program department email")
+      .populate("student", "studentId employeeId affiliation firstName lastName program department email yearLevel yearLevelOverride")
       .populate("assignedProvider", "name role")
       .sort({ dateKey: 1, timeSlot: 1 })
       .skip((page - 1) * limit)
       .limit(limit),
     Appointment.countDocuments(appointmentFilter),
   ]);
+  const academicYear = await getConfiguredAcademicYear();
+  appointments.forEach((appointment) => {
+    if (appointment.student) appointment.student = decoratePatientYearLevel(appointment.student, academicYear);
+  });
   res.json({ items: appointments, total, page, limit });
 }
 
 export async function getAppointment(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ message: "Invalid appointment ID." });
   const appointment = await Appointment.findById(req.params.id)
-    .populate("student", "studentId employeeId affiliation firstName lastName program department email")
+    .populate("student", "studentId employeeId affiliation firstName lastName program department email yearLevel yearLevelOverride")
     .populate("assignedProvider", "name role")
     .populate("queueEntry", "queueNumber serviceType status createdAt completedAt")
     .populate("checkedInBy", "name");
   if (!appointment) return res.status(404).json({ message: "Appointment not found." });
+  appointment.student = decoratePatientYearLevel(appointment.student, await getConfiguredAcademicYear());
   const encounter = appointment.queueEntry
     ? await ConsultationRecord.findOne({ queueEntry: appointment.queueEntry._id }).select("_id visitType visitDate")
     : null;
@@ -386,6 +394,28 @@ export async function checkInAppointment(req, res) {
         reason: current.purpose || "Scheduled appointment",
       }], { session });
       queueEntry = created[0];
+      if (current.serviceType === "Medical Clearance") {
+        const student = await Student.findById(current.student).select("affiliation studentId").session(session);
+        const requirementSet = findClearanceRequirement(student?.affiliation, current.purpose);
+        if (!student || !requirementSet) {
+          const invalidClearance = new Error("The patient's clearance purpose is no longer valid for their affiliation.");
+          invalidClearance.appointmentConflict = true;
+          throw invalidClearance;
+        }
+        const [workflow] = await MedicalWorkflow.create([{
+          student: student._id,
+          queueEntry: queueEntry._id,
+          service: "Medical Clearance",
+          purpose: requirementSet.purpose,
+          affiliation: student.affiliation,
+          initialFields: { appointmentId: current._id },
+          status: "assessment",
+          requirements: requirementSet.requirements.map((item) => ({ text: item.text, kind: item.kind, required: item.conditional ? false : Boolean(item.required || item.kind === "action"), conditional: Boolean(item.conditional), condition: item.condition || "" })),
+          events: [{ type: "created", description: "Medical clearance workflow started from the checked-in appointment.", actor: req.user.id, at: checkedInAt }],
+        }], { session });
+        queueEntry.medicalWorkflow = workflow._id;
+        await queueEntry.save({ session });
+      }
       appointment = await Appointment.findOneAndUpdate(
         { _id: current._id, status: "scheduled", decisionStatus: "accepted", $or: [{ queueEntry: { $exists: false } }, { queueEntry: null }] },
         { $set: { status: "checked_in", checkedInAt, checkedInBy: req.user.id, queueEntry: queueEntry._id } },
@@ -419,6 +449,28 @@ export async function checkInAppointment(req, res) {
   io?.to("clinical-queue").to("frontdesk-queue").emit("queue:new", { _id: queueEntry._id });
   io?.emit("appointment:update", { _id: appointment._id, status: appointment.status, queueEntry: queueEntry._id });
   return res.json({ appointment, queueEntry, alreadyCheckedIn: false });
+}
+
+export async function updateAppointmentNoShowException(req, res) {
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ message: "Invalid appointment ID." });
+  const exempt = req.body?.exempt;
+  const reason = String(req.body?.reason || "").trim().slice(0, 500);
+  if (typeof exempt !== "boolean") return res.status(400).json({ message: "Choose whether to enable or remove the no-show exception." });
+  if (exempt && reason.length < 5) return res.status(400).json({ message: "Enter a reason of at least 5 characters for this exception." });
+  const now = new Date();
+  const appointment = await Appointment.findOneAndUpdate(
+    { _id: req.params.id, status: "scheduled", decisionStatus: "accepted", $or: [{ queueEntry: { $exists: false } }, { queueEntry: null }] },
+    {
+      $set: exempt
+        ? { noShowExempt: true, noShowExemptionReason: reason, noShowExemptionBy: req.user.id, noShowExemptionAt: now }
+        : { noShowExempt: false, noShowExemptionReason: "", noShowExemptionBy: req.user.id, noShowExemptionAt: now },
+      $push: { statusHistory: { from: "scheduled", to: "scheduled", actor: req.user.id, at: now, reason: exempt ? `No-show exception granted: ${reason}` : "No-show exception removed." } },
+    },
+    { new: true },
+  ).populate("student", "studentId employeeId affiliation firstName lastName program department email").populate("assignedProvider", "name role");
+  if (!appointment) return res.status(409).json({ message: "No-show exceptions can only be changed for an accepted appointment that has not been checked in or expired." });
+  req.app.get("io")?.emit("appointment:update", { _id: appointment._id, status: appointment.status, noShowExempt: appointment.noShowExempt });
+  return res.json({ appointment });
 }
 
 export async function updateAppointmentDecision(req, res) {

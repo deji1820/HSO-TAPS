@@ -21,7 +21,7 @@ export default function AppointmentFilters({ search, filters, onSearchChange, on
       </label>
       <label>Appointment status
         <select className="text-input" value={filters.status} onChange={(event) => onFilterChange("status", event.target.value)}>
-          <option value="">All statuses</option><option value="scheduled">Scheduled</option><option value="checked_in">Checked in</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option>
+          <option value="">All statuses</option><option value="scheduled">Scheduled</option><option value="checked_in">Checked in</option><option value="no_show">No-show</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option>
         </select>
       </label>
       <button type="button" className="btn btn-outline appointment-filter-clear" onClick={onClear} disabled={!hasFilters}>Clear filters</button>
