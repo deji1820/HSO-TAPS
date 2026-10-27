@@ -82,7 +82,9 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
     return () => { active = false; };
   }, []);
 
-  const purposes = requirementItems.filter((item) => item.affiliation === affiliation && (item.clearance || item.documentSubmission));
+  // Document Submission is for uploading files and the health declaration.
+  // Clearance purpose selection belongs to the dedicated Medical Clearance flow.
+  const purposes = requirementItems.filter((item) => item.affiliation === affiliation && item.documentSubmission && !item.clearance);
   const selectedRequirements = purposes.find((item) => item.purpose === purpose)?.requirements || [];
 
   async function verifyIdentity(event) {
@@ -160,7 +162,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
       setError("Enter a valid email address so we can send your submission status.");
       return;
     }
-    if (!fullName.trim() || !sex || !dateOfBirth || !institutionalAffiliation.trim() || !purpose || (!isHealthDeclaration && !documentType) || (!isHealthDeclaration && !examDate) || (documentType !== "Other" && !documentSubtype) || (documentType === "Other" && !otherType.trim())) {
+    if (!fullName.trim() || !sex || !dateOfBirth || !institutionalAffiliation.trim() || (!isHealthDeclaration && !documentType) || (!isHealthDeclaration && !examDate) || (!isHealthDeclaration && documentType !== "Other" && !documentSubtype) || (!isHealthDeclaration && documentType === "Other" && !otherType.trim())) {
       setError("Complete all required identity and document details.");
       return;
     }
@@ -201,7 +203,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
         const result = await submitKioskDocument({
           studentId: student.studentId || studentId.trim(),
           notificationEmail: notificationEmail.trim(),
-          title: `Medical Document Submission — ${purpose}`,
+          title: `Medical Document Submission — ${purpose || documentSubtype || otherType.trim() || documentType}`,
           category: documentType === "Other" ? `Other: ${otherType.trim()}` : documentType,
           examDate,
           submissionDetails,
@@ -260,7 +262,7 @@ export default function DocumentSubmissionScreen({ initialStudent = null, onBack
             <label>Sex assigned at birth<select required value={sex} onChange={(event) => setSex(event.target.value)}><option value="">Select</option><option>Male</option><option>Female</option></select></label>
             <label>Date of birth<input required type="date" max={latestAllowedDateOfBirth} value={dateOfBirth} onChange={(event) => { setDateOfBirth(event.target.value); setError(""); }} /></label>
             <label>{affiliation === "Student" ? "Academic program / grade level" : "Department"}<input required value={institutionalAffiliation} onChange={(event) => setInstitutionalAffiliation(event.target.value)} /></label>
-            <label className="document-field-wide">Purpose<select required disabled={requirementsLoading || Boolean(requirementsError)} value={purpose} onChange={(event) => { const nextPurpose = event.target.value; setPurpose(nextPurpose); setDocumentType(""); setDocumentSubtype(""); setOtherType(""); setExamDate(""); setFiles([]); setHealthDeclaration(null); }}><option value="" disabled>Choose a purpose</option>{purposes.map((item) => <option key={item.purpose} value={item.purpose}>{item.purpose}</option>)}</select></label>
+            <label className="document-field-wide">Purpose (optional)<select disabled={requirementsLoading || Boolean(requirementsError)} value={purpose} onChange={(event) => { const nextPurpose = event.target.value; setPurpose(nextPurpose); setDocumentType(""); setDocumentSubtype(""); setOtherType(""); setExamDate(""); setFiles([]); setHealthDeclaration(null); }}><option value="">General document submission (no clearance purpose)</option>{purposes.map((item) => <option key={item.purpose} value={item.purpose}>{item.purpose}</option>)}</select><small>Medical clearance purposes are handled through Medical Clearance. Choose the health declaration purpose only for that form.</small></label>
           </div>
           {requirementsLoading && <p className="document-progress" role="status">Loading HSO requirements…</p>}
           {requirementsError && <p className="document-error" role="alert">{requirementsError}</p>}
