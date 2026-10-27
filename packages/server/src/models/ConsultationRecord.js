@@ -11,6 +11,7 @@ const consultationRecordSchema = new mongoose.Schema(
     serviceType: String,
     requestDetails: String,
     attendingStaff: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    status: { type: String, enum: ["in_progress", "completed"], default: "completed", index: true },
     visitType: {
       type: String,
       enum: ["Walk-in Medical Consultation", "Dental Consultation", "Medical Clearance", "Medication and Relief", "General Inquiry"],

@@ -35,6 +35,7 @@ export const updateQueueStatus = (id, status, details = {}) => api.patch(`/queue
 export const updateQueueExpirationExemption = (id, exempt, reason = "") => api.patch(`/queue/${encodeURIComponent(id)}/expiration-exemption`, { exempt, reason }).then((r) => r.data);
 export const updateElevatedVitalsAlert = (id, action, note = "") => api.patch(`/queue/${encodeURIComponent(id)}/elevated-vitals-alert`, { action, note }).then((r) => r.data);
 export const completeSession = (payload) => api.post("/consultations", payload).then((r) => r.data);
+export const saveConsultationDraft = (queueEntryId, payload) => api.patch(`/consultations/${encodeURIComponent(queueEntryId)}/draft`, payload).then((r) => r.data);
 export const saveMedicalProfile = (id, payload) => api.post(`/students/${id}/medical-profiles`, payload).then((r) => r.data);
 export const startMedicalWorkflow = (id, payload) => api.post(`/students/${id}/medical-workflows`, payload).then((r) => r.data);
 export const getMedicalProfiles = (id) => api.get(`/students/${id}/medical-profiles`).then((r) => r.data);

@@ -70,6 +70,7 @@ const queueEntrySchema = new mongoose.Schema(
 
 queueEntrySchema.virtual("encounterStatus").get(function () { return getEncounterStatus(this.status).value; });
 queueEntrySchema.virtual("encounterStatusLabel").get(function () { return getEncounterStatus(this.status).label; });
+queueEntrySchema.virtual("consultationRecord", { ref: "ConsultationRecord", localField: "_id", foreignField: "queueEntry", justOne: true });
 
 queueEntrySchema.index({ appointment: 1 }, { unique: true, partialFilterExpression: { appointment: { $type: "objectId" } } });
 queueEntrySchema.index({ status: 1, serviceType: 1, createdAt: 1 });

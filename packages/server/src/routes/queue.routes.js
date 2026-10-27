@@ -48,7 +48,7 @@ router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "de
   let query = QueueEntry.find(queryFilter)
     .populate("student", "studentId affiliation firstName lastName program department yearLevel yearLevelOverride")
     .sort({ createdAt: 1 });
-  if (clinicalRole) query = query.populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded");
+  if (clinicalRole) query = query.populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded").populate("consultationRecord");
   const entries = await query;
   const decoratedStudents = await decoratePatients(entries.map((entry) => entry.student));
   entries.forEach((entry, index) => { entry.student = decoratedStudents[index]; });
@@ -241,7 +241,7 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
     }
     update.$set.nursingAssessment = { physicalExam, laboratoryExamination, notes, recordedBy: req.user.id, recordedAt: new Date() };
   }
-  const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: current.status }, update, { new: true }).populate("student").populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded");
+  const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: current.status }, update, { new: true }).populate("student").populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded").populate("consultationRecord");
   if (!entry) return res.status(409).json({ message: "This queue entry has already changed" });
   const workflow = await MedicalWorkflow.findOne({ queueEntry: entry._id });
   if (workflow) {

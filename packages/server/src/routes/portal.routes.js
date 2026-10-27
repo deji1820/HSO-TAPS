@@ -293,6 +293,102 @@ router.delete("/inventory/:id", requireNurseOrSupervisor, async (req, res) => {
   res.json({ deleted: true, id: item._id });
 });
 
+router.patch("/consultations/:queueEntryId/draft", requireRole("physician", "doctor", "dentist"), async (req, res) => {
+  const { queueEntryId } = req.params;
+  if (!validId(queueEntryId)) return res.status(400).json({ message: "Invalid queue entry ID." });
+  const queueEntry = await QueueEntry.findById(queueEntryId).populate("student").populate("linkedVitals").populate("medicalWorkflow");
+  if (!queueEntry) return res.status(404).json({ message: "Queue entry not found." });
+  if (!["Medical Consultation", "Dental Consultation"].includes(queueEntry.serviceType) || queueEntry.status !== "provider_in_session") return res.status(409).json({ message: "Only an active physician or dentist consultation can be saved as a draft." });
+  const role = String(req.user.role || "").toLowerCase();
+  if (!providerRoleMatches(queueEntry.serviceType, role)) return res.status(403).json({ message: "This consultation is assigned to the matching physician or dentist queue." });
+
+  const intakeFields = req.body?.intakeFields || {};
+  if (!intakeFields || typeof intakeFields !== "object" || Array.isArray(intakeFields) || JSON.stringify(intakeFields).length > 20000) return res.status(400).json({ message: "Medical record intake fields are invalid or too large." });
+  const nursingAssessmentInput = req.body?.nursingAssessment || {};
+  const nursingAssessment = Object.fromEntries(["physicalExam", "laboratoryExamination", "notes"].map((key) => [key, String(nursingAssessmentInput[key] || "").trim().slice(0, 4000)]));
+  nursingAssessment.recordedBy = queueEntry.nursingAssessment?.recordedBy || req.user.id;
+  nursingAssessment.recordedAt = queueEntry.nursingAssessment?.recordedAt || new Date();
+  const secondaryVitals = req.body?.secondaryVitals || {};
+  const pulseRate = secondaryVitals.pulseRate === "" || secondaryVitals.pulseRate == null ? null : Number(secondaryVitals.pulseRate);
+  const spo2 = secondaryVitals.spo2 === "" || secondaryVitals.spo2 == null ? null : Number(secondaryVitals.spo2);
+  if ((pulseRate !== null && (!Number.isFinite(pulseRate) || pulseRate < 0 || pulseRate > 300)) || (spo2 !== null && (!Number.isFinite(spo2) || spo2 < 0 || spo2 > 100))) return res.status(400).json({ message: "Enter valid pulse and oxygen saturation measurements." });
+  const bp = String(secondaryVitals.bloodPressure || "").trim().slice(0, 30);
+  const vitalsSnapshot = {
+    ...(queueEntry.linkedVitals?.toObject?.() || {}),
+    bloodPressure: bp,
+    pulseRate,
+    spo2,
+  };
+  const text = (key, max = 4000) => String(req.body?.[key] || "").trim().slice(0, max);
+  const visitType = queueEntry.serviceType === "Dental Consultation" ? "Dental Consultation" : "Walk-in Medical Consultation";
+  const now = new Date();
+  const consultation = await ConsultationRecord.findOneAndUpdate(
+    { queueEntry: queueEntry._id },
+    { $set: {
+      student: queueEntry.student._id,
+      queueEntry: queueEntry._id,
+      serviceType: queueEntry.serviceType,
+      requestDetails: queueEntry.requestDetails || "",
+      attendingStaff: req.user.id,
+      visitType,
+      status: "in_progress",
+      subjective: text("subjective"),
+      objective: text("objective"),
+      assessment: text("assessment"),
+      plan: text("plan"),
+      otc: { itemDispensed: text("medicineName", 300), quantity: text("quantity", 100), instructions: text("otcInstructions", 1000) },
+      firstAid: { careProvided: text("careProvided", 1000), appliedTo: text("appliedTo", 500), restRequired: text("restRequired", 300) },
+      safetyChecklist: {
+        verifiedIdentityAndAllergies: Boolean(req.body?.safetyChecklist?.verifiedIdentityAndAllergies),
+        confirmedNoAdverseReactions: Boolean(req.body?.safetyChecklist?.confirmedNoAdverseReactions),
+        instructedDosageAndHygiene: Boolean(req.body?.safetyChecklist?.instructedDosageAndHygiene),
+      },
+      sessionNotes: text("sessionNotes"),
+      natureOfInquiry: text("natureOfInquiry"),
+      inquiryResponse: text("inquiryResponse"),
+      vitalsSnapshot,
+    } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+  );
+  const linkedVitals = await VitalsLog.findOneAndUpdate(
+    { queueEntry: queueEntry._id },
+    { $set: { bloodPressure: bp, pulseRate, spo2, source: "manual_staff_entry", capturedAt: now }, $setOnInsert: { student: queueEntry.student._id, queueEntry: queueEntry._id } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+  );
+  const savedQueueEntry = await QueueEntry.findOneAndUpdate(
+    { _id: queueEntry._id, status: "provider_in_session" },
+    { $set: { nursingAssessment } },
+    { new: true, runValidators: true },
+  ).populate("student").populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded").populate("consultationRecord");
+  if (!savedQueueEntry) return res.status(409).json({ message: "The session changed while saving. Reload it before editing further." });
+  if (queueEntry.medicalWorkflow) {
+    queueEntry.medicalWorkflow.initialFields = intakeFields;
+    queueEntry.medicalWorkflow.diagnosis = text("assessment");
+    queueEntry.medicalWorkflow.treatment = text("plan");
+    await queueEntry.medicalWorkflow.save();
+  }
+  const profileFields = {
+    ...(queueEntry.medicalWorkflow?.initialFields || {}),
+    ...intakeFields,
+    diagnosis: text("assessment"),
+    treatment: text("plan"),
+    serviceType: queueEntry.serviceType,
+    requestDetails: queueEntry.requestDetails || "",
+    consultationStatus: "in_progress",
+    consultationRecordId: consultation._id,
+    nursingAssessment: { ...nursingAssessment },
+    clinicalRecord: { subjective: consultation.subjective, objective: consultation.objective, assessment: consultation.assessment, treatment: consultation.plan, medication: consultation.otc, firstAid: consultation.firstAid, safetyChecklist: consultation.safetyChecklist, notes: consultation.sessionNotes, vitals: vitalsSnapshot },
+  };
+  await MedicalProfile.findOneAndUpdate(
+    { $or: [{ consultationRecord: consultation._id }, { "fields.medicalWorkflowId": queueEntry.medicalWorkflow?._id }] },
+    { $set: { student: queueEntry.student._id, consultationRecord: consultation._id, studentId: queueEntry.student.studentId, purpose: queueEntry.serviceType, provider: req.user.name || "", physicalExamIncluded: queueEntry.medicalWorkflow?.physicalExamIncluded || false, laboratoryExamIncluded: queueEntry.medicalWorkflow?.laboratoryExamIncluded || false, fields: profileFields, examinedAt: now } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+  );
+  if (linkedVitals) savedQueueEntry.linkedVitals = linkedVitals;
+  req.app.get("io")?.to("clinical-queue").emit("queue:update", savedQueueEntry);
+  res.json({ consultation, queueEntry: savedQueueEntry, syncedAt: now });
+});
+
 router.post("/consultations", requireClinicalRole, async (req, res) => {
   const { queueEntryId, visitType, secondaryVitals = {} } = req.body;
   const queueEntry = await QueueEntry.findById(queueEntryId).populate("student").populate("linkedVitals");
@@ -323,6 +419,18 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
     { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
   );
   const { queueEntryId: _id, secondaryVitals: _vitals, ...recordFields } = req.body;
+  const intakeFields = recordFields.intakeFields && typeof recordFields.intakeFields === "object" && !Array.isArray(recordFields.intakeFields) ? recordFields.intakeFields : workflow?.initialFields || {};
+  if (JSON.stringify(intakeFields).length > 20000) return res.status(400).json({ message: "Medical record intake fields are invalid or too large." });
+  if (isConsultation && recordFields.nursingAssessment && typeof recordFields.nursingAssessment === "object") {
+    queueEntry.nursingAssessment = {
+      physicalExam: String(recordFields.nursingAssessment.physicalExam || "").trim().slice(0, 4000),
+      laboratoryExamination: String(recordFields.nursingAssessment.laboratoryExamination || "").trim().slice(0, 4000),
+      notes: String(recordFields.nursingAssessment.notes || "").trim().slice(0, 4000),
+      recordedBy: queueEntry.nursingAssessment?.recordedBy || req.user.id,
+      recordedAt: queueEntry.nursingAssessment?.recordedAt || new Date(),
+    };
+    await queueEntry.save();
+  }
   const consultation = await ConsultationRecord.findOneAndUpdate(
     { queueEntry: queueEntry._id },
     { $set: {
@@ -342,14 +450,16 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
       queueEntry: queueEntry._id,
       attendingStaff: req.user.id,
       visitType,
+      status: "completed",
       vitalsSnapshot: { ...(queueEntry.linkedVitals?.toObject?.() || {}), ...secondaryVitals },
     } },
     { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
   );
   if (workflow) {
+    workflow.initialFields = intakeFields;
     const attendingProvider = await User.findById(req.user.id).select("name");
     const profileFields = {
-      ...workflow.initialFields,
+      ...intakeFields,
       diagnosis: String(req.body.assessment || "").trim(),
       treatment: String(req.body.plan || "").trim(),
       visitType,

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { completeSession } from "../services/api.js";
+import { completeSession, saveConsultationDraft } from "../services/api.js";
 import useMedicineInventory, { inventoryItemLabel, isInventoryItemUnavailable } from "../hooks/useMedicineInventory.js";
 import "../styles/components/ActiveSessionModal.css";
 
@@ -34,6 +34,7 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
   const [tab, setTab] = useState("clinical");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [syncMessage, setSyncMessage] = useState("");
 
   // Secondary vitals — staff-entered, not captured by the kiosk
   const [bloodPressure, setBloodPressure] = useState(entry.linkedVitals?.bloodPressure || "");
@@ -41,59 +42,69 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
   const [spo2, setSpo2] = useState(entry.linkedVitals?.spo2 ?? "");
 
   // Clinical Charting
-  const [subjective, setSubjective] = useState("");
-  const [objective, setObjective] = useState("");
-  const [assessment, setAssessment] = useState("");
-  const [plan, setPlan] = useState("");
+  const saved = entry.consultationRecord || {};
+  const [subjective, setSubjective] = useState(saved.subjective || "");
+  const [objective, setObjective] = useState(saved.objective || "");
+  const [assessment, setAssessment] = useState(saved.assessment || entry.medicalWorkflow?.diagnosis || "");
+  const [plan, setPlan] = useState(saved.plan || entry.medicalWorkflow?.treatment || "");
+  const [intakeFields, setIntakeFields] = useState({ ...(entry.medicalWorkflow?.initialFields || {}) });
+  const [nursingAssessment, setNursingAssessment] = useState({ physicalExam: entry.nursingAssessment?.physicalExam || "", laboratoryExamination: entry.nursingAssessment?.laboratoryExamination || "", notes: entry.nursingAssessment?.notes || "" });
 
   // Medication & Relief
   const [selectedMedicineId, setSelectedMedicineId] = useState("");
   const { inventoryItems, inventoryLoading, inventoryError } = useMedicineInventory();
   const selectedMedicine = inventoryItems.find((item) => item._id === selectedMedicineId);
-  const [quantity, setQuantity] = useState("");
-  const [otcInstructions, setOtcInstructions] = useState("");
-  const [careProvided, setCareProvided] = useState("");
-  const [appliedTo, setAppliedTo] = useState("");
-  const [restRequired, setRestRequired] = useState("");
-  const [verifiedIdentityAndAllergies, setVerifiedIdentityAndAllergies] = useState(false);
-  const [confirmedNoAdverseReactions, setConfirmedNoAdverseReactions] = useState(false);
-  const [instructedDosageAndHygiene, setInstructedDosageAndHygiene] = useState(false);
-  const [sessionNotes, setSessionNotes] = useState("");
+  const [quantity, setQuantity] = useState(saved.otc?.quantity || "");
+  const [otcInstructions, setOtcInstructions] = useState(saved.otc?.instructions || "");
+  const [careProvided, setCareProvided] = useState(saved.firstAid?.careProvided || "");
+  const [appliedTo, setAppliedTo] = useState(saved.firstAid?.appliedTo || "");
+  const [restRequired, setRestRequired] = useState(saved.firstAid?.restRequired || "");
+  const [verifiedIdentityAndAllergies, setVerifiedIdentityAndAllergies] = useState(Boolean(saved.safetyChecklist?.verifiedIdentityAndAllergies));
+  const [confirmedNoAdverseReactions, setConfirmedNoAdverseReactions] = useState(Boolean(saved.safetyChecklist?.confirmedNoAdverseReactions));
+  const [instructedDosageAndHygiene, setInstructedDosageAndHygiene] = useState(Boolean(saved.safetyChecklist?.instructedDosageAndHygiene));
+  const [sessionNotes, setSessionNotes] = useState(saved.sessionNotes || "");
 
   // General Inquiry
-  const [natureOfInquiry, setNatureOfInquiry] = useState("");
-  const [inquiryResponse, setInquiryResponse] = useState("");
+  const [natureOfInquiry, setNatureOfInquiry] = useState(saved.natureOfInquiry || "");
+  const [inquiryResponse, setInquiryResponse] = useState(saved.inquiryResponse || "");
 
   const student = entry.student || {};
   const vitals = entry.linkedVitals || {};
-  const initialRecordFields = Object.entries(entry.medicalWorkflow?.initialFields || {}).filter(([key, value]) => !["diagnosis", "treatment", "treatment_remarks"].includes(key) && String(value ?? "").trim());
+  const initialRecordFields = Object.entries(entry.medicalWorkflow?.initialFields || {}).filter(([key]) => !["diagnosis", "treatment", "treatment_remarks"].includes(key));
+
+  useEffect(() => {
+    const match = inventoryItems.find((item) => item.name === saved.otc?.itemDispensed);
+    if (match && !selectedMedicineId) setSelectedMedicineId(match._id);
+  }, [inventoryItems, saved.otc?.itemDispensed, selectedMedicineId]);
+
+  function buildPayload() {
+    const visitType = tab === "medication" ? "Medication and Relief" : tab === "inquiry" ? "General Inquiry" : CLINICAL_VISIT_TYPE[entry.serviceType] || "Walk-in Medical Consultation";
+    return { queueEntryId: entry._id, visitType, subjective, objective, assessment, plan, intakeFields, nursingAssessment,
+      medicineName: selectedMedicine?.name || saved.otc?.itemDispensed || "", quantity: quantity && selectedMedicine?.unit ? `${quantity} ${selectedMedicine.unit}` : quantity,
+      otcInstructions, careProvided, appliedTo, restRequired,
+      safetyChecklist: { verifiedIdentityAndAllergies, confirmedNoAdverseReactions, instructedDosageAndHygiene },
+      sessionNotes, natureOfInquiry, inquiryResponse, secondaryVitals: { bloodPressure, pulseRate, spo2 } };
+  }
+
+  async function handleSaveDraft() {
+    setSaving(true); setError(null); setSyncMessage("");
+    try { await saveConsultationDraft(entry._id, buildPayload()); setSyncMessage("Draft synced to Full EMR · Medical Profile."); }
+    catch (saveError) { setError(saveError.response?.data?.message || "Draft could not be synced. Your entries remain here; please try again."); }
+    finally { setSaving(false); }
+  }
 
   async function handleComplete() {
     setSaving(true);
     setError(null);
     try {
-      const visitType =
-        tab === "medication"
-          ? "Medication and Relief"
-          : tab === "inquiry"
-          ? "General Inquiry"
-          : CLINICAL_VISIT_TYPE[entry.serviceType] || "Walk-in Medical Consultation";
-
-      const payload = {
-        queueEntryId: entry._id,
-        visitType,
-        secondaryVitals: {
-          bloodPressure: bloodPressure || undefined,
-          pulseRate: pulseRate === "" ? undefined : Number(pulseRate),
-          spo2: spo2 === "" ? undefined : Number(spo2),
-        },
-      };
+      const payload = buildPayload();
+      const visitType = payload.visitType;
 
       if (tab === "clinical") {
-        Object.assign(payload, { subjective, objective, assessment, plan });
+        Object.assign(payload, { subjective, objective, assessment, plan, intakeFields, nursingAssessment });
       } else if (tab === "medication") {
         Object.assign(payload, {
-          otc: { itemDispensed: selectedMedicine?.name || "", quantity: quantity && selectedMedicine?.unit ? `${quantity} ${selectedMedicine.unit}` : quantity, instructions: otcInstructions },
+          otc: { itemDispensed: selectedMedicine?.name || saved.otc?.itemDispensed || "", quantity: quantity && selectedMedicine?.unit ? `${quantity} ${selectedMedicine.unit}` : quantity, instructions: otcInstructions },
           firstAid: { careProvided, appliedTo, restRequired },
           safetyChecklist: {
             verifiedIdentityAndAllergies,
@@ -184,9 +195,9 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
             </div>
           </div>
 
-          {entry.medicalWorkflow && <section className="card" aria-label="New medical record intake"><h3 className="vitals-block-title">New Medical Record · Nurse Intake</h3><p>Purpose: {entry.medicalWorkflow.purpose}</p><p><strong>Provider route:</strong> {entry.serviceType === "Dental Consultation" ? "Dentist" : entry.serviceType === "Medical Consultation" ? "Physician" : "Clinic staff"} after nursing assessment.</p>{initialRecordFields.length ? <div className="patient-info-grid">{initialRecordFields.map(([key, value]) => <div key={key}><span className="field-label-inline">{key.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}:</span> {String(value)}</div>)}</div> : <p>No additional intake findings were entered.</p>}</section>}
+          {entry.medicalWorkflow && <section className="card" aria-label="New medical record intake"><h3 className="vitals-block-title">New Medical Record · Nurse Intake</h3><p>Purpose: {entry.medicalWorkflow.purpose}</p><p><strong>Provider route:</strong> {entry.serviceType === "Dental Consultation" ? "Dentist" : entry.serviceType === "Medical Consultation" ? "Physician" : "Clinic staff"} after nursing assessment.</p>{initialRecordFields.length ? <div className="vitals-rows">{initialRecordFields.map(([key]) => <label key={key} className="vitals-input-row"><span className="field-label-inline">{key.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}:</span><input className="text-input" value={String(intakeFields[key] ?? "")} onChange={(e) => setIntakeFields((current) => ({ ...current, [key]: e.target.value }))} /></label>)}</div> : <p>No additional intake findings were entered.</p>}</section>}
 
-          {entry.nursingAssessment && <section className="card" aria-label="Nursing handoff"><h3 className="vitals-block-title">Nursing assessment and handoff</h3><div className="vitals-rows">{entry.nursingAssessment.physicalExam && <p><strong>Physical examination:</strong> {entry.nursingAssessment.physicalExam}</p>}{entry.nursingAssessment.laboratoryExamination && <p><strong>Laboratory examination:</strong> {entry.nursingAssessment.laboratoryExamination}</p>}{entry.nursingAssessment.notes && <p><strong>Nursing notes:</strong> {entry.nursingAssessment.notes}</p>}</div></section>}
+          {entry.nursingAssessment && <section className="card" aria-label="Nursing handoff"><h3 className="vitals-block-title">Nursing assessment and handoff</h3><label className="field-label">Physical examination</label><textarea className="text-input" rows={2} value={nursingAssessment.physicalExam} onChange={(e) => setNursingAssessment((current) => ({ ...current, physicalExam: e.target.value }))} /><label className="field-label">Laboratory examination</label><textarea className="text-input" rows={2} value={nursingAssessment.laboratoryExamination} onChange={(e) => setNursingAssessment((current) => ({ ...current, laboratoryExamination: e.target.value }))} /><label className="field-label">Nursing notes</label><textarea className="text-input" rows={2} value={nursingAssessment.notes} onChange={(e) => setNursingAssessment((current) => ({ ...current, notes: e.target.value }))} /></section>}
 
           <h3 className="workstation-title">Workstation Tabs</h3>
           <div className="workstation-tabs">
@@ -270,12 +281,14 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
           )}
 
           {error && <p className="error-text" style={{ marginTop: 12 }}>{error}</p>}
+          {syncMessage && <p role="status" className="field-hint" style={{ marginTop: 12 }}>{syncMessage}</p>}
           {tab === "clinical" && (!assessment.trim() || !plan.trim()) && <p className="field-hint">Enter the diagnosis or clinical assessment and the treatment plan before completing this consultation.</p>}
 
           <div className="active-session-actions">
             <button className="btn btn-outline" onClick={() => navigate(`/emr?studentId=${student.studentId}`)}>
               Open Full Medical Record
             </button>
+            {entry.status === "provider_in_session" && <button className="btn btn-outline" onClick={handleSaveDraft} disabled={saving}>{saving ? "Saving…" : "Save Draft to EMR"}</button>}
             <button className="btn btn-primary" onClick={handleComplete} disabled={saving || (tab === "clinical" && (!assessment.trim() || !plan.trim()))}>
               {saving ? "Saving…" : "Mark Encounter Complete"}
             </button>
