@@ -29,6 +29,40 @@
 .document-actions .document-secondary { border: 2px solid #34418e; background: white; color: #34418e; }
 .document-submission-success { min-height: 55dvh; display: grid; align-content: center; justify-items: start; }
 .document-submission-success p { max-width: 44rem; font-size: 1.1rem; line-height: 1.6; }
+.clearance-document-submission { width: 100%; min-width: 0; overflow-x: clip; }
+.clearance-document-submission .document-submission-content { box-sizing: border-box; min-width: 0; }
+.clearance-upload-form { width: 100%; min-width: 0; }
+.clearance-upload-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; width: 100%; min-width: 0; box-sizing: border-box; }
+.clearance-upload-form-grid legend { grid-column: 1 / -1; max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere; }
+.clearance-upload-form-grid label { display: grid; align-content: start; gap: 7px; min-width: 0; color: #24334b; font-size: .96rem; font-weight: 700; line-height: 1.4; }
+.clearance-upload-form-grid label.document-field-wide { grid-column: 1 / -1; }
+.clearance-upload-form-grid input:not([type="checkbox"]), .clearance-upload-form-grid select { width: 100%; max-width: 100%; min-width: 0; min-height: 48px; box-sizing: border-box; padding: 10px 12px; border: 1px solid #9aa8ba; border-radius: 8px; background: #fff; color: #24334b; font: inherit; font-size: 16px; }
+.clearance-upload-form-grid input[type="file"] { padding: 8px; overflow: hidden; }
+.clearance-upload-form-grid label.document-check { display: flex; align-items: flex-start; gap: 11px; margin: 2px 0; }
+.clearance-upload-form-grid .document-check input { width: 22px; height: 22px; min-height: 22px; flex: 0 0 22px; margin: 0; padding: 0; accent-color: #0756b5; }
+.clearance-upload-form-grid label small { color: #5b687b; font-size: .83rem; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.clearance-upload-form .document-actions { margin-top: 14px; }
+.clearance-upload-form .document-actions button { min-width: min(100%, 240px); }
+.clearance-document-submission .document-intro { overflow-wrap: anywhere; }
+.clearance-upload-instructions { margin: 0 0 12px; color: #40516a; line-height: 1.5; }
+.clearance-upload-list { display: grid; gap: 12px; min-width: 0; }
+.clearance-upload-item { margin: 0; }
+.clearance-upload-item h2,
+.clearance-upload-item .clearance-upload-condition,
+.clearance-upload-item .clearance-upload-filename,
+.clearance-upload-item .clearance-upload-submitted,
+.clearance-upload-item .document-error,
+.clearance-upload-item .clearance-upload-submit { grid-column: 1 / -1; }
+.clearance-upload-item h2 { margin: 0; color: #163c76; font-size: 1rem; line-height: 1.45; overflow-wrap: anywhere; }
+.clearance-upload-condition { margin: -4px 0 0; color: #5b687b; font-size: .9rem; line-height: 1.45; overflow-wrap: anywhere; }
+.clearance-upload-filename { margin: 0; color: #344054; font-size: .9rem; overflow-wrap: anywhere; }
+.clearance-upload-submitted { margin: 0; color: #18532e; font-weight: 750; line-height: 1.45; }
+.clearance-upload-contact label:not(.document-check) { display: grid; gap: 7px; min-width: 0; color: #24334b; font-weight: 700; }
+.clearance-upload-contact input[type="email"] { width: 100%; min-width: 0; min-height: 48px; box-sizing: border-box; padding: 10px 12px; border: 1px solid #9aa8ba; border-radius: 8px; font: inherit; font-size: 16px; }
+.clearance-upload-contact small { color: #5b687b; font-size: .83rem; font-weight: 500; }
+.clearance-upload-contact .document-check { margin-bottom: 0; }
+.clearance-upload-submit { min-height: 50px; padding: 10px 16px; border: 0; border-radius: 9px; background: #0756b5; color: white; font-size: 1rem; font-weight: 750; cursor: pointer; }
+.clearance-upload-submit:disabled { opacity: .55; cursor: not-allowed; }
 @media (max-width: 600px) {
   .document-submission-content { width: calc(100% - 24px); padding-top: 18px; }
   .document-card { margin: 12px 0; padding: 14px; }
@@ -38,4 +72,17 @@
   .document-identity-verify button { width: 100%; }
   .document-actions { flex-direction: column-reverse; }
   .document-actions button { width: 100%; }
+  .clearance-upload-form-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px; }
+  .clearance-upload-form-grid legend,
+  .clearance-upload-form-grid label.document-field-wide { grid-column: 1; }
+  .clearance-upload-form-grid input[type="file"] { min-height: 52px; padding: 7px; font-size: 14px; }
+  .clearance-upload-form .document-actions button { min-width: 0; }
+  .clearance-upload-item { grid-template-columns: minmax(0, 1fr); }
+  .clearance-upload-item h2,
+  .clearance-upload-item .clearance-upload-condition,
+  .clearance-upload-item .clearance-upload-filename,
+  .clearance-upload-item .clearance-upload-submitted,
+  .clearance-upload-item .document-error,
+  .clearance-upload-item .clearance-upload-submit { grid-column: 1; }
+  .clearance-upload-contact { padding: 14px; }
 }

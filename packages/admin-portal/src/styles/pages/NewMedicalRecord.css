@@ -39,5 +39,8 @@
 .clearance-submission-qr p { margin: 5px 0; }
 .clearance-submission-qr small { display: block; max-width: 680px; overflow-wrap: anywhere; color: #667085; font-size: .72rem; }
 .clearance-submission-qr img { width: 160px; height: 160px; padding: 4px; border: 1px solid #e5e7eb; background: #fff; }
+.clearance-submission-qr > div { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.clearance-submission-qr img { flex: 0 0 auto; max-width: 100%; object-fit: contain; }
 .record-footer-actions .btn-danger { background: #e33a3a; color: #fff; border-radius: 2px; }
 @media (max-width: 700px) { .new-record-grid, .record-summary, .exam-grid, .result-fields { grid-template-columns: 1fr; } .exam-wide { grid-column: auto; } .record-section { padding: 16px; } .record-footer-actions { flex-wrap: wrap; } }
+@media (max-width: 600px) { .clearance-submission-qr { flex-direction: column; align-items: stretch; gap: 10px; } .clearance-submission-qr img { align-self: center; width: min(180px, 60vw); height: auto; aspect-ratio: 1; } .clearance-submission-qr small { font-size: .75rem; } }
