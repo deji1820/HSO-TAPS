@@ -99,6 +99,14 @@ table.data-table th {
 }
 .table-sort-button { border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
 .table-sort-button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.document-section-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; border-bottom: 1px solid var(--border-color, #d9e2ef); }
+.document-section-tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 9px 14px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--text-secondary, #52657d); font: inherit; font-weight: 600; cursor: pointer; }
+.document-section-tabs button.active { border-bottom-color: #1d5fbf; color: #163f75; }
+.document-section-tabs button span { display: inline-grid; min-width: 22px; height: 22px; place-items: center; border-radius: 999px; background: #edf2f9; font-size: .8rem; }
+.document-archive-header { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 18px 0 10px; }
+.document-archive-header .section-title { margin: 0; }
+.document-archive-header label { display: grid; gap: 5px; min-width: 190px; color: #52657d; font-size: .85rem; }
+@media (max-width: 650px) { .document-archive-header { align-items: stretch; flex-direction: column; } }
 table.data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
 table.data-table tr:last-child td { border-bottom: none; }
 table.data-table tr:hover td { background: #f7f9fc; }
