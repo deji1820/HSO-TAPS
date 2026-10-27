@@ -18,6 +18,8 @@
   max-width: 820px;
   overflow: hidden;
 }
+.active-session-modal--record { max-width: 1180px; }
+.active-session-modal--record .active-session-body { max-height: calc(100vh - 120px); }
 
 .active-session-header {
   background: var(--nu-blue);
