@@ -30,7 +30,11 @@ export default function MedicalDocumentsPage() {
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const canReviewDocuments = ["nurse", "supervisor"].includes(normalizeRole(user.role));
-  const visibleFiles = files.filter((file) => file.recordType !== "clearance_certificate");
+  const visibleFiles = files.filter((file) => {
+    const purpose = [file.submissionDetails?.purpose, file.submissionDetails?.clearance?.purpose, file.documentTitle, file.title].filter(Boolean).join(" ");
+    const clearanceRelated = Boolean(file.clearanceWorkflow) || /medical clearance/i.test(purpose);
+    return file.recordType !== "clearance_certificate" && !clearanceRelated && file.formSource === "Kiosk Document Submission";
+  });
   const pendingFiles = visibleFiles.filter((file) => (file.status || "Pending") === "Pending").sort(newestFirst);
   const reviewedFiles = visibleFiles.filter((file) => ["Verified", "Rejected"].includes(file.status));
   const archiveFiles = reviewedFiles.filter((file) => archiveFilter === "all" || (archiveFilter === "accepted" ? file.status === "Verified" : file.status === "Rejected")).sort(newestFirst);

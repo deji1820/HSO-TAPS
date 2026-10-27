@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { approveMedicalClearance, getMedicalDocuments, saveClearanceAssessment, submitPublicClearanceDocument, updateClearanceRequirement } from "../services/api.js";
+import { approveMedicalClearance, getMedicalDocuments, saveClearanceAssessment, submitPublicClearanceDocument, updateClearanceRequirement, updateMedicalDocumentStatus } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
+import VerifiedClearanceCertificate from "./VerifiedClearanceCertificate.jsx";
 import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/NewMedicalRecord.css";
 
@@ -42,6 +43,7 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
   const [evidence, setEvidence] = useState({});
   const [directUploads, setDirectUploads] = useState({});
   const [notificationEmail, setNotificationEmail] = useState(entry.student?.email || "");
+  const [certificatePreview, setCertificatePreview] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const clearanceDocuments = useMemo(() => documents.filter((doc) => String(doc.clearanceWorkflow?._id || doc.clearanceWorkflow) === String(workflow?._id)), [documents, workflow?._id]);
@@ -119,9 +121,30 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
     }
   }
 
+  async function reviewDocument(document, status) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await updateMedicalDocumentStatus(document._id, status, "");
+      let updatedWorkflow = result.clearanceWorkflowRecord || currentWorkflow;
+      if (updatedWorkflow?._id) setCurrentWorkflow(updatedWorkflow);
+      if (status === "Verified" && updatedWorkflow?.status === "ready_for_approval" && String(user.role || "").toLowerCase() === "nurse") {
+        updatedWorkflow = await approveMedicalClearance(workflow._id, "");
+        setCurrentWorkflow(updatedWorkflow);
+      }
+      await refreshDocuments();
+      onUpdated?.(updatedWorkflow);
+    } catch (requestError) {
+      setError(requestErrorMessage(requestError, `Could not ${status === "Verified" ? "accept" : "reject"} this document.`));
+    } finally { setBusy(false); }
+  }
+
   const activeWorkflow = currentWorkflow || {};
   const assessmentOpen = ["assessment", "requirements_pending", "ready_for_approval"].includes(activeWorkflow.status);
   const statusLabel = activeWorkflow.status === "ready_for_approval" ? "Ready for completion" : String(activeWorkflow.status || "").replaceAll("_", " ");
+  const clearanceCertificate = activeWorkflow.medicalFile && typeof activeWorkflow.medicalFile === "object"
+    ? activeWorkflow.medicalFile
+    : documents.find((doc) => doc.recordType === "clearance_certificate" && String(doc.sourceWorkflow?._id || doc.sourceWorkflow) === String(workflow?._id));
   useEffect(() => {
     if (activeWorkflow.status !== "approval_in_progress") return undefined;
     const approvedBy = activeWorkflow.providerApproval?.approvedBy?._id || activeWorkflow.providerApproval?.approvedBy;
@@ -144,7 +167,7 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
       <header className="active-session-header"><div><h2 id="clearance-title">Medical Clearance — {activeWorkflow.purpose}</h2><p>{entry.student?.firstName} {entry.student?.lastName} · {entry.student?.studentId} · {entry.queueNumber ? `Queue ${entry.queueNumber}` : "Staff-created clearance"}</p></div><button type="button" className="active-session-close" onClick={onClose} aria-label="Close clearance workflow">×</button></header>
       <div className="active-session-body">
         <div className="record-summary"><div><h3>{entry.student?.lastName}, {entry.student?.firstName}</h3><p>Affiliation: {entry.student?.affiliation || activeWorkflow.affiliation}</p><p>Department: {entry.student?.department || entry.student?.program || "—"}</p><p>Official Email: {entry.student?.email || "—"}</p></div><div><p>Clearance purpose: {activeWorkflow.purpose}</p><p>Started: {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "—"}</p><p>Workflow status: {statusLabel}</p></div></div>
-        <section className="record-section clearance-submitted-documents"><div className="clearance-documents-heading"><h3>Documents Submitted for This Clearance</h3><button type="button" className="btn btn-secondary btn-sm" onClick={refreshDocuments} disabled={documentsLoading}>{documentsLoading ? "Refreshing…" : "Refresh documents"}</button></div><p>Review and accept or reject these files in Medical Documents. Their review updates the matching clearance requirement.</p>{documentsLoading ? <p role="status">Loading submitted files…</p> : clearanceDocuments.length ? <ul>{clearanceDocuments.map((doc) => <li key={doc._id}><span><strong>{doc.clearanceRequirementText || doc.submissionDetails?.clearanceRequirementText || "Clearance document"}</strong><br />{doc.name || doc.documentTitle} · {doc.status} · Submitted {new Date(doc.submittedAt || doc.createdAt).toLocaleString()}</span><div className="clearance-document-row-actions">{doc.name && <button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(doc._id, doc.name).catch((openError) => setError(openError.message || "Could not open this submitted file."))}>View Submitted File</button>}</div></li>)}</ul> : <p>No files have been submitted for this clearance yet.</p>}</section>
+        <section className="record-section clearance-submitted-documents"><div className="clearance-documents-heading"><h3>Documents Submitted for This Clearance</h3><button type="button" className="btn btn-secondary btn-sm" onClick={refreshDocuments} disabled={documentsLoading}>{documentsLoading ? "Refreshing…" : "Refresh documents"}</button></div><p>Review each uploaded file here. Once the assessment and all requirements are complete, accepting the last required document issues the certificate and completes this queue entry.</p>{documentsLoading ? <p role="status">Loading submitted files…</p> : clearanceDocuments.length ? <ul>{clearanceDocuments.map((doc) => <li key={doc._id}><span><strong>{doc.clearanceRequirementText || doc.submissionDetails?.clearanceRequirementText || "Clearance document"}</strong><br />{doc.name || doc.documentTitle} · {doc.status} · Submitted {new Date(doc.submittedAt || doc.createdAt).toLocaleString()}</span><div className="clearance-document-row-actions">{doc.name && <button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(doc._id, doc.name).catch((openError) => setError(openError.message || "Could not open this submitted file."))}>View Submitted File</button>}{doc.status === "Pending" && ["nurse", "supervisor"].includes(String(user.role || "").toLowerCase()) && <><button type="button" className="btn btn-success btn-sm" disabled={busy} onClick={() => reviewDocument(doc, "Verified")}>Accept</button><button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={() => reviewDocument(doc, "Rejected")}>Reject</button></>}</div></li>)}</ul> : <p>No files have been submitted for this clearance yet.</p>}</section>
         <section className="record-section"><h3>Clearance Requirements</h3><ol>{activeWorkflow.requirements?.map((item, index) => <li key={`${item.text}-${index}`}>{item.text}</li>)}</ol></section>
         {assessmentOpen && activeWorkflow.requirements?.some((item) => item.kind === "document") && <section className="record-section clearance-direct-upload"><h3>Upload Documents from This Computer</h3><p>Use this option if the kiosk or phone QR is unavailable. Each upload is added to Medical Documents for review.</p>{!entry.student?.email && <label>Email for document status updates<input className="text-input" type="email" value={notificationEmail} onChange={(event) => setNotificationEmail(event.target.value)} /></label>}{activeWorkflow.requirements.filter((item) => item.kind === "document").map((item, index) => {
           const upload = directUploads[item.text] || {};
@@ -162,9 +185,10 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
         })}</section>}
         {assessmentOpen && <form onSubmit={saveAssessment} className="record-section"><h3>Nurse Assessment and Requirement Review</h3><div className="exam-grid"><label>Physical Examination<textarea className="text-input" rows={3} value={assessment.physicalExam} onChange={(event) => setAssessment({ ...assessment, physicalExam: event.target.value })} /></label><label>Laboratory Examination<textarea className="text-input" rows={3} value={assessment.laboratoryExamination} onChange={(event) => setAssessment({ ...assessment, laboratoryExamination: event.target.value })} /></label><label className="exam-wide">Notes<textarea className="text-input" rows={2} value={assessment.notes} onChange={(event) => setAssessment({ ...assessment, notes: event.target.value })} /></label></div><button className="btn btn-primary" disabled={busy}>Save Nurse Assessment</button></form>}
         {!(["approved", "completed"].includes(activeWorkflow.status)) && activeWorkflow.requirements?.map((item, index) => item.kind === "document" ? null : <section className="record-section" key={`req-${index}`}><h3>{item.text}</h3><label>Completion note<textarea className="text-input" rows={2} value={evidence[index] || ""} onChange={(event) => setEvidence({ ...evidence, [index]: event.target.value })} /></label><div className="modal-actions"><button type="button" className="btn btn-success" disabled={busy} onClick={() => setRequirement(index, "satisfied", item)}>Mark Satisfied</button>{item.conditional && <button type="button" className="btn btn-secondary" disabled={busy || !evidence[index]?.trim()} onClick={() => setRequirement(index, "not_applicable", item)}>Not Applicable</button>}{item.status !== "pending" && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRequirement(index, "pending", item)}>Reset to Pending</button>}</div></section>)}
-        {activeWorkflow.status === "approved" || activeWorkflow.status === "completed" ? <p role="status">Certificate issued and saved in Documents &amp; Attachments.</p> : null}
+        {activeWorkflow.status === "approved" || activeWorkflow.status === "completed" ? <section className="record-section clearance-issued-certificate"><h3>Clearance Certificate</h3><p role="status">Certificate issued and saved in Documents &amp; Attachments. The walk-in queue has been completed.</p>{clearanceCertificate && <button type="button" className="btn btn-primary" onClick={() => setCertificatePreview(clearanceCertificate)}>Preview / Print Certificate</button>}</section> : null}
         {error && <p className="error-text" role="alert">{error}</p>}
       </div>
     </section>
+    {certificatePreview && <VerifiedClearanceCertificate certificate={certificatePreview} onClose={() => setCertificatePreview(null)} />}
   </div>;
 }
