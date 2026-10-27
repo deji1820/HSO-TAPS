@@ -4,6 +4,7 @@ import QueueEntry from "../models/QueueEntry.js";
 import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import { expireStaleEntries } from "../services/queueExpiration.service.js";
 import { decoratePatients } from "../services/academicYearDisplay.js";
+import { providerRoleMatches } from "../services/providerAvailability.js";
 
 const router = Router();
 const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -212,7 +213,7 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
   }
   if (status === "awaiting_provider" && !isConsultation) return res.status(403).json({ message: "Only medical and dental consultations are routed from nursing to a provider." });
   if (status === "provider_in_session" && !isConsultation) return res.status(403).json({ message: "Provider handoff is only used for medical and dental consultations." });
-  if (status === "provider_in_session" && ((role === "dentist" && current.serviceType !== "Dental Consultation") || (role !== "dentist" && current.serviceType === "Dental Consultation"))) {
+  if (status === "provider_in_session" && !providerRoleMatches(current.serviceType, role)) {
     return res.status(403).json({ message: "This encounter must be handled by the matching physician or dentist." });
   }
   const timestampField = { called: "calledAt", in_session: "startedAt", provider_in_session: "providerStartedAt", completed: "completedAt" }[status];

@@ -13,9 +13,9 @@ const dateTime = (value) => value ? new Date(value).toLocaleString([], { dateSty
 const STATUS_LABEL = { waiting: "Checked In", called: "Awaiting Nurse Assessment", in_session: "Intake In Progress", awaiting_provider: "Awaiting Physician or Dentist", provider_in_session: "Consultation In Progress", completed: "Completed", cancelled: "Cancelled", expired: "Expired" };
 const HISTORY_STATUS_LABEL = STATUS_LABEL;
 
-function filterQueueEntries(entries, { provider, filter, search }) {
+function filterQueueEntries(entries, { provider, providerRole, filter, search }) {
   return entries.filter((entry) => {
-    if (provider && !["Medical Consultation", "Dental Consultation"].includes(entry.serviceType)) return false;
+    if (provider && !providerHandlesService(providerRole, entry.serviceType)) return false;
     const matchesFilter = filter === "All" || (filter === "High Priority" ? entry.priorityLevel === filter : entry.serviceType === filter);
     const name = `${entry.student?.firstName || ""} ${entry.student?.lastName || ""} ${entry.student?.studentId || ""} ${entry.queueNumber || ""}`.toLowerCase();
     return matchesFilter && name.includes(search.toLowerCase());
@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [sessionNotice, setSessionNotice] = useState("");
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const provider = ["physician", "doctor", "dentist"].includes(user.role);
+  const providerRole = user.role;
   const supervisor = user.role === "supervisor";
   const clinicalRole = ["nurse", "supervisor", "physician", "doctor", "dentist"].includes(user.role);
   const [announcement, setAnnouncement] = useState("Health Services Office announcements will appear here.");
@@ -94,8 +95,8 @@ export default function DashboardPage() {
     return () => { socket.off("queue:new", onNew); socket.off("queue:update", onUpdate); socket.off("announcement:update", onAnnouncement); socket.disconnect(); };
   }, [refreshQueue, refreshScreeningAlerts, refreshHistory]);
 
-  const visibleQueue = useMemo(() => filterQueueEntries(queue, { provider, filter, search }).sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * (sortOrder === "asc" ? 1 : -1)), [queue, filter, search, provider, sortOrder]);
-  const visibleHistory = useMemo(() => filterQueueEntries(history, { provider, filter, search }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [history, filter, search, provider]);
+  const visibleQueue = useMemo(() => filterQueueEntries(queue, { provider, providerRole, filter, search }).sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * (sortOrder === "asc" ? 1 : -1)), [queue, filter, search, provider, providerRole, sortOrder]);
+  const visibleHistory = useMemo(() => filterQueueEntries(history, { provider, providerRole, filter, search }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [history, filter, search, provider, providerRole]);
   const selected = (queueView === "active" ? queue : history).find((entry) => entry._id === selectedId) || null;
   const visibleServiceTypes = provider ? SERVICE_TYPES.slice(0, 2) : queueView === "history" ? SERVICE_TYPES : SERVICE_TYPES.filter((service) => service !== "Quick Health Screening");
 
@@ -180,7 +181,7 @@ export default function DashboardPage() {
         </div>}
         {queueView === "history" && historyError && <div className="table-empty" role="alert">{historyError}</div>}
         {queueView === "active" ? (
-          visibleQueue.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th><th>Encounter Status</th></tr></thead><tbody>{visibleQueue.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}{entry.elevatedVitalsAlert?.active && <span className="appointment-cell-secondary" role="status">&#9888; Elevated vital signs alert</span>}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td><td>{entry.encounterStatusLabel || STATUS_LABEL[entry.status] || entry.status}</td></tr>)}</tbody></table></div> : <div className="table-empty">No active patients in the queue.</div>
+          visibleQueue.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th><th>Provider Route</th><th>Encounter Status</th></tr></thead><tbody>{visibleQueue.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}{entry.elevatedVitalsAlert?.active && <span className="appointment-cell-secondary" role="status">&#9888; Elevated vital signs alert</span>}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td><td>{providerTarget(entry.serviceType) || "—"}</td><td>{queueStatusLabel(entry)}</td></tr>)}</tbody></table></div> : <div className="table-empty">No active patients in the queue.</div>
         ) : (
           visibleHistory.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Date / time queued</th><th>Called at</th><th>Purpose</th><th>Encounter Status</th></tr></thead><tbody>{visibleHistory.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "-"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{dateTime(entry.createdAt)}</td><td>{entry.calledAt ? dateTime(entry.calledAt) : "-"}</td><td>{entry.serviceType || "-"}</td><td>{HISTORY_STATUS_LABEL[entry.status] || entry.status}</td></tr>)}</tbody></table></div> : !historyError && <div className="table-empty">No archived queue entries match this date range.</div>
         )}
@@ -197,9 +198,10 @@ export default function DashboardPage() {
         <div className="snapshot-field"><span>Patient Type:</span> Student</div>
         <div className="snapshot-field"><span>Student ID:</span> {selected.student?.studentId || "—"}</div>
         <div className="snapshot-field"><span>Department:</span> {selected.student?.program || "—"}</div>
-        <div className="snapshot-field"><span>Purpose:</span> {selected.serviceType || "—"}</div>
+        <div className="snapshot-field"><span>Purpose:</span> {selected.medicalWorkflow?.purpose || selected.serviceType || "—"}</div>
+        {providerTarget(selected.serviceType) && <div className="snapshot-field"><span>Provider Route:</span> {providerTarget(selected.serviceType)}{selected.status === "awaiting_provider" || selected.status === "provider_in_session" ? " · Provider queue" : " · After nursing assessment"}</div>}
         {queueView === "active" ? <>
-          <div className="snapshot-field"><span>Encounter Status:</span> {selected.encounterStatusLabel || STATUS_LABEL[selected.status] || selected.status}</div>
+          <div className="snapshot-field"><span>Encounter Status:</span> {queueStatusLabel(selected)}</div>
           {selected.expirationExempt && isNursingTeam(user.role) && <div className="snapshot-field"><span>Expiration exception:</span> {selected.expirationExemptionReason || "Authorized exception"}</div>}
           {selected.elevatedVitalsAlert?.active && <div className="snapshot-field elevated-vitals-alert" role="alert"><strong>&#9888; Elevated vital signs alert: {selected.elevatedVitalsAlert.reason || "Review required"}</strong><p>Next action: assess the patient and follow the clinic escalation procedure. This alert does not change encounter status.</p>{clinicalRole && <button type="button" className="btn btn-warning" onClick={async () => { try { const updated = await updateElevatedVitalsAlert(selected._id, selected.elevatedVitalsAlert.acknowledgedAt ? "resolve" : "acknowledge"); setQueue((items) => items.map((item) => item._id === updated._id ? updated : item)); setSelectedId(updated._id); } catch (error) { window.alert(error.response?.data?.message || "Could not update the elevated-vitals alert."); } }}>{selected.elevatedVitalsAlert.acknowledgedAt ? "Resolve Alert" : "Acknowledge and Review Alert"}</button>}</div>}
           <div className="snapshot-actions">
@@ -208,14 +210,14 @@ export default function DashboardPage() {
             {isNursingTeam(user.role) && selected.status === "in_session" && isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={() => setNursingEntry(selected)}>Resume Nursing Assessment</button>}
             {isNursingTeam(user.role) && selected.status === "called" && !isConsultation(selected.serviceType) && selected.serviceType !== "Medical Clearance" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setSessionEntry(entry); }}>Start Nursing Assessment</button>}
             {isNursingTeam(user.role) && selected.status === "in_session" && !isConsultation(selected.serviceType) && selected.serviceType !== "Medical Clearance" && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Nursing Assessment</button>}
-            {provider && selected.status === "awaiting_provider" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>Start Consultation</button>}
-            {provider && selected.status === "provider_in_session" && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Consultation</button>}
+            {provider && providerHandlesService(user.role, selected.serviceType) && selected.status === "awaiting_provider" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>Start {providerTarget(selected.serviceType)} Consultation</button>}
+            {provider && providerHandlesService(user.role, selected.serviceType) && selected.status === "provider_in_session" && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Consultation</button>}
             {!provider && <button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button>}
             {isNursingTeam(user.role) && ["waiting", "called"].includes(selected.status) && <button className="btn btn-secondary" onClick={() => changeExpirationException(selected)}>{selected.expirationExempt ? "Remove Expiration Exception" : "Keep in Queue"}</button>}
           </div>
           {clinicalRole && <div className="snapshot-actions"><button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Open Full Medical Record</button></div>}
         </> : <>
-          <div className="snapshot-field"><span>Encounter Status:</span> {selected.encounterStatusLabel || HISTORY_STATUS_LABEL[selected.status] || selected.status}</div>
+          <div className="snapshot-field"><span>Encounter Status:</span> {queueStatusLabel(selected, HISTORY_STATUS_LABEL)}</div>
           {selected.elevatedVitalsAlert?.active && <div className="snapshot-field elevated-vitals-alert" role="alert"><strong>&#9888; Elevated vital signs alert: {selected.elevatedVitalsAlert.reason || "Review required"}</strong><p>Next action: review the recorded acknowledgement and clinical follow-up before closing this alert.</p></div>}
           <div className="snapshot-field"><span>Checked in:</span> {dateTime(selected.createdAt)}</div>
           <div className="snapshot-field"><span>Called:</span> {dateTime(selected.calledAt)}</div>
@@ -228,7 +230,7 @@ export default function DashboardPage() {
           {selected.requestDetails && <div className="snapshot-field"><span>Request details:</span> {selected.requestDetails}</div>}
           {selected.linkedVitals && <div className="snapshot-archive-vitals"><strong>Vital Signs</strong><div>Temperature: {selected.linkedVitals.temperatureC ?? "—"} °C</div><div>Height: {selected.linkedVitals.heightCm ?? "—"} cm</div><div>Weight: {selected.linkedVitals.weightKg ?? "—"} kg</div><div>Blood pressure: {selected.linkedVitals.bloodPressure || "—"}</div></div>}
           <div className="snapshot-actions">
-            {provider && ["awaiting_provider", "provider_in_session"].includes(selected.status) && <button className="btn btn-success" onClick={async () => { const entry = selected.status === "provider_in_session" ? selected : await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>{selected.status === "provider_in_session" ? "Resume Consultation" : "Start Consultation"}</button>}
+            {provider && providerHandlesService(user.role, selected.serviceType) && ["awaiting_provider", "provider_in_session"].includes(selected.status) && <button className="btn btn-success" onClick={async () => { const entry = selected.status === "provider_in_session" ? selected : await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>{selected.status === "provider_in_session" ? "Resume Consultation" : `Start ${providerTarget(selected.serviceType)} Consultation`}</button>}
             {clinicalRole && <button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Open Full Medical Record</button>}
           </div>
         </>}
@@ -242,3 +244,6 @@ export default function DashboardPage() {
 
 function isNursingTeam(role) { return ["nurse", "supervisor"].includes(role); }
 function isConsultation(serviceType) { return ["Medical Consultation", "Dental Consultation"].includes(serviceType); }
+function providerTarget(serviceType) { return serviceType === "Dental Consultation" ? "Dentist" : serviceType === "Medical Consultation" ? "Physician" : null; }
+function providerHandlesService(role, serviceType) { return (String(role || "").toLowerCase() === "dentist") === (serviceType === "Dental Consultation") && isConsultation(serviceType); }
+function queueStatusLabel(entry, labels = STATUS_LABEL) { return entry.status === "awaiting_provider" && providerTarget(entry.serviceType) ? `Awaiting ${providerTarget(entry.serviceType)}` : entry.encounterStatusLabel || labels[entry.status] || entry.status; }

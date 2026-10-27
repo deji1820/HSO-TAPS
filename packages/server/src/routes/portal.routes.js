@@ -11,6 +11,7 @@ import MedicalProfile from "../models/MedicalProfile.js";
 import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import User from "../models/User.js";
 import { findClearanceRequirement } from "../services/clearanceRequirements.js";
+import { providerRoleMatches } from "../services/providerAvailability.js";
 import { clearancePurposeFor, issueVerifiedClearanceDocument } from "../services/clearanceCertificate.service.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 import PatientHistory from "../models/PatientHistory.js";
@@ -303,7 +304,7 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
     if (!(["physician", "doctor", "dentist"].includes(role)) || queueEntry.status !== "provider_in_session") {
       return res.status(409).json({ message: "A physician or dentist must start this consultation before completing it." });
     }
-    if ((role === "dentist" && queueEntry.serviceType !== "Dental Consultation") || (role !== "dentist" && queueEntry.serviceType === "Dental Consultation")) {
+    if (!providerRoleMatches(queueEntry.serviceType, role)) {
       return res.status(403).json({ message: "This consultation must be completed by the matching physician or dentist." });
     }
   } else if (!(["nurse", "supervisor"].includes(role)) || queueEntry.status !== "in_session") {
