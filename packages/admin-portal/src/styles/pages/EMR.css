@@ -127,6 +127,10 @@
   margin-bottom: -1px;
 }
 .emr-tab-content { max-width: 770px; margin: 0 auto; padding: 0; }
+.emr-files-sections { display: grid; gap: 22px; }
+.emr-files-section { min-width: 0; }
+.emr-files-section > .section-title { margin: 0 0 10px; }
+.emr-files-section > .page-subtitle { margin: -4px 0 10px; }
 .emr-document-list { display: grid; gap: 12px; width: 100%; }
 .emr-document-card { min-width: 0; padding: 14px; border: 1px solid #dce3ed; border-radius: 9px; background: #fff; box-shadow: 0 1px 3px rgba(20, 40, 70, .06); }
 .emr-document-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #e8edf4; }

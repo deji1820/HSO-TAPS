@@ -157,8 +157,8 @@ function ClearanceCertificateAction({ certificate, label = "View / Print Certifi
 }
 
 function MedicalClearanceForms({ workflows = [], documents = [] }) {
-  if (!workflows.length) return <><h2 className="section-title">Medical Clearance Forms</h2><div className="table-empty">No medical clearance records have been created for this patient.</div></>;
-  return <section className="medical-clearance-forms"><h2 className="section-title">Medical Clearance Forms</h2><div className="emr-document-list">{workflows.map((workflow) => {
+  if (!workflows.length) return <div className="table-empty">No medical clearances have been created for this patient.</div>;
+  return <section className="medical-clearance-forms"><div className="emr-document-list">{workflows.map((workflow) => {
     const linkedDocuments = documents.filter((document) => String(document.clearanceWorkflow?._id || document.clearanceWorkflow) === String(workflow._id));
     const certificate = documents.find((document) => String(document.sourceWorkflow?._id || document.sourceWorkflow) === String(workflow._id)) || workflow.medicalFile;
     return <article className="emr-document-card" key={workflow._id}>
@@ -784,13 +784,22 @@ export default function EMRPage() {
             {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} studentMongoId={record.student._id} onSaved={replaceLatestMedicalProfile} /><KioskRequestsTab requests={record.kioskRequests} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
-            {tab === "forms" && <><MedicalClearanceForms workflows={record.medicalWorkflows || []} documents={record.documents || []} /><HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} /> </>}
-            {tab === "files" && <>
-              <h2 className="section-title">Medical Document Submissions</h2>
-              <MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} onRetryCertificate={retryClearanceCertificate} />
-              <h2 className="section-title">Other Synced Medical Files</h2>
-              <DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && !(document.recordType === "clearance_certificate" && document.sourceDocument) && document.formSource !== "Kiosk Document Submission")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />
-            </>}
+            {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} />}
+            {tab === "files" && <div className="emr-files-sections">
+              <p className="page-subtitle">Clearance records and certificates, submitted documents, and other medical files are grouped below.</p>
+              <section className="emr-files-section">
+                <h2 className="section-title">Medical Clearances ({record.medicalWorkflows?.length || 0})</h2>
+                <MedicalClearanceForms workflows={record.medicalWorkflows || []} documents={record.documents || []} />
+              </section>
+              <section className="emr-files-section">
+                <h2 className="section-title">Submitted Documents ({medicalDocumentFiles.length})</h2>
+                <MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} onRetryCertificate={retryClearanceCertificate} />
+              </section>
+              <section className="emr-files-section">
+                <h2 className="section-title">Other Medical Files ({(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && !(document.recordType === "clearance_certificate" && (document.sourceDocument || document.sourceWorkflow)) && !document.clearanceWorkflow && document.formSource !== "Kiosk Document Submission").length})</h2>
+                <DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && !(document.recordType === "clearance_certificate" && (document.sourceDocument || document.sourceWorkflow)) && !document.clearanceWorkflow && document.formSource !== "Kiosk Document Submission")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />
+              </section>
+            </div>}
           </div>
         </div>
       )}
