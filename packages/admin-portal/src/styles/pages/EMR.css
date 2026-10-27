@@ -178,6 +178,8 @@
 .emr-compact-count { color: #68758a; font-size: 0.72rem; font-weight: 500; white-space: nowrap; }
 .emr-compact-section > .table-wrap, .emr-compact-section > .table-empty { margin: 0 10px 10px; }
 .emr-compact-section > .emr-profile-previous { padding: 0 10px 10px; }
+.emr-record-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 0 10px 10px; color: #68758a; font-size: 0.72rem; }
+.emr-record-pagination .btn { min-height: 30px; padding: 4px 10px; }
 .emr-history-title { margin-top: 24px; }
 .emr-profile-previous { display: flex; flex-direction: column; gap: 8px; }
 .emr-profile-previous details { border: 1px solid #d7d7d7; background: #fff; }

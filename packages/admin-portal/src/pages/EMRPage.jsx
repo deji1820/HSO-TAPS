@@ -8,6 +8,8 @@ import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/EMR.css";
 import { appDialog } from "../../../shared-ui/src/dialogService.js";
 
+const EMR_RECORDS_PER_PAGE = 5;
+
 function formatDate(d) {
   if (!d) return "—";
   return new Date(d).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
@@ -242,6 +244,10 @@ function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumen
 }
 
 function KioskRequestsTab({ requests = [] }) {
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(requests.length / EMR_RECORDS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const visibleRequests = requests.slice((currentPage - 1) * EMR_RECORDS_PER_PAGE, currentPage * EMR_RECORDS_PER_PAGE);
   const formatDetails = (value) => {
     if (!value) return "—";
     try {
@@ -260,8 +266,9 @@ function KioskRequestsTab({ requests = [] }) {
     <summary><span>Kiosk Service Requests</span><span className="emr-compact-count">{requests.length} {requests.length === 1 ? "request" : "requests"}</span></summary>
     {requests.length ? <div className="table-wrap"><table className="data-table">
       <thead><tr><th>Date</th><th>Service</th><th>Reason</th><th>Details entered at kiosk</th></tr></thead>
-      <tbody>{requests.map((request) => <tr key={request._id}><td>{formatDate(request.createdAt)}</td><td>{request.serviceType || "—"}</td><td>{request.reason || "—"}</td><td>{formatDetails(request.requestDetails)}</td></tr>)}</tbody>
+      <tbody>{visibleRequests.map((request) => <tr key={request._id}><td>{formatDate(request.createdAt)}</td><td>{request.serviceType || "—"}</td><td>{request.reason || "—"}</td><td>{formatDetails(request.requestDetails)}</td></tr>)}</tbody>
     </table></div> : <div className="table-empty">No kiosk service requests recorded for this patient.</div>}
+    {pageCount > 1 && <nav className="emr-record-pagination" aria-label="Kiosk service request pages"><button type="button" className="btn btn-outline btn-sm" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button><span>Page {currentPage} of {pageCount}</span><button type="button" className="btn btn-outline btn-sm" disabled={currentPage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next</button></nav>}
   </details>;
 }
 
@@ -309,12 +316,16 @@ function MedicalProfileSections({ entry, vitals = [], editable = false, onFieldC
 
 function MedicalProfileHistory({ entries, vitals, studentMongoId, onSaved }) {
   const [editing, setEditing] = useState(false);
+  const [previousPage, setPreviousPage] = useState(1);
   const [draft, setDraft] = useState({});
   const [profileMeta, setProfileMeta] = useState({ purpose: "", provider: "" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const latest = entries[0];
   const previous = entries.slice(1);
+  const previousPageCount = Math.max(1, Math.ceil(previous.length / EMR_RECORDS_PER_PAGE));
+  const currentPreviousPage = Math.min(previousPage, previousPageCount);
+  const visiblePrevious = previous.slice((currentPreviousPage - 1) * EMR_RECORDS_PER_PAGE, currentPreviousPage * EMR_RECORDS_PER_PAGE);
   function startEditing() {
     setDraft({ ...(latest?.fields || {}) });
     setProfileMeta({ purpose: latest?.purpose || "Medical Examination", provider: latest?.provider || "" });
@@ -351,10 +362,11 @@ function MedicalProfileHistory({ entries, vitals, studentMongoId, onSaved }) {
     <MedicalProfileSections entry={editing ? { ...latest, fields: draft } : latest} vitals={vitals} editable={editing} onFieldChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} />
     {previous.length ? <details className="emr-compact-section emr-previous-profiles">
       <summary><span>Previous Medical Profile History</span><span className="emr-compact-count">{previous.length} {previous.length === 1 ? "record" : "records"}</span></summary>
-      <div className="emr-profile-previous">{previous.map((entry) => <details key={entry.id}>
+      <div className="emr-profile-previous">{visiblePrevious.map((entry) => <details key={entry.id}>
         <summary>{new Date(entry.examinedAt).toLocaleString()} · {entry.purpose} · {entry.provider}</summary>
         <MedicalProfileSections entry={entry} />
       </details>)}</div>
+      {previousPageCount > 1 && <nav className="emr-record-pagination" aria-label="Previous medical profile pages"><button type="button" className="btn btn-outline btn-sm" disabled={currentPreviousPage <= 1} onClick={() => setPreviousPage((value) => Math.max(1, value - 1))}>Previous</button><span>Page {currentPreviousPage} of {previousPageCount}</span><button type="button" className="btn btn-outline btn-sm" disabled={currentPreviousPage >= previousPageCount} onClick={() => setPreviousPage((value) => Math.min(previousPageCount, value + 1))}>Next</button></nav>}
     </details> : <><h2 className="section-title emr-history-title">Previous Medical Profile History</h2><p className="emr-profile-empty-history">No previous medical profiles recorded.</p></>}
   </>;
 }
