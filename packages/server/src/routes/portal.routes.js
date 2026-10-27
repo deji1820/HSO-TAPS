@@ -309,6 +309,7 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
   }
 });
 router.post("/medical-workflows/:id/complete", requireRole("nurse"), async (req, res) => {
+  let completionStage = "loading the clearance";
   try {
     if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
     const workflow = await MedicalWorkflow.findById(req.params.id);
@@ -316,12 +317,15 @@ router.post("/medical-workflows/:id/complete", requireRole("nurse"), async (req,
     if (workflow.service !== "Medical Clearance" || !["approved", "completed"].includes(workflow.status) || !workflow.medicalFile || !workflow.certificateIssuedAt) {
       return res.status(409).json({ message: "Approve the completed clearance and issue its certificate before completing this process." });
     }
-    if (workflow.status === "completed") return res.json(await workflow.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+    if (workflow.status === "completed") return res.json(workflow.toObject());
 
     const io = req.app.get("io");
+    let appointmentSyncWarning = false;
     if (workflow.queueEntry) {
+      completionStage = "loading the linked queue entry";
       const linkedQueue = await QueueEntry.findById(workflow.queueEntry).select("status appointment");
       if (linkedQueue && ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session"].includes(linkedQueue.status)) {
+        completionStage = "marking the queue entry completed";
         const completedAt = new Date();
         const completedQueue = await QueueEntry.findOneAndUpdate(
           { _id: linkedQueue._id, status: linkedQueue.status },
@@ -332,36 +336,54 @@ router.post("/medical-workflows/:id/complete", requireRole("nurse"), async (req,
           const latestQueue = await QueueEntry.findById(linkedQueue._id).select("status appointment");
           if (latestQueue?.status !== "completed") return res.status(409).json({ message: "The queue entry changed. Refresh the queue and try again." });
         } else {
-          io?.to("clinical-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
-          io?.to("frontdesk-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
+          try {
+            io?.to("clinical-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
+            io?.to("frontdesk-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
+          } catch (socketError) {
+            console.warn("[clearance] Queue completion saved but live update could not be emitted:", socketError?.message || socketError);
+          }
         }
-        if (linkedQueue.appointment) {
+      } else if (linkedQueue && linkedQueue.status !== "completed") {
+        return res.status(409).json({ message: `The linked queue entry is ${linkedQueue.status}; refresh it before completing this clearance.` });
+      }
+      if (linkedQueue?.appointment) {
+        completionStage = "updating the linked appointment";
+        try {
           const completedAppointment = await Appointment.findOneAndUpdate(
             { _id: linkedQueue.appointment, queueEntry: linkedQueue._id, status: "checked_in" },
             { $set: { status: "completed" } },
             { new: true },
           ).select("_id status");
           if (completedAppointment) io?.emit("appointment:update", { _id: completedAppointment._id, status: completedAppointment.status, queueEntry: linkedQueue._id });
+        } catch (appointmentError) {
+          appointmentSyncWarning = true;
+          console.error("[clearance] Queue completed but linked appointment sync failed:", appointmentError);
         }
-      } else if (linkedQueue && linkedQueue.status !== "completed") {
-        return res.status(409).json({ message: `The linked queue entry is ${linkedQueue.status}; refresh it before completing this clearance.` });
       }
     }
 
+    completionStage = "marking the clearance workflow completed";
     const completed = await MedicalWorkflow.findOneAndUpdate(
       { _id: workflow._id, status: "approved" },
       { $set: { status: "completed" }, $push: { events: { type: "completed", description: "Nurse completed the approved clearance process after reviewing its certificate.", actor: req.user.id, at: new Date() } } },
       { new: true },
     );
     if (!completed) {
+      completionStage = "checking whether another request completed the workflow";
       const latestWorkflow = await MedicalWorkflow.findById(workflow._id);
       if (latestWorkflow?.status !== "completed") return res.status(409).json({ message: "The clearance changed while it was being completed. Refresh and try again." });
-      return res.json(await latestWorkflow.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+      return res.json(latestWorkflow.toObject());
     }
-    res.json(await completed.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+    completionStage = "sending the completion response";
+    const response = completed.toObject();
+    if (appointmentSyncWarning) response.appointmentSyncWarning = "The clearance queue was completed, but the linked appointment status did not update. Refresh the appointment record.";
+    res.json(response);
   } catch (error) {
-    console.error("[clearance] Process completion failed:", error);
-    if (!res.headersSent) res.status(500).json({ message: "The clearance could not be completed because the server failed while updating its records. Your certificate and assessment have been preserved; refresh and retry." });
+    console.error(`[clearance] Process completion failed during ${completionStage}:`, error);
+    if (!res.headersSent) {
+      const diagnostic = error?.name || (error?.code ? `database error ${error.code}` : "server error");
+      res.status(500).json({ message: `The clearance process failed during ${completionStage} (${diagnostic}). Your certificate and assessment have been preserved; refresh and retry.` });
+    }
   }
 });
 router.get("/medical-workflows/:id/certificate", requireWorkflowRole, async (req, res) => {
