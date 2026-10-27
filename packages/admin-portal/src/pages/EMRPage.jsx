@@ -242,7 +242,6 @@ function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumen
 }
 
 function KioskRequestsTab({ requests = [] }) {
-  if (!requests.length) return <div className="table-empty">No kiosk service requests recorded for this patient.</div>;
   const formatDetails = (value) => {
     if (!value) return "—";
     try {
@@ -257,10 +256,13 @@ function KioskRequestsTab({ requests = [] }) {
     } catch { /* Non-JSON details are free-text requests. */ }
     return value;
   };
-  return <div className="table-wrap"><table className="data-table">
-    <thead><tr><th>Date</th><th>Service</th><th>Reason</th><th>Details entered at kiosk</th></tr></thead>
-    <tbody>{requests.map((request) => <tr key={request._id}><td>{formatDate(request.createdAt)}</td><td>{request.serviceType || "—"}</td><td>{request.reason || "—"}</td><td>{formatDetails(request.requestDetails)}</td></tr>)}</tbody>
-  </table></div>;
+  return <details className="emr-compact-section">
+    <summary><span>Kiosk Service Requests</span><span className="emr-compact-count">{requests.length} {requests.length === 1 ? "request" : "requests"}</span></summary>
+    {requests.length ? <div className="table-wrap"><table className="data-table">
+      <thead><tr><th>Date</th><th>Service</th><th>Reason</th><th>Details entered at kiosk</th></tr></thead>
+      <tbody>{requests.map((request) => <tr key={request._id}><td>{formatDate(request.createdAt)}</td><td>{request.serviceType || "—"}</td><td>{request.reason || "—"}</td><td>{formatDetails(request.requestDetails)}</td></tr>)}</tbody>
+    </table></div> : <div className="table-empty">No kiosk service requests recorded for this patient.</div>}
+  </details>;
 }
 
 function MedicalProfileSections({ entry, vitals = [], editable = false, onFieldChange }) {
@@ -268,7 +270,6 @@ function MedicalProfileSections({ entry, vitals = [], editable = false, onFieldC
   const latestVitals = vitals[0] || {};
   const profileField = (key, label, fallback = "") => <ProfileValue key={key} label={label} value={fields[key] ?? fallback} editable={editable} name={key} onChange={onFieldChange} />;
   return <div className="emr-profile-sections">
-    {fields.nursingAssessment && <section className="emr-profile-section"><h3>Nursing Assessment and Handoff</h3><div className="emr-profile-fields"><ProfileValue label="Physical Examination" value={fields.nursingAssessment.physicalExam} /><ProfileValue label="Laboratory Examination" value={fields.nursingAssessment.laboratoryExamination} /><ProfileValue label="Nursing Notes" value={fields.nursingAssessment.notes} /><ProfileValue label="Recorded At" value={fields.nursingAssessment.recordedAt ? formatDate(fields.nursingAssessment.recordedAt) : ""} /></div></section>}
     {fields.clearancePurpose && <section className="emr-profile-section emr-clearance-profile"><h3>Medical Clearance</h3><div className="emr-profile-fields"><ProfileValue label="Clearance Purpose" value={fields.clearancePurpose} /><ProfileValue label="Provider Determination" value={fields.providerStatement} /><ProfileValue label="Approved By" value={`${fields.providerRole || "Provider"} - ${entry.provider || ""}`} /><ProfileValue label="Clearance Assessment" value={[fields.clearanceAssessment?.physicalExam, fields.clearanceAssessment?.laboratoryExamination, fields.clearanceAssessment?.notes].filter(Boolean).join(" | ")} /></div><h4>Requirement Review</h4><ul>{(fields.requirementChecks || []).map((item, index) => <li key={`${item.text}-${index}`}>{item.text} - {item.status?.replaceAll("_", " ")}{item.evidence ? ` (${item.evidence})` : ""}</li>)}</ul></section>}
     <section className="emr-profile-section">
       <h3>Physical Examination</h3>
@@ -348,11 +349,13 @@ function MedicalProfileHistory({ entries, vitals, studentMongoId, onSaved }) {
     {editing && <div className="emr-profile-meta-edit"><label>Purpose<input value={profileMeta.purpose} onChange={(event) => setProfileMeta((current) => ({ ...current, purpose: event.target.value }))} /></label><label>Provider<input value={profileMeta.provider} onChange={(event) => setProfileMeta((current) => ({ ...current, provider: event.target.value }))} /></label></div>}
     {saveError && <p className="error-text" role="alert">{saveError}</p>}
     <MedicalProfileSections entry={editing ? { ...latest, fields: draft } : latest} vitals={vitals} editable={editing} onFieldChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} />
-    <h2 className="section-title emr-history-title">Previous Medical Profile History</h2>
-    {previous.length ? <div className="emr-profile-previous">{previous.map((entry) => <details key={entry.id}>
-      <summary>{new Date(entry.examinedAt).toLocaleString()} · {entry.purpose} · {entry.provider}</summary>
-      <MedicalProfileSections entry={entry} />
-    </details>)}</div> : <p className="emr-profile-empty-history">No previous medical profiles recorded.</p>}
+    {previous.length ? <details className="emr-compact-section emr-previous-profiles">
+      <summary><span>Previous Medical Profile History</span><span className="emr-compact-count">{previous.length} {previous.length === 1 ? "record" : "records"}</span></summary>
+      <div className="emr-profile-previous">{previous.map((entry) => <details key={entry.id}>
+        <summary>{new Date(entry.examinedAt).toLocaleString()} · {entry.purpose} · {entry.provider}</summary>
+        <MedicalProfileSections entry={entry} />
+      </details>)}</div>
+    </details> : <><h2 className="section-title emr-history-title">Previous Medical Profile History</h2><p className="emr-profile-empty-history">No previous medical profiles recorded.</p></>}
   </>;
 }
 
@@ -745,7 +748,7 @@ export default function EMRPage() {
             </div>
             {Object.keys(record.student.healthIndicators || {}).length > 0 && <details className="emr-document-details"><summary>Declared health-screen answers</summary><dl>{Object.entries(record.student.healthIndicators).map(([question, answer]) => <div key={question}><dt>{question}</dt><dd>{answer}</dd></div>)}</dl></details>}
             <p className="page-subtitle">Declaration status is shown above. Current patient details reflect the declaration where provided; fields it does not collect remain from their existing source.</p></div>}
-            {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} studentMongoId={record.student._id} onSaved={replaceLatestMedicalProfile} /><h2 className="section-title">Kiosk Service Requests</h2><KioskRequestsTab requests={record.kioskRequests} /><h2 className="section-title">Visit and Clinical History</h2><ConsultationsTab consultations={record.consultations} /></>}
+            {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} studentMongoId={record.student._id} onSaved={replaceLatestMedicalProfile} /><KioskRequestsTab requests={record.kioskRequests} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
             {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} />}

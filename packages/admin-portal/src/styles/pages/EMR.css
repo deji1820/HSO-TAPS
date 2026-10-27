@@ -172,6 +172,12 @@
 .emr-profile-aside .emr-profile-field { grid-template-columns: 112px minmax(0, 1fr); }
 .emr-lab-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
 .emr-result-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
+.emr-compact-section { margin: 14px 0; border: 1px solid #d7d7d7; background: #fff; }
+.emr-compact-section > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; color: var(--nu-blue-dark); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+.emr-compact-section > summary:hover { background: #f7f9fc; }
+.emr-compact-count { color: #68758a; font-size: 0.72rem; font-weight: 500; white-space: nowrap; }
+.emr-compact-section > .table-wrap, .emr-compact-section > .table-empty { margin: 0 10px 10px; }
+.emr-compact-section > .emr-profile-previous { padding: 0 10px 10px; }
 .emr-history-title { margin-top: 24px; }
 .emr-profile-previous { display: flex; flex-direction: column; gap: 8px; }
 .emr-profile-previous details { border: 1px solid #d7d7d7; background: #fff; }
