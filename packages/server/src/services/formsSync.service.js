@@ -25,10 +25,10 @@ export async function handleFormSubmission({ pipelineId, formName, payload }) {
       fileUrl: payload.fileUrl,
       submittedAt: payload.submittedAt || new Date(),
       status: "Pending",
-      notificationEmail: payload.notificationEmail || payload.email || payload.studentEmail || payload.respondentEmail || student.email,
+      notificationEmail: student.email || payload.notificationEmail || payload.email || payload.studentEmail || payload.respondentEmail,
     });
     if (doc.notificationEmail && areDocumentNotificationsConfigured()) {
-      void sendDocumentStatusNotification(doc, "Pending", doc.notificationEmail);
+      void sendDocumentStatusNotification(doc, "Pending");
     } else {
       console.warn(`[Forms] Pending email notice not started for document ${doc._id}: missing email or email settings.`);
     }

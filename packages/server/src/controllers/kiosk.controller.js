@@ -185,7 +185,7 @@ export async function submitDocument(req, res) {
       document.name = storedName;
       document.contentType = storedContentType;
       document.status = "Pending";
-      document.notificationEmail = notificationEmail;
+      document.notificationEmail = student.email || notificationEmail;
       document.examDate = new Date(examDate);
       document.verificationHistory.push({ status: "Pending", remarks: "Patient resubmitted the rejected declaration for review.", at: now });
       document.verifiedBy = undefined;
@@ -211,7 +211,7 @@ export async function submitDocument(req, res) {
           examDate: new Date(examDate),
           submissionDetails: { ...(submissionDetails || {}), healthDeclaration: declarationPayload },
           status: "Pending",
-          notificationEmail,
+          notificationEmail: student.email || notificationEmail,
           submittedAt: now,
           declarationHistory: [{ declaration: declarationPayload, changedFields: Object.keys(declarationPayload), source: "patient_submission", at: now }],
         });
@@ -224,7 +224,7 @@ export async function submitDocument(req, res) {
     applyDeclarationToPatient(student, declarationPayload, document, "Pending");
     await student.save();
     const notificationQueued = areDocumentNotificationsConfigured();
-    if (notificationQueued) void sendDocumentStatusNotification(document, "Pending", notificationEmail);
+    if (notificationQueued) void sendDocumentStatusNotification(document, "Pending");
     return res.status(createdNew ? 201 : 200).json({ id: document._id, status: document.status, statusLabel: declarationStatusLabel(document.status), notificationQueued });
   }
 
@@ -239,14 +239,12 @@ export async function submitDocument(req, res) {
     examDate: new Date(examDate),
     submissionDetails: submissionDetails || {},
     status: "Pending",
-    notificationEmail,
+    notificationEmail: student.email || notificationEmail,
     submittedAt: new Date(),
   });
-  student.email = notificationEmail;
-  await student.save();
   const notificationQueued = areDocumentNotificationsConfigured();
   if (notificationQueued) {
-    void sendDocumentStatusNotification(document, "Pending", notificationEmail);
+    void sendDocumentStatusNotification(document, "Pending");
   } else {
     console.warn(`[Email] Pending notice not started for document ${document._id}: email settings are incomplete.`);
   }

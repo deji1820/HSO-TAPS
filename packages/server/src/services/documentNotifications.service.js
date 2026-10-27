@@ -69,8 +69,10 @@ async function sendWithGmailApi(message) {
   return true;
 }
 
-export async function sendDocumentStatusNotification(document, status, recipient = document.notificationEmail) {
-  const email = String(recipient || "").trim().toLowerCase();
+export async function sendDocumentStatusNotification(document, status) {
+  // The linked patient profile is authoritative. notificationEmail is only a
+  // fallback for older records that were created before the profile had email.
+  const email = String(document.student?.email || document.notificationEmail || "").trim().toLowerCase();
   const provider = String(process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
@@ -132,7 +134,7 @@ export async function sendDocumentStatusNotification(document, status, recipient
         return { sent: false, reason: "The email provider could not send the notification." };
       }
     }
-    document.notificationEmail = email;
+    if (!document.notificationEmail) document.notificationEmail = email;
     document.lastNotifiedStatus = status;
     document.notificationSentAt = new Date();
     await document.save();

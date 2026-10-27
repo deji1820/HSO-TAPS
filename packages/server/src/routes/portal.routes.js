@@ -586,7 +586,7 @@ router.post("/students/:id/documents", requireDocumentRole, async (req, res) => 
   const student = await Student.findById(req.params.id);
   if (!student) return res.status(404).json({ message: "Student not found" });
   const { title, category, examDate, name, contentType, fileData } = req.body;
-  const notificationEmail = String(req.body.notificationEmail || student.email || "").trim().toLowerCase();
+  const notificationEmail = String(student.email || req.body.notificationEmail || "").trim().toLowerCase();
   if (!title || !name || !fileData) return res.status(400).json({ message: "Title and file are required" });
   const parsedExamDate = examDate ? new Date(examDate) : null;
   if (!parsedExamDate || Number.isNaN(parsedExamDate.getTime()) || parsedExamDate > new Date()) return res.status(400).json({ message: "Enter a valid examination, test, or issue date that is not in the future." });
@@ -597,10 +597,8 @@ router.post("/students/:id/documents", requireDocumentRole, async (req, res) => 
     student: student._id, documentTitle: title, category, name, contentType,
     fileData: bytes, formSource: "Admin Portal", status: "Pending", notificationEmail, examDate: parsedExamDate, submittedAt: new Date(),
   });
-  student.email = notificationEmail;
-  await student.save();
   const notificationQueued = areDocumentNotificationsConfigured();
-  if (notificationQueued) void sendDocumentStatusNotification(document, "Pending", notificationEmail);
+  if (notificationQueued) void sendDocumentStatusNotification(document, "Pending");
   const result = document.toObject();
   delete result.fileData;
   result.fileUrl = `/api/documents/${document._id}/file`;
@@ -699,9 +697,9 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
   }
   let notificationQueued = false;
   if (statusChanged || document.lastNotifiedStatus !== document.status) {
-    notificationQueued = Boolean(document.notificationEmail || document.student?.email) && areDocumentNotificationsConfigured();
+    notificationQueued = Boolean(document.student?.email || document.notificationEmail) && areDocumentNotificationsConfigured();
     if (notificationQueued) {
-      void sendDocumentStatusNotification(document, document.status, document.notificationEmail || document.student?.email);
+      void sendDocumentStatusNotification(document, document.status);
     }
   }
   await document.populate("student", "studentId firstName lastName affiliation program department");
