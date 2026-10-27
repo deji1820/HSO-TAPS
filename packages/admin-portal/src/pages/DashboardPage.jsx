@@ -88,7 +88,9 @@ export default function DashboardPage() {
   }, [refreshQueue, refreshHistory]);
 
   const visibleQueue = useMemo(() => filterQueueEntries(queue, { provider, providerRole, filter, search }).sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * (sortOrder === "asc" ? 1 : -1)), [queue, filter, search, provider, providerRole, sortOrder]);
-  const activeQueueEntries = visibleQueue.filter((entry) => !["awaiting_provider", "provider_in_session"].includes(entry.status));
+  const activeQueueEntries = provider
+    ? visibleQueue.filter((entry) => ["awaiting_provider", "provider_in_session"].includes(entry.status))
+    : visibleQueue.filter((entry) => !["awaiting_provider", "provider_in_session"].includes(entry.status));
   const visibleHistory = useMemo(() => filterQueueEntries(history, { provider, providerRole, filter, search }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [history, filter, search, provider, providerRole]);
   const selected = (queueView === "history" ? history : queue).find((entry) => entry._id === selectedId) || null;
   const visibleServiceTypes = provider ? SERVICE_TYPES.slice(0, 2) : queueView === "history" ? SERVICE_TYPES : SERVICE_TYPES.filter((service) => service !== "Quick Health Screening");

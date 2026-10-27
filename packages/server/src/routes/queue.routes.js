@@ -41,7 +41,7 @@ router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "de
   const providerRole = ["physician", "doctor", "dentist"].includes(role);
   const clinicalRole = ["nurse", "supervisor", "physician", "doctor", "dentist"].includes(role);
   const queryFilter = {
-    status: { $in: providerRole ? ["in_session"] : ["waiting", "called", "in_session"] },
+    status: { $in: providerRole ? ["awaiting_provider", "provider_in_session"] : ["waiting", "called", "in_session"] },
   };
   if (providerRole) queryFilter.serviceType = role === "dentist" ? "Dental Consultation" : "Medical Consultation";
   else queryFilter.serviceType = { $ne: "Quick Health Screening" };
@@ -96,9 +96,14 @@ router.get("/history", requireAuth, requireRole("nurse", "supervisor", "physicia
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
   const pageSize = 50;
   const match = {
-    // Routed consultations leave the active queue and remain available in Queue History for provider follow-up.
-    status: { $in: ["awaiting_provider", "provider_in_session", "completed", "cancelled", "expired"] },
+    // Queue History is reserved for completed encounters. Routed work stays active until completion.
+    status: "completed",
   };
+  // Filter before pagination so a provider's routed entries cannot be pushed off
+  // the page by another specialty's queue history. This also limits the records
+  // returned to each provider to the consultation type they handle.
+  if (role === "physician" || role === "doctor") match.serviceType = "Medical Consultation";
+  else if (role === "dentist") match.serviceType = "Dental Consultation";
   if (fromStart || toStart) {
     match.createdAt = {
       ...(fromStart ? { $gte: fromStart } : {}),
