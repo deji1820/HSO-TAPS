@@ -21,6 +21,7 @@ import MedicineInventory from "../models/MedicineInventory.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
 import { areDocumentNotificationsConfigured, sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
 import { applyDeclarationToPatient, declarationRequiresReview, materialDeclarationChanges, normalizeDeclaration, validateDeclaration } from "../services/patientInformation.js";
+import { consultationCompletionCertificateToPdf } from "../services/consultationCompletionCertificate.service.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -670,6 +671,51 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
     await workflow.save();
   }
   const completedAt = new Date();
+  if (isConsultation) {
+    const attendingProvider = await User.findById(req.user.id).select("name role");
+    const certificateReference = String(consultation._id);
+    const certificateName = `Consultation-Completion-${String(queueEntry.student.studentId || queueEntry.student.employeeId || "patient").replace(/[^a-zA-Z0-9_-]/g, "-")}-${completedAt.toISOString().slice(0, 10)}.pdf`;
+    const certificateFile = consultationCompletionCertificateToPdf({
+      patient: queueEntry.student,
+      serviceType: queueEntry.serviceType,
+      visitDate: completedAt,
+      providerName: attendingProvider?.name || req.user.name || "Authorized Provider",
+      providerRole: attendingProvider?.role || role,
+      certificateReference,
+    });
+    let certificate;
+    try {
+      certificate = await ExternalDocument.findOneAndUpdate(
+        { consultationRecord: consultation._id },
+        { $setOnInsert: {
+          student: queueEntry.student._id,
+          recordType: "consultation_certificate",
+          consultationRecord: consultation._id,
+          documentTitle: `${queueEntry.serviceType} Completion Certificate`,
+          formSource: "HSO Clinical Encounter",
+          category: "Consultation Completion Certificate",
+          name: certificateName,
+          contentType: "application/pdf",
+          fileData: certificateFile,
+          status: "Issued",
+          submittedAt: completedAt,
+          submissionDetails: { consultationCompletion: {
+            serviceType: queueEntry.serviceType,
+            visitType,
+            completedAt,
+            certificateReference,
+            provider: { name: attendingProvider?.name || req.user.name || "Authorized Provider", role: attendingProvider?.role || role },
+            patient: { studentId: queueEntry.student.studentId, employeeId: queueEntry.student.employeeId, name: [queueEntry.student.firstName, queueEntry.student.lastName].filter(Boolean).join(" "), affiliation: queueEntry.student.affiliation },
+          } },
+        } },
+        { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+      );
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      certificate = await ExternalDocument.findOne({ consultationRecord: consultation._id });
+    }
+    if (!certificate) return res.status(500).json({ message: "The consultation was saved, but its completion certificate could not be saved to Full EMR. The queue was not marked complete; retry completion." });
+  }
   const previousQueueStatus = queueEntry.status;
   const completedQueueEntry = await QueueEntry.findOneAndUpdate(
     { _id: queueEntry._id, status: queueEntry.status },

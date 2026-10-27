@@ -8,11 +8,12 @@
 const externalDocumentSchema = new mongoose.Schema(
   {
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
-    recordType: { type: String, enum: ["submission", "clearance_certificate", "health_declaration"], default: "submission", index: true },
+    recordType: { type: String, enum: ["submission", "clearance_certificate", "consultation_certificate", "health_declaration"], default: "submission", index: true },
     sourceWorkflow: { type: mongoose.Schema.Types.ObjectId, ref: "MedicalWorkflow" },
     clearanceWorkflow: { type: mongoose.Schema.Types.ObjectId, ref: "MedicalWorkflow", index: true },
     clearanceRequirementText: String,
     sourceDocument: { type: mongoose.Schema.Types.ObjectId, ref: "ExternalDocument" },
+    consultationRecord: { type: mongoose.Schema.Types.ObjectId, ref: "ConsultationRecord" },
     documentTitle: String, // "Health Status Declaration"
     formSource: { type: String, default: "MS Forms" },
     fileUrl: String, // link to the stored file (e.g. SharePoint / S3 / GridFS)
@@ -38,6 +39,7 @@ const externalDocumentSchema = new mongoose.Schema(
 
 externalDocumentSchema.index({ sourceWorkflow: 1 }, { unique: true, partialFilterExpression: { sourceWorkflow: { $type: "objectId" } } });
 externalDocumentSchema.index({ sourceDocument: 1 }, { unique: true, partialFilterExpression: { sourceDocument: { $type: "objectId" } } });
+externalDocumentSchema.index({ consultationRecord: 1 }, { unique: true, partialFilterExpression: { consultationRecord: { $type: "objectId" } } });
 externalDocumentSchema.index({ student: 1, recordType: 1 }, { unique: true, partialFilterExpression: { recordType: "health_declaration" } });
 
 export default mongoose.model("ExternalDocument", externalDocumentSchema);

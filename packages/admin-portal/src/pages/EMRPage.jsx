@@ -187,7 +187,7 @@ function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentI
     <header><h3>{document.documentTitle || document.name || "Medical document"}</h3><span>{formatDate(document.submittedAt)}</span></header>
     <div className="emr-document-card-grid">
       <div><span>Form source</span><strong>{document.formSource || "—"}</strong></div>
-      <div><span>Status</span>{canReviewDocuments && document.recordType !== "clearance_certificate" ? <select className="text-input document-status-select" aria-label={`Change status for ${document.documentTitle || document.name || "document"}`} value={document.status || "Pending"} disabled={updatingDocumentId === document._id || ["Verified", "Rejected", "Issued"].includes(document.status)} onChange={(event) => onStatusChange(document._id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <strong>{document.status || "Pending"}</strong>}</div>
+      <div><span>Status</span>{canReviewDocuments && !["clearance_certificate", "consultation_certificate"].includes(document.recordType) ? <select className="text-input document-status-select" aria-label={`Change status for ${document.documentTitle || document.name || "document"}`} value={document.status || "Pending"} disabled={updatingDocumentId === document._id || ["Verified", "Rejected", "Issued"].includes(document.status)} onChange={(event) => onStatusChange(document._id, event.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option></select> : <strong>{document.status || "Pending"}</strong>}</div>
     </div>
     {document.verificationRemarks && <p className="emr-document-review-remarks"><strong>Review remarks:</strong> {document.verificationRemarks}</p>}
     {document.submissionDetails?.clearance?.approval && <p className="emr-document-review-remarks"><strong>Approved by:</strong> {document.submissionDetails.clearance.approval.providerName} · {document.submissionDetails.clearance.approval.providerRole}. {document.submissionDetails.clearance.approval.providerStatement}</p>}
@@ -502,7 +502,8 @@ export default function EMRPage() {
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const canReviewDocuments = ["nurse", "supervisor"].includes(normalizeRole(user.role));
   const canEditDeclaration = normalizeRole(user.role) === "superadmin";
-  const additionalMedicalFiles = (record?.documents || []).filter((document) => !isHealthStatusDeclaration(document) && !(document.recordType === "clearance_certificate" && (document.sourceDocument || document.sourceWorkflow)) && !document.clearanceWorkflow && document.formSource !== "Kiosk Document Submission");
+  const consultationCertificates = (record?.documents || []).filter((document) => document.recordType === "consultation_certificate");
+  const additionalMedicalFiles = (record?.documents || []).filter((document) => !isHealthStatusDeclaration(document) && document.recordType !== "consultation_certificate" && !(document.recordType === "clearance_certificate" && (document.sourceDocument || document.sourceWorkflow)) && !document.clearanceWorkflow && document.formSource !== "Kiosk Document Submission");
 
   useEffect(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -795,7 +796,11 @@ export default function EMRPage() {
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
             {tab === "files" && <div className="emr-files-sections">
-              <p className="page-subtitle">Medical clearances and submitted documents are organized below.</p>
+              <p className="page-subtitle">Consultation completion certificates, medical clearances, and submitted documents are organized below.</p>
+              <details className="emr-files-section" open>
+                <summary className="section-title">Consultation Completion Certificates ({consultationCertificates.length})</summary>
+                <DocumentsTab documents={consultationCertificates} emptyMessage="No completed medical or dental consultations have certificates yet." />
+              </details>
               <details className="emr-files-section" open>
                 <summary className="section-title">Medical Clearance ({(record.medicalWorkflows?.length || 0) + (healthStatusSubmissions.length ? 1 : 0)})</summary>
                 <MedicalClearanceForms workflows={record.medicalWorkflows || []} documents={record.documents || []} declarations={healthStatusSubmissions} declarationProps={{ canReviewDocuments, canEditDeclaration, updatingDocumentId, onStatusChange: changeDocumentStatus, editingDeclarationId, declarationDraft, setDeclarationDraft, onEdit: beginDeclarationEdit, onCancelEdit: () => { setEditingDeclarationId(null); setDeclarationDraft(""); }, onSaveEdit: saveDeclarationEdit, savingDeclaration }} canContinue={normalizeRole(user.role) === "nurse"} onContinue={(workflow) => setClearanceEntry({ student: record.student, medicalWorkflow: workflow, createdAt: workflow.createdAt })} />
