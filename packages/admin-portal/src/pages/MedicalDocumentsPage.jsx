@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getMedicalDocuments, getStudents, uploadMedicalDocument, updateMedicalDocumentStatus } from "../services/api.js";
+import { approveMedicalClearance, getMedicalDocuments, getStudents, uploadMedicalDocument, updateMedicalDocumentStatus } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
 import VerifiedClearanceCertificate from "../components/VerifiedClearanceCertificate.jsx";
@@ -30,7 +30,7 @@ export default function MedicalDocumentsPage() {
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const canReviewDocuments = ["nurse", "supervisor"].includes(normalizeRole(user.role));
-  const visibleFiles = files.filter((file) => !file.clearanceWorkflow && !(file.recordType === "clearance_certificate" && file.sourceDocument));
+  const visibleFiles = files.filter((file) => file.recordType !== "clearance_certificate");
   const pendingFiles = visibleFiles.filter((file) => (file.status || "Pending") === "Pending").sort(newestFirst);
   const reviewedFiles = visibleFiles.filter((file) => ["Verified", "Rejected"].includes(file.status));
   const archiveFiles = reviewedFiles.filter((file) => archiveFilter === "all" || (archiveFilter === "accepted" ? file.status === "Verified" : file.status === "Rejected")).sort(newestFirst);
@@ -65,15 +65,27 @@ export default function MedicalDocumentsPage() {
   }
 
   async function updateStatus(file, status) {
-    const decisionRemark = await appDialog.prompt(`Add a brief ${status === "Verified" ? "acceptance" : "rejection"} remark:`, "", status === "Verified" ? "Accept document" : "Reject document");
-    if (decisionRemark === null) return;
-    const remarks = decisionRemark.trim();
-    if (remarks.length < 3) { setNotice("Add a remark with at least 3 characters before saving this decision."); return; }
+    let remarks = "";
+    if (status !== "Pending" && !file.clearanceWorkflow) {
+      const decisionRemark = await appDialog.prompt(`Add a brief ${status === "Verified" ? "acceptance" : "rejection"} remark:`, "", status === "Verified" ? "Accept document" : "Reject document");
+      if (decisionRemark === null) return;
+      remarks = decisionRemark.trim();
+      if (remarks.length < 3) { setNotice("Add a remark with at least 3 characters before saving this decision."); return; }
+    }
     setUpdatingStatusId(file._id); setNotice("");
     try {
       const updated = await updateMedicalDocumentStatus(file._id, status, remarks);
       setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated, issuedCertificate: updated.issuedCertificate || item.issuedCertificate } : item));
-      setNotice(updated.notificationQueued ? `Document status changed to ${statusLabel(status)}. The email send was started.` : `Document status changed to ${statusLabel(status)}, but the email could not be started. ${updated.notificationMessage || "Check the backend email settings."}`);
+      if (status === "Verified" && updated.clearanceWorkflowRecord?.status === "ready_for_approval") {
+        try {
+          const completed = await approveMedicalClearance(updated.clearanceWorkflowRecord._id, "");
+          setNotice(completed.medicalFile ? "Document accepted. The clearance certificate has been saved to the patient's EMR." : "Document accepted and clearance completed.");
+        } catch (completionError) {
+          setNotice(`Document accepted. Clearance completion needs to be retried: ${completionError?.response?.data?.message || "the certificate could not be issued."}`);
+        }
+      } else {
+        setNotice(updated.notificationQueued ? `Document status changed to ${statusLabel(status)}. The email send was started.` : `Document status changed to ${statusLabel(status)}, but the email could not be started. ${updated.notificationMessage || "Check the backend email settings."}`);
+      }
     } catch (error) { setNotice(error?.response?.data?.message || "Could not update this document status."); }
     finally { setUpdatingStatusId(null); }
   }
