@@ -64,7 +64,8 @@ function hasCurrentExamDate(requirementText, document) {
   return examDate >= earliest;
 }
 function hasUnresolvedRequirements(workflow) {
-  return workflow.requirements.some((item) => (item.required && item.status !== "satisfied") || (item.conditional && !["satisfied", "not_applicable"].includes(item.status)));
+  if (!Array.isArray(workflow?.requirements)) return true;
+  return workflow.requirements.some((item) => !item || (item.required && item.status !== "satisfied") || (item.conditional && !["satisfied", "not_applicable"].includes(item.status)));
 }
 function isWorkflowManagedPurpose(purpose) {
   return /consultation/i.test(String(purpose || ""));
@@ -208,8 +209,38 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
     }
   }
   const resumingApproval = workflow.status === "approval_in_progress" && String(workflow.providerApproval?.approvedBy) === String(req.user.id);
-  if ((!resumingApproval && workflow.status !== "ready_for_approval") || hasUnresolvedRequirements(workflow) || !workflow.assessment?.recordedAt) return res.status(409).json({ message: "Complete the required assessments and verify every required item or record why a conditional item does not apply." });
   completionStage = "checking clearance requirements";
+  const configuredRequirements = findClearanceRequirement(workflow.affiliation, workflow.purpose);
+  const savedRequirements = Array.isArray(workflow.requirements) ? workflow.requirements : [];
+  const requirementsAreValid = Boolean(configuredRequirements)
+    && savedRequirements.length === configuredRequirements.requirements.length
+    && savedRequirements.every((item, index) => item && item.text === configuredRequirements.requirements[index].text && item.kind === configuredRequirements.requirements[index].kind);
+  if (!requirementsAreValid) {
+    if (!configuredRequirements) return res.status(409).json({ message: "The saved clearance purpose no longer matches the configured requirements. Contact an administrator before issuing a certificate." });
+    completionStage = "restoring the configured clearance requirements";
+    const verifiedDocuments = await ExternalDocument.find({ clearanceWorkflow: workflow._id, status: "Verified" });
+    workflow.requirements = configuredRequirements.requirements.map((configured) => {
+      const prior = savedRequirements.find((item) => item?.text === configured.text && item?.kind === configured.kind);
+      const verifiedDocument = configured.kind === "document"
+        ? verifiedDocuments.find((document) => (document.clearanceRequirementText || document.submissionDetails?.clearanceRequirementText) === configured.text && matchesRequiredDocument(configured.text, document) && hasCurrentExamDate(configured.text, document))
+        : null;
+      const priorEvidence = typeof prior?.evidence === "string" ? prior.evidence.trim() : "";
+      const validPriorAction = configured.kind === "action" && prior?.status === "satisfied" && Boolean(priorEvidence);
+      const validNotApplicable = Boolean(configured.conditional && prior?.status === "not_applicable" && priorEvidence);
+      return {
+        text: configured.text,
+        kind: configured.kind,
+        required: configured.conditional ? false : Boolean(configured.required || configured.kind === "action"),
+        conditional: Boolean(configured.conditional),
+        condition: configured.condition || "",
+        status: verifiedDocument ? "satisfied" : validPriorAction ? "satisfied" : validNotApplicable ? "not_applicable" : "pending",
+        ...(verifiedDocument ? { document: verifiedDocument._id, verifiedBy: verifiedDocument.verifiedBy, verifiedAt: verifiedDocument.verifiedAt, evidence: [verifiedDocument.documentTitle, verifiedDocument.category, verifiedDocument.name].filter(Boolean).join(" — ") } : validPriorAction || validNotApplicable ? { verifiedBy: prior.verifiedBy, verifiedAt: prior.verifiedAt, evidence: priorEvidence } : {}),
+      };
+    });
+    pushWorkflowEvent(workflow, "requirements_recovered", "Configured clearance requirements were restored; previously accepted linked files and recorded actions were preserved.", req.user.id);
+    await workflow.save();
+  }
+  if ((!resumingApproval && workflow.status !== "ready_for_approval") || hasUnresolvedRequirements(workflow) || !workflow.assessment?.recordedAt) return res.status(409).json({ message: "Complete the required assessments and verify every required item or record why a conditional item does not apply." });
   const providerStatement = String((resumingApproval && workflow.providerStatement) || req.body?.providerStatement || "Clearance assessment and required documents reviewed and approved by the authorized nurse.").trim().slice(0, 2000);
   if (resumingApproval && !workflow.providerStatement) {
     workflow.providerStatement = providerStatement;
