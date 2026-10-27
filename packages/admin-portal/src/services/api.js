@@ -13,6 +13,8 @@ api.interceptors.request.use((config) => {
 });
 
 export const login = (email, password) => api.post("/auth/login", { email, password }).then((r) => r.data);
+export const getPublicClearanceSubmission = (token) => api.get(`/kiosk/public/clearance-submissions/${encodeURIComponent(token)}`).then((r) => r.data);
+export const submitPublicClearanceDocument = (token, payload) => api.post(`/kiosk/public/clearance-submissions/${encodeURIComponent(token)}/documents`, payload).then((r) => r.data);
 export const getQueue = () => api.get("/queue").then((r) => r.data);
 export const getQuickScreeningAlerts = () => api.get("/queue/screening-alerts").then((r) => r.data);
 export const getQueueHistory = ({ from = "", to = "", page = 1 } = {}) =>

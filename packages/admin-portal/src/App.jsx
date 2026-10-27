@@ -16,6 +16,7 @@ import { normalizeRole } from "./utils/roles.js";
 import MedicalDocumentsPage from "./pages/MedicalDocumentsPage.jsx";
 import InventoryPage from "./pages/InventoryPage.jsx";
 import QueueBoardPage from "./pages/QueueBoardPage.jsx";
+import PublicClearanceSubmissionPage from "./pages/PublicClearanceSubmissionPage.jsx";
 
 function ProtectedRoute({ user, children }) {
   if (!user) return <Navigate to="/login" replace />;
@@ -48,6 +49,7 @@ export default function App() {
 
   const routes = (
     <Routes>
+      <Route path="/clearance-document-submission" element={<PublicClearanceSubmissionPage />} />
       <Route path="/login" element={<LoginPage onLoggedIn={setUser} />} />
       <Route
         path="/"
