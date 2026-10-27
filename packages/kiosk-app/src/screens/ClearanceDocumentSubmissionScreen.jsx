@@ -19,9 +19,14 @@ function contentType(file) {
   return ({ pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })[extension] || "application/octet-stream";
 }
 
+function clinicDate(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 function today() {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return clinicDate();
 }
 
 export default function ClearanceDocumentSubmissionScreen({ token, isOnline = true }) {
@@ -52,6 +57,10 @@ export default function ClearanceDocumentSubmissionScreen({ token, isOnline = tr
     const upload = uploads[item.text] || {};
     if (!context || !upload.file || !upload.examDate) {
       updateUpload(item.text, { error: "Choose this requirement's file and enter its examination or issue date." });
+      return;
+    }
+    if (upload.examDate > today()) {
+      updateUpload(item.text, { error: "The examination or issue date cannot be in the future." });
       return;
     }
     if (upload.file.size > MAX_FILE_SIZE) {
@@ -109,7 +118,7 @@ export default function ClearanceDocumentSubmissionScreen({ token, isOnline = tr
             <legend>{item.required ? "Required document" : "Conditional document"}</legend>
             <h2>{item.text}</h2>
             {item.conditional && <p className="clearance-upload-condition">{item.condition}</p>}
-            <label>Date of examination or issue<input type="date" required max={today()} value={upload.examDate || ""} onChange={(event) => updateUpload(item.text, { examDate: event.target.value, error: "" })} /></label>
+            <label>Date of examination or issue<input type="date" required max={today()} value={upload.examDate || ""} onChange={(event) => { const value = event.target.value; updateUpload(item.text, { examDate: value, error: value > today() ? "The examination or issue date cannot be in the future." : "" }); }} /></label>
             <label htmlFor={fileInputId}>Choose this document<input id={fileInputId} type="file" accept={ACCEPTED_FILES} onChange={(event) => updateUpload(item.text, { file: event.target.files?.[0] || null, error: "" })} /><small>PDF, JPG, PNG, or DOCX. Maximum 12 MB.</small></label>
             {upload.file && <p className="clearance-upload-filename">Selected file: {upload.file.name}</p>}
             {upload.error && <p className="document-error" role="alert">{upload.error}</p>}

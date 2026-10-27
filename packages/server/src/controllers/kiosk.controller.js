@@ -15,6 +15,20 @@ import { applyDeclarationToPatient, declarationStatusLabel, declarationSubmissio
 const HYPOTHERMIA_BELOW_C = 35.5;
 const FEVER_AT_OR_ABOVE_C = 37.8;
 
+function clinicDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function isValidNonFutureExamDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  const isRealDate = parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+  return isRealDate && value <= clinicDateString();
+}
+
 function classifyTemperature(t) {
   if (typeof t !== "number") return undefined;
   if (t < HYPOTHERMIA_BELOW_C) return "Hypothermia";
@@ -128,6 +142,9 @@ export async function submitDocument(req, res) {
   const notificationEmail = String(req.body?.notificationEmail || "").trim().toLowerCase();
   if (!studentId || !title || !category || !examDate || !name || !fileData || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {
     return res.status(400).json({ message: "ID, purpose, category, examination date, a valid email address, and file are required." });
+  }
+  if (!isValidNonFutureExamDate(examDate)) {
+    return res.status(400).json({ message: "Enter a valid examination or issue date that is not in the future." });
   }
   if (typeof fileData !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(fileData)) {
     return res.status(400).json({ message: "The uploaded file is invalid." });
