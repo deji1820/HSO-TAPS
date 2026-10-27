@@ -1,8 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { approveMedicalClearance, getMedicalDocuments, saveClearanceAssessment, updateClearanceRequirement } from "../services/api.js";
+import { approveMedicalClearance, getMedicalDocuments, saveClearanceAssessment, submitPublicClearanceDocument, updateClearanceRequirement } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/NewMedicalRecord.css";
+
+const MAX_UPLOAD_SIZE = 12 * 1024 * 1024;
+const ACCEPTED_UPLOADS = ".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+function clinicToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const get = (type) => parts.find((part) => part.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+function uploadContentType(file) {
+  if (file.type) return file.type;
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  return ({ pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })[extension] || "application/octet-stream";
+}
+async function encodeUpload(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  return btoa(binary);
+}
 function requestErrorMessage(error, fallback) {
   const data = error?.response?.data;
   if (data && typeof data.message === "string" && data.message.trim()) return data.message;
@@ -21,6 +40,8 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [assessment, setAssessment] = useState({ physicalExam: workflow?.assessment?.physicalExam || "", laboratoryExamination: workflow?.assessment?.laboratoryExamination || "", notes: workflow?.assessment?.notes || "" });
   const [evidence, setEvidence] = useState({});
+  const [directUploads, setDirectUploads] = useState({});
+  const [notificationEmail, setNotificationEmail] = useState(entry.student?.email || "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const clearanceDocuments = useMemo(() => documents.filter((doc) => String(doc.clearanceWorkflow?._id || doc.clearanceWorkflow) === String(workflow?._id)), [documents, workflow?._id]);
@@ -64,6 +85,40 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
     await run(() => updateClearanceRequirement(workflow._id, index, payload));
   }
 
+  function patchDirectUpload(requirement, patch) {
+    setDirectUploads((current) => ({ ...current, [requirement]: { ...current[requirement], ...patch } }));
+  }
+
+  async function uploadRequirement(item) {
+    const upload = directUploads[item.text] || {};
+    if (!upload.file || !upload.examDate) return patchDirectUpload(item.text, { error: "Choose a file and enter its examination or issue date." });
+    if (upload.examDate > clinicToday()) return patchDirectUpload(item.text, { error: "The examination or issue date cannot be in the future." });
+    if (upload.file.size > MAX_UPLOAD_SIZE) return patchDirectUpload(item.text, { error: "Files cannot exceed 12 MB." });
+    const email = String(notificationEmail || "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return patchDirectUpload(item.text, { error: "Enter a valid email address for document status updates." });
+    const studentId = entry.student?.studentId || entry.student?.employeeId;
+    if (!studentId || !activeWorkflow.documentSubmissionToken) return patchDirectUpload(item.text, { error: "This clearance is missing its patient ID or secure upload link. Refresh the clearance and try again." });
+    patchDirectUpload(item.text, { saving: true, error: "" });
+    try {
+      await submitPublicClearanceDocument(activeWorkflow.documentSubmissionToken, {
+        studentId,
+        notificationEmail: email,
+        title: `Medical Clearance Supporting Document - ${activeWorkflow.purpose}`,
+        category: "Diagnostic Test (Chest X-ray, ECG, Ultrasound, etc.)",
+        examDate: upload.examDate,
+        clearanceRequirementText: item.text,
+        submissionDetails: { purpose: activeWorkflow.purpose, clearanceRequirementText: item.text, affiliation: activeWorkflow.affiliation },
+        name: upload.file.name,
+        contentType: uploadContentType(upload.file),
+        fileData: await encodeUpload(upload.file),
+      });
+      patchDirectUpload(item.text, { saving: false, submitted: true, error: "", file: null });
+      await refreshDocuments();
+    } catch (requestError) {
+      patchDirectUpload(item.text, { saving: false, error: requestErrorMessage(requestError, "Could not upload this document.") });
+    }
+  }
+
   const activeWorkflow = currentWorkflow || {};
   const assessmentOpen = ["assessment", "requirements_pending", "ready_for_approval"].includes(activeWorkflow.status);
   const statusLabel = activeWorkflow.status === "ready_for_approval" ? "Ready for completion" : String(activeWorkflow.status || "").replaceAll("_", " ");
@@ -91,6 +146,20 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
         <div className="record-summary"><div><h3>{entry.student?.lastName}, {entry.student?.firstName}</h3><p>Affiliation: {entry.student?.affiliation || activeWorkflow.affiliation}</p><p>Department: {entry.student?.department || entry.student?.program || "—"}</p><p>Official Email: {entry.student?.email || "—"}</p></div><div><p>Clearance purpose: {activeWorkflow.purpose}</p><p>Started: {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "—"}</p><p>Workflow status: {statusLabel}</p></div></div>
         <section className="record-section clearance-submitted-documents"><div className="clearance-documents-heading"><h3>Documents Submitted for This Clearance</h3><button type="button" className="btn btn-secondary btn-sm" onClick={refreshDocuments} disabled={documentsLoading}>{documentsLoading ? "Refreshing…" : "Refresh documents"}</button></div><p>Review and accept or reject these files in Medical Documents. Their review updates the matching clearance requirement.</p>{documentsLoading ? <p role="status">Loading submitted files…</p> : clearanceDocuments.length ? <ul>{clearanceDocuments.map((doc) => <li key={doc._id}><span><strong>{doc.clearanceRequirementText || doc.submissionDetails?.clearanceRequirementText || "Clearance document"}</strong><br />{doc.name || doc.documentTitle} · {doc.status} · Submitted {new Date(doc.submittedAt || doc.createdAt).toLocaleString()}</span><div className="clearance-document-row-actions">{doc.name && <button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(doc._id, doc.name).catch((openError) => setError(openError.message || "Could not open this submitted file."))}>View Submitted File</button>}</div></li>)}</ul> : <p>No files have been submitted for this clearance yet.</p>}</section>
         <section className="record-section"><h3>Clearance Requirements</h3><ol>{activeWorkflow.requirements?.map((item, index) => <li key={`${item.text}-${index}`}>{item.text}</li>)}</ol></section>
+        {assessmentOpen && activeWorkflow.requirements?.some((item) => item.kind === "document") && <section className="record-section clearance-direct-upload"><h3>Upload Documents from This Computer</h3><p>Use this option if the kiosk or phone QR is unavailable. Each upload is added to Medical Documents for review.</p>{!entry.student?.email && <label>Email for document status updates<input className="text-input" type="email" value={notificationEmail} onChange={(event) => setNotificationEmail(event.target.value)} /></label>}{activeWorkflow.requirements.filter((item) => item.kind === "document").map((item, index) => {
+          const upload = directUploads[item.text] || {};
+          const alreadySubmitted = clearanceDocuments.some((doc) => (doc.clearanceRequirementText || doc.submissionDetails?.clearanceRequirementText) === item.text && doc.status !== "Rejected");
+          return <fieldset className="clearance-direct-upload-item" key={`upload-${item.text}`} disabled={upload.saving || upload.submitted || alreadySubmitted}>
+            <legend>{item.text}</legend>
+            {alreadySubmitted || upload.submitted ? <p role="status">A document has been submitted for nurse review.</p> : <>
+              <label>Date of examination or issue<input className="text-input" type="date" max={clinicToday()} value={upload.examDate || ""} onChange={(event) => patchDirectUpload(item.text, { examDate: event.target.value, error: "" })} /></label>
+              <label>Choose file<input className="text-input" type="file" accept={ACCEPTED_UPLOADS} onChange={(event) => patchDirectUpload(item.text, { file: event.target.files?.[0] || null, error: "" })} /><small>PDF, JPG, PNG, or DOCX · Maximum 12 MB</small></label>
+              {upload.file && <p>{upload.file.name}</p>}
+              {upload.error && <p className="error-text" role="alert">{upload.error}</p>}
+              <button type="button" className="btn btn-primary" disabled={busy || upload.saving} onClick={() => uploadRequirement(item)}>{upload.saving ? "Uploading…" : "Upload this document"}</button>
+            </>}
+          </fieldset>;
+        })}</section>}
         {assessmentOpen && <form onSubmit={saveAssessment} className="record-section"><h3>Nurse Assessment and Requirement Review</h3><div className="exam-grid"><label>Physical Examination<textarea className="text-input" rows={3} value={assessment.physicalExam} onChange={(event) => setAssessment({ ...assessment, physicalExam: event.target.value })} /></label><label>Laboratory Examination<textarea className="text-input" rows={3} value={assessment.laboratoryExamination} onChange={(event) => setAssessment({ ...assessment, laboratoryExamination: event.target.value })} /></label><label className="exam-wide">Notes<textarea className="text-input" rows={2} value={assessment.notes} onChange={(event) => setAssessment({ ...assessment, notes: event.target.value })} /></label></div><button className="btn btn-primary" disabled={busy}>Save Nurse Assessment</button></form>}
         {!(["approved", "completed"].includes(activeWorkflow.status)) && activeWorkflow.requirements?.map((item, index) => item.kind === "document" ? null : <section className="record-section" key={`req-${index}`}><h3>{item.text}</h3><label>Completion note<textarea className="text-input" rows={2} value={evidence[index] || ""} onChange={(event) => setEvidence({ ...evidence, [index]: event.target.value })} /></label><div className="modal-actions"><button type="button" className="btn btn-success" disabled={busy} onClick={() => setRequirement(index, "satisfied", item)}>Mark Satisfied</button>{item.conditional && <button type="button" className="btn btn-secondary" disabled={busy || !evidence[index]?.trim()} onClick={() => setRequirement(index, "not_applicable", item)}>Not Applicable</button>}{item.status !== "pending" && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRequirement(index, "pending", item)}>Reset to Pending</button>}</div></section>)}
         {activeWorkflow.status === "approved" || activeWorkflow.status === "completed" ? <p role="status">Certificate issued and saved in Documents &amp; Attachments.</p> : null}
