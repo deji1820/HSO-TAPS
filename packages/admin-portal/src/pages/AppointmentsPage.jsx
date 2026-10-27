@@ -3,6 +3,7 @@ import { getAppointments, updateAppointmentDecision } from "../services/api.js";
 import { socket } from "../services/socket.js";
 import AppointmentFilters from "../components/AppointmentFilters.jsx";
 import AppointmentTable from "../components/AppointmentTable.jsx";
+import CreateAppointmentModal from "../components/CreateAppointmentModal.jsx";
 import { Link } from "react-router-dom";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/Appointments.css";
@@ -23,6 +24,7 @@ export default function AppointmentsPage({ user }) {
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const requestSequence = useRef(0);
 
   useEffect(() => {
@@ -115,7 +117,10 @@ export default function AppointmentsPage({ user }) {
           <h1>Appointments</h1>
         </div>
         <p className="page-subtitle">Review and manage kiosk appointment requests.</p>
-        {normalizeRole(user?.role) === "supervisor" && <Link to="/appointment-schedules" className="btn btn-outline">Manage provider schedules</Link>}
+        <div className="appointments-heading-actions">
+          {normalizeRole(user?.role) === "nurse" && <button type="button" className="btn btn-primary" onClick={() => setCreateModalOpen(true)}>Create Appointment</button>}
+          {normalizeRole(user?.role) === "supervisor" && <Link to="/appointment-schedules" className="btn btn-outline">Manage provider schedules</Link>}
+        </div>
       </header>
 
       <div className="appointments-toolbar">
@@ -127,6 +132,19 @@ export default function AppointmentsPage({ user }) {
       {notice && <p role="status" className="appointments-notice">{notice}</p>}
       {error && <div className="appointments-error" role="alert"><span>{error}</span><button type="button" className="btn btn-outline btn-sm" onClick={refresh} disabled={loading}>Try again</button></div>}
       {!error && <AppointmentTable appointments={appointments} loading={loading} busyId={busyId} onDecision={decide} />}
+      {createModalOpen && <CreateAppointmentModal
+        onClose={() => setCreateModalOpen(false)}
+        onCreated={(result) => {
+          const patient = result.appointment?.student;
+          const patientName = [patient?.firstName, patient?.lastName].filter(Boolean).join(" ") || "Patient";
+          setNotice(result.notificationSent
+            ? `Appointment created for ${patientName} as Pending Review. The booking email was sent.`
+            : `Appointment created for ${patientName} as Pending Review. ${result.notificationMessage || "The booking email could not be sent."}`);
+          setCreateModalOpen(false);
+          setPage(1);
+          void refresh();
+        }}
+      />}
       {!error && total > limit && <nav className="appointment-pagination" aria-label="Appointment pages">
         <span>Showing {((page - 1) * limit) + 1}–{Math.min(page * limit, total)} of {total}</span>
         <div>

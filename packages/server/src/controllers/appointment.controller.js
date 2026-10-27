@@ -144,6 +144,16 @@ export async function getKioskTodayAppointment(req, res) {
   } });
 }
 
+export async function searchAppointmentPatients(req, res) {
+  const query = String(req.query.q || "").trim().slice(0, 80);
+  if (query.length < 2) return res.json({ items: [] });
+  const regex = { $regex: escapeRegex(query), $options: "i" };
+  const patients = await Student.find({ isActive: { $ne: false }, $or: [
+    { studentId: regex }, { employeeId: regex }, { firstName: regex }, { lastName: regex },
+  ] }).select("studentId employeeId firstName lastName email affiliation program department").sort({ lastName: 1, firstName: 1 }).limit(15).lean();
+  return res.json({ items: patients });
+}
+
 export async function getProviderOptions(req, res) {
   const { serviceType, date, timeSlot, excludeAppointmentId } = req.query;
   if (!PROVIDER_SERVICES.has(serviceType)) return res.status(400).json({ message: "Provider assignment is not available for this service." });

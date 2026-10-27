@@ -21,6 +21,10 @@ export const getQueueHistory = ({ from = "", to = "", page = 1 } = {}) =>
   api.get("/queue/history", { params: { from: from || undefined, to: to || undefined, page } }).then((r) => r.data);
 export const getQueueBoard = () => api.get("/queue/board").then((r) => r.data);
 export const getAppointments = (filters = {}) => api.get("/appointments", { params: filters }).then((r) => r.data);
+export const searchAppointmentPatients = (q) => api.get("/appointments/staff/patients", { params: { q } }).then((r) => r.data);
+export const getStaffAppointmentSchedule = (serviceType) => api.get("/appointments/staff/schedule", { params: { serviceType } }).then((r) => r.data);
+export const getStaffAppointmentAvailability = (serviceType, date) => api.get("/appointments/staff/availability", { params: { serviceType, date } }).then((r) => r.data);
+export const createStaffAppointment = (payload) => api.post("/appointments/staff", payload).then((r) => r.data);
 export const getAppointment = (id) => api.get(`/appointments/${encodeURIComponent(id)}`).then((r) => r.data);
 export const getClearanceRequirements = () => api.get("/appointments/clearance-requirements").then((r) => r.data);
 export const getAppointmentNotifications = (id) => api.get(`/appointments/${encodeURIComponent(id)}/notifications`).then((r) => r.data);
