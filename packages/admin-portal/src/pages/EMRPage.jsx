@@ -156,6 +156,27 @@ function ClearanceCertificateAction({ certificate, label = "View / Print Certifi
   return certificate ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => setOpen(true)}>{label}</button>{open && <VerifiedClearanceCertificate certificate={certificate} onClose={() => setOpen(false)} />}</> : null;
 }
 
+function MedicalClearanceForms({ workflows = [], documents = [] }) {
+  if (!workflows.length) return <><h2 className="section-title">Medical Clearance Forms</h2><div className="table-empty">No medical clearance records have been created for this patient.</div></>;
+  return <section className="medical-clearance-forms"><h2 className="section-title">Medical Clearance Forms</h2><div className="emr-document-list">{workflows.map((workflow) => {
+    const linkedDocuments = documents.filter((document) => String(document.clearanceWorkflow?._id || document.clearanceWorkflow) === String(workflow._id));
+    const certificate = documents.find((document) => String(document.sourceWorkflow?._id || document.sourceWorkflow) === String(workflow._id)) || workflow.medicalFile;
+    return <article className="emr-document-card" key={workflow._id}>
+      <header><h3>{workflow.purpose}</h3><span>{formatDate(workflow.createdAt)}</span></header>
+      <div className="emr-document-card-grid"><div><span>Status</span><strong>{workflow.status === "ready_for_approval" ? "Ready for nurse completion" : String(workflow.status || "Pending").replaceAll("_", " ")}</strong></div><div><span>Affiliation</span><strong>{workflow.affiliation || "—"}</strong></div><div><span>Completed</span><strong>{workflow.certificateIssuedAt ? formatDate(workflow.certificateIssuedAt) : "Not completed"}</strong></div></div>
+      <p className="emr-document-review-remarks"><strong>Nurse assessment:</strong> {[workflow.assessment?.physicalExam, workflow.assessment?.laboratoryExamination, workflow.assessment?.notes].filter(Boolean).join(" · ") || "Not recorded"}</p>
+      <details className="emr-document-details"><summary>Clearance requirements</summary><ul>{(workflow.requirements || []).map((requirement, index) => {
+        const linkedId = requirement.document?._id || requirement.document;
+        const submittedFile = linkedDocuments.find((document) => String(document._id) === String(linkedId)) || (linkedId ? documents.find((document) => String(document._id) === String(linkedId)) : null);
+        return <li key={`${requirement.text}-${index}`}>{requirement.text}: {String(requirement.status || "pending").replaceAll("_", " ")}{submittedFile ? ` · ${submittedFile.name || submittedFile.documentTitle} (${submittedFile.status})` : requirement.evidence ? ` · ${requirement.evidence}` : ""}</li>;
+      })}</ul></details>
+      <h4>Documents submitted through this clearance</h4>
+      {linkedDocuments.length ? <ul className="clearance-emr-submitted-files">{linkedDocuments.map((document) => <li key={document._id}><span><strong>{document.clearanceRequirementText || "Supporting document"}</strong><br />{document.name || document.documentTitle} · {document.status} · {formatDate(document.submittedAt)}</span>{document.name && <button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => appDialog.alert(error.message || "Could not open the submitted file."))}>View Submitted File</button>}</li>)}</ul> : <p>No supporting file has been uploaded for this clearance.</p>}
+      {certificate && <div className="document-actions"><ClearanceCertificateAction certificate={certificate} /></div>}
+    </article>;
+  })}</div></section>;
+}
+
 function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentId, onStatusChange, emptyMessage = "No external documents synced yet." }) {
   if (!documents?.length) return <div className="table-empty">{emptyMessage}</div>;
   return <div className="emr-document-list">{documents.map((document) => <article className="emr-document-card" key={document._id}>
@@ -763,7 +784,7 @@ export default function EMRPage() {
             {tab === "profile" && <><MedicalProfileHistory entries={profileHistory} vitals={record.vitals || []} studentMongoId={record.student._id} onSaved={replaceLatestMedicalProfile} /><KioskRequestsTab requests={record.kioskRequests} /></>}
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
-            {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} />}
+            {tab === "forms" && <><MedicalClearanceForms workflows={record.medicalWorkflows || []} documents={record.documents || []} /><HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} /> </>}
             {tab === "files" && <>
               <h2 className="section-title">Medical Document Submissions</h2>
               <MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} onRetryCertificate={retryClearanceCertificate} />

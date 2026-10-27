@@ -6,6 +6,7 @@ import QueueEntry from "../models/QueueEntry.js";
 import { SyncLog } from "../models/FormPipeline.js";
 import Appointment from "../models/Appointment.js";
 import MedicalProfile from "../models/MedicalProfile.js";
+import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import PatientHistory from "../models/PatientHistory.js";
 import AcademicCalendar from "../models/AcademicCalendar.js";
 import { calculateAge, decoratePatientYearLevel, expectedYearLevel, parseAcademicYearStart } from "../services/patientInformation.js";
@@ -249,13 +250,14 @@ export async function listStudents(req, res) {
 
 // GET /api/students/:id/emr  (Consultation History + Vitals + External Documents tabs)
 export async function getFullEmr(req, res) {
-  const [student, vitals, consultations, documents, kioskRequests, formSubmissions] = await Promise.all([
+  const [student, vitals, consultations, documents, kioskRequests, formSubmissions, medicalWorkflows] = await Promise.all([
     Student.findById(req.params.id),
     VitalsLog.find({ student: req.params.id }).sort({ capturedAt: -1 }),
     ConsultationRecord.find({ student: req.params.id }).sort({ visitDate: -1 }),
     ExternalDocument.find({ student: req.params.id }).select("-fileData").populate("student", "studentId firstName lastName affiliation program department").populate("verifiedBy", "name role").populate("verificationHistory.actor", "name role").populate("declarationHistory.actor", "name role").sort({ submittedAt: -1 }),
     QueueEntry.find({ student: req.params.id, status: { $ne: "cancelled" } }).sort({ createdAt: -1 }),
     SyncLog.find({ matchedStudent: req.params.id }).sort({ createdAt: -1 }),
+    MedicalWorkflow.find({ student: req.params.id, service: "Medical Clearance" }).populate("requirements.document", "documentTitle name category status examDate submittedAt").populate("medicalFile", "recordType documentTitle name category status submittedAt submissionDetails").sort({ createdAt: -1 }),
   ]);
   if (!student) return res.status(404).json({ message: "Student not found" });
   await Promise.all(documents.filter((document) => document.status === "Verified").map((document) => issueVerifiedClearanceDocument(document)));
@@ -268,7 +270,7 @@ export async function getFullEmr(req, res) {
     result.clearanceCertificateEligible = result.recordType !== "clearance_certificate" && !result.clearanceWorkflow && Boolean(findClearanceRequirement(student.affiliation, result.submissionDetails?.purpose));
     return result;
   });
-  res.json({ student: decoratePatient(student, await currentAcademicYear()), vitals, consultations, documents: safeDocuments, kioskRequests, formSubmissions });
+  res.json({ student: decoratePatient(student, await currentAcademicYear()), vitals, consultations, documents: safeDocuments, medicalWorkflows, kioskRequests, formSubmissions });
 }
 
 // POST /api/students/bulk-upload  (Admin > Upload Master Data, after CSV/XLSX is parsed client- or server-side)

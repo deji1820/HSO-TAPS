@@ -268,6 +268,15 @@ export async function submitDocument(req, res) {
     notificationEmail: student.email || notificationEmail,
     submittedAt: new Date(),
   });
+  if (clearanceWorkflow) {
+    const targetRequirement = clearanceWorkflow.requirements.find((item) => item.kind === "document" && item.text === clearanceRequirementText && item.status === "pending");
+    if (targetRequirement) {
+      await MedicalWorkflow.updateOne(
+        { _id: clearanceWorkflow._id, status: { $in: ["assessment", "requirements_pending", "ready_for_approval"] }, "requirements._id": targetRequirement._id },
+        { $set: { "requirements.$.document": document._id }, $push: { events: { type: "document_uploaded", description: `A supporting file was submitted for: ${clearanceRequirementText}`, at: new Date() } } },
+      );
+    }
+  }
   const notificationQueued = areDocumentNotificationsConfigured();
   if (notificationQueued) {
     void sendDocumentStatusNotification(document, "Pending");
