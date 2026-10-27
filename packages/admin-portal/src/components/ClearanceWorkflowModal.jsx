@@ -3,6 +3,16 @@ import { approveMedicalClearance, getMedicalDocuments, saveClearanceAssessment, 
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/NewMedicalRecord.css";
+function requestErrorMessage(error, fallback) {
+  const data = error?.response?.data;
+  if (data && typeof data.message === "string" && data.message.trim()) return data.message;
+  if (data && typeof data.error === "string" && data.error.trim()) return data.error;
+  if (typeof data === "string" && data.trim() && !/<!doctype|<html/i.test(data)) return data.trim().slice(0, 240);
+  if (error?.response?.status) return `${fallback} (server returned ${error.response.status}).`;
+  if (error?.message === "Network Error") return `${fallback} The server could not be reached.`;
+  return error?.message || fallback;
+}
+
 export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
   const workflow = entry?.medicalWorkflow;
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
@@ -25,15 +35,26 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
   async function run(action) {
     setBusy(true); setError("");
     try {
-      let updated = await action();
-      if (updated?._id) setCurrentWorkflow(updated);
-      if (updated?.status === "ready_for_approval") {
-        updated = await approveMedicalClearance(workflow._id, "");
+      let updated;
+      try {
+        updated = await action();
         if (updated?._id) setCurrentWorkflow(updated);
+      } catch (requestError) {
+        setError(requestErrorMessage(requestError, "Could not save the nurse assessment or requirement."));
+        return;
+      }
+      if (updated?.status === "ready_for_approval") {
+        try {
+          updated = await approveMedicalClearance(workflow._id, "");
+          if (updated?._id) setCurrentWorkflow(updated);
+        } catch (requestError) {
+          onUpdated?.();
+          setError(requestErrorMessage(requestError, "The assessment is saved, but automatic clearance completion failed."));
+          return;
+        }
       }
       onUpdated?.();
-    } catch (requestError) { setError(requestError.response?.data?.message || "Could not save the clearance workflow."); }
-    finally { setBusy(false); }
+    } finally { setBusy(false); }
   }
   async function saveAssessment(event) {
     event.preventDefault();
@@ -51,17 +72,39 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
       let nextWorkflow = updated.clearanceWorkflowRecord;
       if (nextWorkflow) setCurrentWorkflow(nextWorkflow);
       if (nextWorkflow?.status === "ready_for_approval") {
-        nextWorkflow = await approveMedicalClearance(workflow._id, "");
-        if (nextWorkflow?._id) setCurrentWorkflow(nextWorkflow);
+        try {
+          nextWorkflow = await approveMedicalClearance(workflow._id, "");
+          if (nextWorkflow?._id) setCurrentWorkflow(nextWorkflow);
+        } catch (requestError) {
+          onUpdated?.();
+          setError(requestErrorMessage(requestError, "The document was saved, but automatic clearance completion failed."));
+          return;
+        }
       }
       onUpdated?.();
-    } catch (requestError) { setError(requestError.response?.data?.message || "Could not save the document review."); }
+    } catch (requestError) { setError(requestErrorMessage(requestError, "Could not save the document review.")); }
     finally { setUpdatingDocumentId(null); }
   }
-  if (!currentWorkflow) return null;
-  const activeWorkflow = currentWorkflow;
+  const activeWorkflow = currentWorkflow || {};
   const assessmentOpen = ["assessment", "requirements_pending", "ready_for_approval"].includes(activeWorkflow.status);
-  const statusLabel = activeWorkflow.status === "ready_for_approval" ? "Ready for nurse completion" : String(activeWorkflow.status || "").replaceAll("_", " ");
+  const statusLabel = activeWorkflow.status === "ready_for_approval" ? "Ready for completion" : String(activeWorkflow.status || "").replaceAll("_", " ");
+  useEffect(() => {
+    if (activeWorkflow.status !== "approval_in_progress") return undefined;
+    const approvedBy = activeWorkflow.providerApproval?.approvedBy?._id || activeWorkflow.providerApproval?.approvedBy;
+    if (String(approvedBy || "") !== String(user.id || user._id || "")) return undefined;
+    let active = true;
+    setBusy(true);
+    setError("");
+    approveMedicalClearance(workflow._id, "").then((completed) => {
+      if (!active) return;
+      setCurrentWorkflow(completed);
+      onUpdated?.();
+    }).catch((requestError) => {
+      if (active) setError(requestErrorMessage(requestError, "Could not resume clearance completion."));
+    }).finally(() => { if (active) setBusy(false); });
+    return () => { active = false; };
+  }, [activeWorkflow.status, activeWorkflow.providerApproval?.approvedBy?._id, activeWorkflow.providerApproval?.approvedBy, workflow._id, user.id, user._id, onUpdated]);
+  if (!currentWorkflow) return null;
   return <div className="active-session-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="active-session-modal clearance-workflow-modal" role="dialog" aria-modal="true" aria-labelledby="clearance-title">
       <header className="active-session-header"><div><h2 id="clearance-title">Medical Clearance — {activeWorkflow.purpose}</h2><p>{entry.student?.firstName} {entry.student?.lastName} · {entry.student?.studentId} · Queue {entry.queueNumber}</p></div><button type="button" className="active-session-close" onClick={onClose} aria-label="Close clearance workflow">×</button></header>

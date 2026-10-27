@@ -176,6 +176,7 @@ router.patch("/medical-workflows/:id/requirements/:index", requireRole("nurse", 
   res.json(workflow);
 });
 router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, res) => {
+  try {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
   const workflow = await MedicalWorkflow.findById(req.params.id);
   if (!workflow) return res.status(404).json({ message: "Medical workflow not found." });
@@ -263,6 +264,26 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
   const result = await approved.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile");
   if (queueCompletionWarning) return res.status(200).json({ ...result.toObject(), queueCompletionWarning });
   res.json(result);
+  } catch (error) {
+    console.error("[clearance] Completion failed:", error);
+    if (res.headersSent) return;
+    try {
+      const pending = await MedicalWorkflow.findById(req.params.id);
+      if (pending?.status === "approval_in_progress" && String(pending.providerApproval?.approvedBy || "") === String(req.user.id)) {
+        const certificateExists = await ExternalDocument.exists({ sourceWorkflow: pending._id });
+        if (!certificateExists) {
+          pending.status = "ready_for_approval";
+          pending.providerApproval = undefined;
+          pending.providerStatement = undefined;
+          pushWorkflowEvent(pending, "approval_retry_available", "Automatic certificate creation did not finish; the completed clearance is ready to retry.", req.user.id);
+          await pending.save();
+        }
+      }
+    } catch (recoveryError) {
+      console.error("[clearance] Could not restore retryable state:", recoveryError);
+    }
+    return res.status(500).json({ message: "Clearance completion failed while saving the certificate. Your assessment and requirements remain saved; retry completion." });
+  }
 });
 router.get("/medical-workflows/:id/certificate", requireWorkflowRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
