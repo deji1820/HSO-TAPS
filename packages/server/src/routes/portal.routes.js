@@ -82,7 +82,8 @@ router.post("/students/:id/medical-workflows", requireRole("nurse", "supervisor"
   const priorRequest = await MedicalWorkflow.findOne({ requestKey: idempotencyKey }).select("+documentSubmissionToken");
   if (priorRequest) {
     if (String(priorRequest.student) !== req.params.id || priorRequest.service !== service || priorRequest.purpose !== String(purpose || "").trim()) return res.status(409).json({ message: "This request key has already been used for a different medical record." });
-    return res.status(200).json(await priorRequest.populate("student", "studentId affiliation firstName lastName").populate("queueEntry", "queueNumber status"));
+    const populatedPriorRequest = await MedicalWorkflow.findById(priorRequest._id).select("+documentSubmissionToken").populate("student", "studentId affiliation firstName lastName").populate("queueEntry", "queueNumber status");
+    return res.status(200).json(populatedPriorRequest);
   }
   if (!["Medical Consultation", "Dental Consultation", "Medical Clearance"].includes(service)) return res.status(400).json({ message: "Choose a supported clinical service." });
   if (typeof purpose !== "string" || !purpose.trim()) return res.status(400).json({ message: "Visit purpose is required." });
@@ -107,7 +108,8 @@ router.post("/students/:id/medical-workflows", requireRole("nurse", "supervisor"
     if (workflow.queueEntry) await QueueEntry.deleteOne({ _id: workflow.queueEntry });
     const existing = await MedicalWorkflow.findOne({ requestKey: idempotencyKey }).select("+documentSubmissionToken");
     if (!existing) throw saveError;
-    return res.status(200).json(await existing.populate("student", "studentId affiliation firstName lastName").populate("queueEntry", "queueNumber status"));
+    const populatedExisting = await MedicalWorkflow.findById(existing._id).select("+documentSubmissionToken").populate("student", "studentId affiliation firstName lastName").populate("queueEntry", "queueNumber status");
+    return res.status(200).json(populatedExisting);
   }
   const io = req.app.get("io");
   if (workflow.queueEntry) {
@@ -206,7 +208,8 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
         workflow.certificateIssuedAt ||= savedCertificate.submittedAt || savedCertificate.createdAt || new Date();
         await workflow.save();
       }
-      return res.json(await workflow.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+      const populatedWorkflow = await MedicalWorkflow.findById(workflow._id).populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile");
+      return res.json(populatedWorkflow);
     }
   }
   completionStage = "checking accepted required documents";
@@ -287,7 +290,7 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
   );
   if (!approved) return res.status(409).json({ message: "The certificate was saved, but the approval state changed. Refresh and resume approval to finish the workflow." });
   completionStage = "loading the saved certificate for the modal";
-  const result = await approved.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile");
+  const result = await MedicalWorkflow.findById(approved._id).populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile");
   res.json(result);
   } catch (error) {
     console.error(`[clearance] Certificate approval failed during ${completionStage}:`, error);
@@ -303,7 +306,10 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
             { new: true },
           );
           const recovered = approved || await MedicalWorkflow.findById(pending._id);
-          if (recovered?.status === "approved") return res.json(await recovered.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+          if (recovered?.status === "approved") {
+            const populatedRecovered = await MedicalWorkflow.findById(recovered._id).populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile");
+            return res.json(populatedRecovered);
+          }
         }
         if (pending.status === "approval_in_progress") {
           pending.status = "ready_for_approval";
