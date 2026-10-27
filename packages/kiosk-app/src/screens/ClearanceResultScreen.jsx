@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import KioskHeader from "../components/KioskHeader.jsx";
-import useCountdown from "../hooks/useCountdown.js";
 import "../styles/screens/MedicalClearance.css";
 
 export default function ClearanceResultScreen({ queueNumber, documentSubmissionUrl, onDone, onFaq, isOnline }) {
-  const remaining = useCountdown(30, onDone);
   const [qrDataUrl, setQrDataUrl] = useState("");
   useEffect(() => {
     let active = true;
@@ -31,7 +29,7 @@ export default function ClearanceResultScreen({ queueNumber, documentSubmissionU
         </section>
         {documentSubmissionUrl && <section className="clearance-upload-qr"><h2>Submit required documents</h2><p>Scan to upload the documents for this clearance purpose. The clinic will review your files in Medical Documents.</p>{qrDataUrl ? <img src={qrDataUrl} alt="Secure QR code to upload this medical clearance's required documents" /> : <p>Preparing QR code…</p>}</section>}
         <button className="clearance-done" onClick={onDone}>Done <span>✓</span></button>
-        <p className="clearance-autoclose">Auto-closes in {remaining}s...</p>
+        <p className="clearance-autoclose">This screen stays open while you scan the QR code. It returns to the RFID screen after the kiosk inactivity timeout.</p>
         <a className="clearance-faq" href="#faq" onClick={(event) => { event.preventDefault(); onFaq?.(); }}>
           Frequently Asked Questions (FAQ’s)
         </a>
