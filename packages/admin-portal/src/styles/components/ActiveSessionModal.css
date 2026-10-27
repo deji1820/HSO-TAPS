@@ -19,6 +19,7 @@
   overflow: hidden;
 }
 .clearance-workflow-modal { max-width: 900px; }
+.clearance-workflow-modal .active-session-header h2 { color: #fff; }
 .clearance-workflow-modal .active-session-body { max-height: calc(100vh - 130px); }
 .clearance-workflow-modal .record-section { margin: 0 0 14px; }
 .clearance-workflow-modal .record-section h3 { margin: 0 0 10px; color: var(--nu-blue-dark); font-size: 1rem; }
