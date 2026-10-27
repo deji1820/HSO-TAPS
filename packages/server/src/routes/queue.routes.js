@@ -199,6 +199,9 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
       physicalExam: String(assessment.physicalExam || "").trim().slice(0, 4000),
       laboratoryExamination: String(assessment.laboratoryExamination || "").trim().slice(0, 4000),
       notes: String(assessment.notes || "").trim().slice(0, 4000),
+      physicalExamIncluded: Boolean(assessment.physicalExamIncluded),
+      laboratoryExamIncluded: Boolean(assessment.laboratoryExamIncluded),
+      fields: sanitizeNursingFields(assessment.fields),
       recordedBy: req.user.id,
       recordedAt: new Date(),
     };
@@ -239,7 +242,7 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
     if (!physicalExam && !laboratoryExamination) {
       return res.status(400).json({ message: "Record a physical or laboratory examination before routing the patient to a provider." });
     }
-    update.$set.nursingAssessment = { physicalExam, laboratoryExamination, notes, recordedBy: req.user.id, recordedAt: new Date() };
+    update.$set.nursingAssessment = { physicalExam, laboratoryExamination, notes, physicalExamIncluded: Boolean(assessment.physicalExamIncluded), laboratoryExamIncluded: Boolean(assessment.laboratoryExamIncluded), fields: sanitizeNursingFields(assessment.fields), recordedBy: req.user.id, recordedAt: new Date() };
   }
   const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: current.status }, update, { new: true }).populate("student").populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded").populate("consultationRecord");
   if (!entry) return res.status(409).json({ message: "This queue entry has already changed" });
@@ -265,3 +268,8 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
 });
 
 export default router;
+
+function sanitizeNursingFields(fields) {
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) return {};
+  return Object.fromEntries(Object.entries(fields).slice(0, 40).map(([key, value]) => [String(key).slice(0, 80), String(value ?? "").trim().slice(0, 2000)]));
+}

@@ -88,8 +88,10 @@ export default function DashboardPage() {
   }, [refreshQueue, refreshHistory]);
 
   const visibleQueue = useMemo(() => filterQueueEntries(queue, { provider, providerRole, filter, search }).sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * (sortOrder === "asc" ? 1 : -1)), [queue, filter, search, provider, providerRole, sortOrder]);
+  const nurseQueueEntries = visibleQueue.filter((entry) => !["awaiting_provider", "provider_in_session"].includes(entry.status));
+  const nurseInProgress = visibleQueue.filter((entry) => ["awaiting_provider", "provider_in_session"].includes(entry.status));
   const visibleHistory = useMemo(() => filterQueueEntries(history, { provider, providerRole, filter, search }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [history, filter, search, provider, providerRole]);
-  const selected = (queueView === "active" ? queue : history).find((entry) => entry._id === selectedId) || null;
+  const selected = (queueView === "history" ? history : queue).find((entry) => entry._id === selectedId) || null;
   const visibleServiceTypes = provider ? SERVICE_TYPES.slice(0, 2) : queueView === "history" ? SERVICE_TYPES : SERVICE_TYPES.filter((service) => service !== "Quick Health Screening");
 
   async function changeStatus(id, status) {
@@ -119,6 +121,18 @@ export default function DashboardPage() {
     }
   }
 
+  async function selectQueueEntry(entry) {
+    setSelectedId(entry._id);
+    if (isNursingTeam(user.role) && isConsultation(entry.serviceType) && ["called", "in_session"].includes(entry.status)) {
+      try {
+        if (entry.status === "called") {
+          const started = await changeStatus(entry._id, "in_session");
+          if (started) setNursingEntry(started);
+        } else setNursingEntry(entry);
+      } catch (error) { await appDialog.alert(error.response?.data?.message || "Could not open this nursing assessment."); }
+    }
+  }
+
   return <div className="nurse-dashboard">
     <p className="nurse-greeting">Good morning, {user.name || (provider ? "Clinician" : "Nurse")}!</p>
     <div className="page-header nurse-dashboard-heading">
@@ -133,11 +147,12 @@ export default function DashboardPage() {
     <div className="dashboard-grid">
       <section className="card dashboard-queue-card">
         <div className="queue-view-tabs" role="tablist" aria-label="Queue views">
-          <button type="button" role="tab" aria-selected={queueView === "active"} className={queueView === "active" ? "active" : ""} onClick={() => { setQueueView("active"); setSelectedId(null); }}>Active Queue ({queue.length})</button>
+          <button type="button" role="tab" aria-selected={queueView === "active"} className={queueView === "active" ? "active" : ""} onClick={() => { setQueueView("active"); setSelectedId(null); }}>Active Queue ({isNursingTeam(user.role) ? queue.filter((entry) => !["awaiting_provider", "provider_in_session"].includes(entry.status)).length : queue.length})</button>
+          {isNursingTeam(user.role) && <button type="button" role="tab" aria-selected={queueView === "in_progress"} className={queueView === "in_progress" ? "active" : ""} onClick={() => { setQueueView("in_progress"); setSelectedId(null); }}>Provider In Progress ({queue.filter((entry) => ["awaiting_provider", "provider_in_session"].includes(entry.status)).length})</button>}
           <button type="button" role="tab" aria-selected={queueView === "history"} className={queueView === "history" ? "active" : ""} onClick={() => { setQueueView("history"); setSelectedId(null); }}>Queue History ({historyTotal})</button>
         </div>
         <div className="queue-list-header">
-          <h2>{queueView === "active" ? "Active Queue" : "Queue History - All Dates"}</h2>
+          <h2>{queueView === "active" ? "Active Queue" : queueView === "in_progress" ? "Provider In Progress" : "Queue History - All Dates"}</h2>
           <select className="text-input filter-select" value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter queue"><option value="All">Filter by</option><option value="High Priority">High Priority</option>{visibleServiceTypes.map((service) => <option key={service}>{service}</option>)}</select>
           {queueView === "active" && <select className="text-input filter-select" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} aria-label="Sort by time-in"><option value="asc">Time-in: Oldest first</option><option value="desc">Time-in: Newest first</option></select>}
         </div>
@@ -149,7 +164,9 @@ export default function DashboardPage() {
         </div>}
         {queueView === "history" && historyError && <div className="table-empty" role="alert">{historyError}</div>}
         {queueView === "active" ? (
-          visibleQueue.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th><th>Provider Route</th><th>Encounter Status</th></tr></thead><tbody>{visibleQueue.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}{entry.elevatedVitalsAlert?.active && <span className="appointment-cell-secondary" role="status">&#9888; Elevated vital signs alert</span>}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td><td>{providerRouteLabel(entry, providerRole)}</td><td>{queueStatusLabel(entry)}</td></tr>)}</tbody></table></div> : <div className="table-empty">No active patients in the queue.</div>
+          nurseQueueEntries.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th><th>Provider Route</th><th>Encounter Status</th></tr></thead><tbody>{nurseQueueEntries.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => selectQueueEntry(entry)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && selectQueueEntry(entry)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}{entry.elevatedVitalsAlert?.active && <span className="appointment-cell-secondary" role="status">&#9888; Elevated vital signs alert</span>}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td><td>{providerRouteLabel(entry, providerRole)}</td><td>{queueStatusLabel(entry)}</td></tr>)}</tbody></table></div> : <div className="table-empty">No active patients in the queue.</div>
+        ) : queueView === "in_progress" ? (
+          nurseInProgress.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th><th>Assigned Provider</th><th>Encounter Status</th></tr></thead><tbody>{nurseInProgress.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{clock(entry.createdAt)}</td><td>{entry.medicalWorkflow?.purpose || entry.serviceType || "—"}</td><td>{providerTarget(entry.serviceType) || entry.assignedProviderRole || "—"}</td><td>{queueStatusLabel(entry)}</td></tr>)}</tbody></table></div> : <div className="table-empty">No consultations are currently with a provider.</div>
         ) : (
           visibleHistory.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Date / time queued</th><th>Called at</th><th>Purpose</th><th>Encounter Status</th></tr></thead><tbody>{visibleHistory.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "-"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{dateTime(entry.createdAt)}</td><td>{entry.calledAt ? dateTime(entry.calledAt) : "-"}</td><td>{entry.serviceType || "-"}</td><td>{HISTORY_STATUS_LABEL[entry.status] || entry.status}</td></tr>)}</tbody></table></div> : !historyError && <div className="table-empty">No archived queue entries match this date range.</div>
         )}
@@ -168,7 +185,7 @@ export default function DashboardPage() {
         <div className="snapshot-field"><span>Department:</span> {selected.student?.program || "—"}</div>
         <div className="snapshot-field"><span>Purpose:</span> {selected.medicalWorkflow?.purpose || selected.serviceType || "—"}</div>
         {providerTarget(selected.serviceType) && <div className="snapshot-field"><span>Provider Route:</span> {providerRouteLabel(selected, user.role)}</div>}
-        {queueView === "active" ? <>
+        {queueView !== "history" ? <>
           <div className="snapshot-field"><span>Encounter Status:</span> {queueStatusLabel(selected)}</div>
           {selected.expirationExempt && isNursingTeam(user.role) && <div className="snapshot-field"><span>Expiration exception:</span> {selected.expirationExemptionReason || "Authorized exception"}</div>}
           {selected.elevatedVitalsAlert?.active && <div className="snapshot-field elevated-vitals-alert" role="alert"><strong>&#9888; Elevated vital signs alert: {selected.elevatedVitalsAlert.reason || "Review required"}</strong><p>Next action: assess the patient and follow the clinic escalation procedure. This alert does not change encounter status.</p>{clinicalRole && <button type="button" className="btn btn-warning" onClick={async () => { try { const updated = await updateElevatedVitalsAlert(selected._id, selected.elevatedVitalsAlert.acknowledgedAt ? "resolve" : "acknowledge"); setQueue((items) => items.map((item) => item._id === updated._id ? updated : item)); setSelectedId(updated._id); } catch (error) { appDialog.alert(error.response?.data?.message || "Could not update the elevated-vitals alert."); } }}>{selected.elevatedVitalsAlert.acknowledgedAt ? "Resolve Alert" : "Acknowledge and Review Alert"}</button>}</div>}
@@ -205,7 +222,7 @@ export default function DashboardPage() {
       </>}</section>
     </div>
 
-    {nursingEntry && <NursingAssessmentModal entry={nursingEntry} onClose={() => setNursingEntry(null)} onSaved={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setSelectedId(entry._id); setNursingEntry(null); }} onRouted={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setSelectedId(entry._id); setNursingEntry(null); }} />}
+    {nursingEntry && <NursingAssessmentModal entry={nursingEntry} onClose={() => setNursingEntry(null)} onSaved={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setSelectedId(entry._id); setNursingEntry(null); }} onRouted={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setQueueView("in_progress"); setSelectedId(entry._id); setNursingEntry(null); }} />}
     {sessionEntry && <ActiveSessionModal entry={sessionEntry} onClose={() => setSessionEntry(null)} onCompleted={(entry) => { setQueue((items) => items.filter((item) => item._id !== entry._id)); setSelectedId(null); setSessionEntry(null); setSessionNotice("Session saved to the patient's EMR and marked complete."); refreshHistory(); window.setTimeout(() => setSessionNotice(""), 6000); }} />}
   </div>;
 }

@@ -306,6 +306,11 @@ router.patch("/consultations/:queueEntryId/draft", requireRole("physician", "doc
   if (!intakeFields || typeof intakeFields !== "object" || Array.isArray(intakeFields) || JSON.stringify(intakeFields).length > 20000) return res.status(400).json({ message: "Medical record intake fields are invalid or too large." });
   const nursingAssessmentInput = req.body?.nursingAssessment || {};
   const nursingAssessment = Object.fromEntries(["physicalExam", "laboratoryExamination", "notes"].map((key) => [key, String(nursingAssessmentInput[key] || "").trim().slice(0, 4000)]));
+  nursingAssessment.physicalExamIncluded = Boolean(nursingAssessmentInput.physicalExamIncluded);
+  nursingAssessment.laboratoryExamIncluded = Boolean(nursingAssessmentInput.laboratoryExamIncluded);
+  nursingAssessment.fields = nursingAssessmentInput.fields && typeof nursingAssessmentInput.fields === "object" && !Array.isArray(nursingAssessmentInput.fields)
+    ? Object.fromEntries(Object.entries(nursingAssessmentInput.fields).slice(0, 40).map(([key, value]) => [String(key).slice(0, 80), String(value ?? "").trim().slice(0, 2000)]))
+    : {};
   nursingAssessment.recordedBy = queueEntry.nursingAssessment?.recordedBy || req.user.id;
   nursingAssessment.recordedAt = queueEntry.nursingAssessment?.recordedAt || new Date();
   const secondaryVitals = req.body?.secondaryVitals || {};
@@ -426,6 +431,11 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
       physicalExam: String(recordFields.nursingAssessment.physicalExam || "").trim().slice(0, 4000),
       laboratoryExamination: String(recordFields.nursingAssessment.laboratoryExamination || "").trim().slice(0, 4000),
       notes: String(recordFields.nursingAssessment.notes || "").trim().slice(0, 4000),
+      physicalExamIncluded: Boolean(recordFields.nursingAssessment.physicalExamIncluded),
+      laboratoryExamIncluded: Boolean(recordFields.nursingAssessment.laboratoryExamIncluded),
+      fields: recordFields.nursingAssessment.fields && typeof recordFields.nursingAssessment.fields === "object" && !Array.isArray(recordFields.nursingAssessment.fields)
+        ? Object.fromEntries(Object.entries(recordFields.nursingAssessment.fields).slice(0, 40).map(([key, value]) => [String(key).slice(0, 80), String(value ?? "").trim().slice(0, 2000)]))
+        : {},
       recordedBy: queueEntry.nursingAssessment?.recordedBy || req.user.id,
       recordedAt: queueEntry.nursingAssessment?.recordedAt || new Date(),
     };
@@ -479,6 +489,9 @@ router.post("/consultations", requireClinicalRole, async (req, res) => {
         physicalExam: queueEntry.nursingAssessment?.physicalExam || "",
         laboratoryExamination: queueEntry.nursingAssessment?.laboratoryExamination || "",
         notes: queueEntry.nursingAssessment?.notes || "",
+        physicalExamIncluded: Boolean(queueEntry.nursingAssessment?.physicalExamIncluded),
+        laboratoryExamIncluded: Boolean(queueEntry.nursingAssessment?.laboratoryExamIncluded),
+        fields: queueEntry.nursingAssessment?.fields || {},
         recordedAt: queueEntry.nursingAssessment?.recordedAt || null,
       },
       consultationRecordId: consultation._id,
