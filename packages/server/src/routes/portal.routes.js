@@ -677,11 +677,30 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });
   const allowedStatuses = ["Pending", "Verified", "Rejected"];
   if (!allowedStatuses.includes(req.body.status)) return res.status(400).json({ message: "Invalid document status" });
-  const remarks = String(req.body.remarks || "").trim().slice(0, 1000);
-  if (req.body.status !== "Pending" && remarks.length < 3) return res.status(400).json({ message: "Add a short verification or rejection remark before saving this decision." });
+  let remarks = String(req.body.remarks || "").trim().slice(0, 1000);
   const document = await ExternalDocument.findById(req.params.id).select("-fileData").populate("student", "studentId firstName lastName email affiliation program department");
   if (!document) return res.status(404).json({ message: "Document not found" });
+  if (document.clearanceWorkflow && ["Verified", "Rejected"].includes(req.body.status) && remarks.length < 3) {
+    remarks = req.body.status === "Verified" ? "Accepted during the nurse clearance assessment." : "Rejected during the nurse clearance assessment.";
+  }
+  if (req.body.status !== "Pending" && remarks.length < 3) return res.status(400).json({ message: "Add a short verification or rejection remark before saving this decision." });
   if (document.recordType === "clearance_certificate" || document.status === "Issued") return res.status(409).json({ message: "Issued clearance certificates are part of the permanent Medical Files history and cannot be changed here." });
+  let linkedClearanceWorkflow = null;
+  let linkedRequirement = null;
+  if (document.clearanceWorkflow) {
+    linkedClearanceWorkflow = await MedicalWorkflow.findById(document.clearanceWorkflow);
+    if (!linkedClearanceWorkflow || linkedClearanceWorkflow.service !== "Medical Clearance") return res.status(409).json({ message: "The clearance workflow linked to this upload no longer exists." });
+    const requirementText = document.clearanceRequirementText || document.submissionDetails?.clearanceRequirementText;
+    const requirementIndex = linkedClearanceWorkflow.requirements.findIndex((item) => item.kind === "document" && item.text === requirementText);
+    linkedRequirement = linkedClearanceWorkflow.requirements[requirementIndex];
+    if (req.body.status === "Verified") {
+      if (!linkedRequirement) return res.status(409).json({ message: "This upload is not linked to a document requirement in the clearance." });
+      if (!matchesRequiredDocument(linkedRequirement.text, document)) return res.status(400).json({ message: "The submitted file does not match this clearance requirement." });
+      if (!hasCurrentExamDate(linkedRequirement.text, document)) return res.status(400).json({ message: "The exam or issue date is missing, in the future, or outside the validity period for this requirement." });
+      if (["approval_in_progress", "approved", "completed"].includes(linkedClearanceWorkflow.status)) return res.status(409).json({ message: "This clearance is already locked for approval or complete." });
+      if (linkedRequirement.status === "satisfied" && String(linkedRequirement.document || "") !== String(document._id)) return res.status(409).json({ message: "A different document already satisfies this clearance requirement." });
+    }
+  }
   const retryVerifiedCertificate = document.status === "Verified" && req.body.status === "Verified";
   if (["Verified", "Rejected"].includes(document.status) && !retryVerifiedCertificate) {
     return res.status(409).json({ message: "This document has already been decided and its status cannot be changed." });
@@ -694,6 +713,18 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
     document.verifiedAt = new Date();
     document.verificationHistory.push({ status: req.body.status, remarks, actor: req.user.id, at: document.verifiedAt });
     await document.save();
+  }
+  if (linkedClearanceWorkflow && linkedRequirement && req.body.status === "Verified" && linkedRequirement.status !== "satisfied") {
+    linkedRequirement.status = "satisfied";
+    linkedRequirement.verifiedBy = req.user.id;
+    linkedRequirement.verifiedAt = new Date();
+    linkedRequirement.document = document._id;
+    linkedRequirement.evidence = [document.documentTitle, document.category, document.name].filter(Boolean).join(" — ");
+    const unresolved = hasUnresolvedRequirements(linkedClearanceWorkflow);
+    const assessed = Boolean(linkedClearanceWorkflow.assessment?.physicalExam?.trim() || linkedClearanceWorkflow.assessment?.laboratoryExamination?.trim());
+    linkedClearanceWorkflow.status = unresolved ? (assessed ? "requirements_pending" : "assessment") : (assessed ? "ready_for_approval" : "assessment");
+    pushWorkflowEvent(linkedClearanceWorkflow, "requirement_verified", `Submitted document accepted for: ${linkedRequirement.text}`, req.user.id);
+    await linkedClearanceWorkflow.save();
   }
   const issuedCertificate = document.status === "Verified" ? await issueVerifiedClearanceDocument(document, req.user.id) : null;
   let healthDeclarationPatient = null;
@@ -716,7 +747,7 @@ router.patch("/documents/:id/status", requireRole("nurse", "supervisor"), async 
   document.fileData = undefined;
   const result = document.toObject();
   if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
-  res.json({ ...result, issuedCertificate: issuedCertificate?.toObject?.() || null, clearanceCertificateEligible: result.recordType !== "clearance_certificate" && Boolean(clearancePurposeFor(result)), ...(healthDeclarationPatient ? { patient: healthDeclarationPatient } : {}), notificationQueued, notificationMessage: notificationQueued ? undefined : "Email was not queued. Check the student's email and server email settings." });
+  res.json({ ...result, ...(linkedClearanceWorkflow ? { clearanceWorkflowRecord: linkedClearanceWorkflow.toObject() } : {}), issuedCertificate: issuedCertificate?.toObject?.() || null, clearanceCertificateEligible: result.recordType !== "clearance_certificate" && Boolean(clearancePurposeFor(result)), ...(healthDeclarationPatient ? { patient: healthDeclarationPatient } : {}), notificationQueued, notificationMessage: notificationQueued ? undefined : "Email was not queued. Check the student's email and server email settings." });
 });
 router.get("/documents/:id/file", requireDocumentRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid document ID" });
