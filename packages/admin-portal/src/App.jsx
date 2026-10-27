@@ -5,7 +5,6 @@ import DashboardPage from "./pages/DashboardPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import EMRPage from "./pages/EMRPage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
-import FormsPage from "./pages/FormsPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import AppointmentsPage from "./pages/AppointmentsPage.jsx";
 import AppointmentDetailsPage from "./pages/AppointmentDetailsPage.jsx";
@@ -106,14 +105,7 @@ export default function App() {
           </RoleRoute>
         }
       />
-      <Route
-        path="/forms"
-        element={
-          <RoleRoute user={user} allowed={["superadmin"]}>
-            <FormsPage />
-          </RoleRoute>
-        }
-      />
+      <Route path="/forms" element={<Navigate to="/" replace />} />
       <Route
         path="/admin"
         element={

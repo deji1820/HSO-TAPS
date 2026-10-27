@@ -70,7 +70,7 @@ export default function Layout({ user, onLogout, children }) {
   const supervisor = role === "supervisor";
   const provider = isClinicalProvider(role);
   const navItems = superadmin
-    ? [{ to: "/admin", label: "Admin", icon: icons.list }, { to: "/forms", label: "Forms", icon: icons.doc }]
+    ? [{ to: "/admin", label: "Admin", icon: icons.list }]
     : [
         { to: provider ? "/dashboard" : "/dashboard", label: provider ? "Patient Queue" : "Dashboard", icon: icons.home },
         ...(["nurse", "supervisor", "physician", "dentist"].includes(role) ? [{ to: "/emr", label: "Electronic Medical Records", icon: icons.folder }] : []),

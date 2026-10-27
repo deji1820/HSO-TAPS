@@ -10,7 +10,6 @@ const MODULES = [
   { title: "Booking Appointments", description: "View scheduled clinic appointments", to: "/appointments", icon: "document", tone: "green" },
   { title: "Medicine Inventory", description: "Track medicines, supplies, and stock levels", to: "/inventory", icon: "inventory", tone: "green" },
   { title: "Data Analytics", description: "Clinic visits and service summaries", to: "/analytics", icon: "chart", tone: "green" },
-  { title: "Forms", description: "Form pipelines and submission sync logs", to: "/forms", icon: "document", tone: "green" },
   { title: "Admin", description: "Manage student master data", to: "/admin", icon: "list", tone: "green" },
 ];
 
@@ -28,7 +27,7 @@ export default function ControlCenterPage({ user }) {
   const [search, setSearch] = useState("");
   const role = normalizeRole(user?.role);
   const modulesByRole = {
-    superadmin: ["Admin", "Forms", "Live Queue Board"],
+    superadmin: ["Admin", "Live Queue Board"],
     supervisor: ["Dashboard", "Live Queue Board", "Electronic Medical Records", "Booking Appointments", "Medicine Inventory", "Data Analytics"],
     nurse: ["Dashboard", "Live Queue Board", "Electronic Medical Records", "Booking Appointments", "Medicine Inventory"],
     physician: ["Dashboard", "Live Queue Board", "Electronic Medical Records", "Booking Appointments"],
