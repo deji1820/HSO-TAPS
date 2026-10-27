@@ -179,6 +179,7 @@ router.patch("/medical-workflows/:id/requirements/:index", requireRole("nurse", 
   res.json(workflow);
 });
 router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, res) => {
+  let completionStage = "loading clearance";
   try {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
   const workflow = await MedicalWorkflow.findById(req.params.id);
@@ -208,14 +209,17 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
   }
   const resumingApproval = workflow.status === "approval_in_progress" && String(workflow.providerApproval?.approvedBy) === String(req.user.id);
   if ((!resumingApproval && workflow.status !== "ready_for_approval") || hasUnresolvedRequirements(workflow) || !workflow.assessment?.recordedAt) return res.status(409).json({ message: "Complete the required assessments and verify every required item or record why a conditional item does not apply." });
+  completionStage = "checking clearance requirements";
   const providerStatement = String((resumingApproval && workflow.providerStatement) || req.body?.providerStatement || "Clearance assessment and required documents reviewed and approved by the authorized nurse.").trim().slice(0, 2000);
   if (resumingApproval && !workflow.providerStatement) {
     workflow.providerStatement = providerStatement;
     await workflow.save();
   }
+  completionStage = "loading the approving nurse";
   const provider = await User.findById(req.user.id).select("name role");
   if (!provider || provider.role !== "nurse") return res.status(401).json({ message: "Authorized nurse account not found." });
   if (!resumingApproval) {
+    completionStage = "locking the clearance for approval";
     const claimed = await MedicalWorkflow.findOneAndUpdate(
       { _id: workflow._id, status: "ready_for_approval" },
       { $set: { status: "approval_in_progress", providerStatement, providerApproval: { approvedBy: provider._id, providerName: provider.name, providerRole: provider.role } } },
@@ -223,13 +227,15 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
     );
     if (!claimed) return res.status(409).json({ message: "This clearance is already being approved or has changed." });
   }
-  const existingCertificate = await ExternalDocument.findOne({ sourceWorkflow: workflow._id }).select("_id submittedAt");
+  completionStage = "loading the patient and any existing certificate";
+  const existingCertificate = await ExternalDocument.findOne({ sourceWorkflow: workflow._id });
   const approvalDate = existingCertificate?.submittedAt || workflow.certificateIssuedAt || new Date();
   const student = await Student.findById(workflow.student).select("studentId affiliation firstName lastName program department");
   if (!student) return res.status(409).json({ message: "Patient record no longer exists; the clearance cannot be saved to Medical Files." });
-  const certificate = await ExternalDocument.findOneAndUpdate(
-    { sourceWorkflow: workflow._id },
-    { $setOnInsert: {
+  let certificate = existingCertificate;
+  if (!certificate) {
+    completionStage = "saving the clearance certificate record";
+    const certificateRecord = {
       student: student._id,
       recordType: "clearance_certificate",
       sourceWorkflow: workflow._id,
@@ -252,34 +258,40 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
           certificateReference: String(workflow._id),
         },
       },
-    } },
-    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
-  );
+    };
+    try {
+      certificate = await ExternalDocument.create(certificateRecord);
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      certificate = await ExternalDocument.findOne({ sourceWorkflow: workflow._id });
+    }
+  }
   if (!certificate) return res.status(500).json({ message: "The clearance certificate could not be saved to Medical Files. The workflow remains incomplete." });
+  completionStage = "linking the certificate to the clearance";
   const approved = await MedicalWorkflow.findOneAndUpdate(
     { _id: workflow._id, status: "approval_in_progress", "providerApproval.approvedBy": provider._id },
     { $set: { status: "approved", medicalFile: certificate._id, "providerApproval.approvedAt": approvalDate, certificateIssuedAt: approvalDate, certificateIssuedBy: provider._id }, $push: { events: { type: "approved", description: `Medical clearance verified by nurse ${provider.name}; certificate saved to Full EMR Medical Files.`, actor: provider._id, at: approvalDate } } },
     { new: true }
   );
   if (!approved) return res.status(409).json({ message: "The certificate was saved, but the approval state changed. Refresh and resume approval to finish the workflow." });
+  completionStage = "loading the saved certificate for the modal";
   const result = await approved.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile");
   res.json(result);
   } catch (error) {
-    console.error("[clearance] Completion failed:", error);
+    console.error(`[clearance] Certificate approval failed during ${completionStage}:`, error);
     if (res.headersSent) return;
     try {
       const pending = await MedicalWorkflow.findById(req.params.id);
       if (pending && ["approval_in_progress", "approved"].includes(pending.status) && String(pending.providerApproval?.approvedBy || "") === String(req.user.id)) {
         const savedCertificate = await ExternalDocument.findOne({ sourceWorkflow: pending._id });
         if (savedCertificate) {
-          pending.status = "approved";
-          pending.medicalFile = savedCertificate._id;
-          pending.certificateIssuedAt ||= savedCertificate.submittedAt || savedCertificate.createdAt || new Date();
-          pending.certificateIssuedBy ||= pending.providerApproval.approvedBy;
-          pending.providerApproval.approvedAt ||= pending.certificateIssuedAt;
-          pushWorkflowEvent(pending, "approval_recovered", "Certificate record recovered and clearance approval finalized after an interrupted response.", req.user.id);
-          await pending.save();
-          return res.json(await pending.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+          const approved = await MedicalWorkflow.findOneAndUpdate(
+            { _id: pending._id, status: { $in: ["approval_in_progress", "approved"] }, "providerApproval.approvedBy": req.user.id },
+            { $set: { status: "approved", medicalFile: savedCertificate._id, certificateIssuedAt: pending.certificateIssuedAt || savedCertificate.submittedAt || savedCertificate.createdAt || new Date(), certificateIssuedBy: pending.certificateIssuedBy || req.user.id, "providerApproval.approvedAt": pending.providerApproval?.approvedAt || savedCertificate.submittedAt || new Date() }, $push: { events: { type: "approval_recovered", description: "Certificate record recovered and clearance approval finalized after an interrupted response.", actor: req.user.id, at: new Date() } } },
+            { new: true },
+          );
+          const recovered = approved || await MedicalWorkflow.findById(pending._id);
+          if (recovered?.status === "approved") return res.json(await recovered.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
         }
         if (pending.status === "approval_in_progress") {
           pending.status = "ready_for_approval";
@@ -292,7 +304,8 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
     } catch (recoveryError) {
       console.error("[clearance] Could not restore retryable state:", recoveryError);
     }
-    return res.status(500).json({ message: "Clearance completion failed while saving the certificate. Your assessment and requirements remain saved; retry completion." });
+    const diagnostic = error?.name || (error?.code ? `database error ${error.code}` : "server error");
+    return res.status(500).json({ message: `Clearance certificate could not finish during ${completionStage} (${diagnostic}). Your assessment and requirements remain saved; retry certificate issuance.` });
   }
 });
 router.post("/medical-workflows/:id/complete", requireRole("nurse"), async (req, res) => {

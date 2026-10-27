@@ -70,6 +70,7 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
           updated = await approveMedicalClearance(workflow._id, "");
           if (updated?._id) setCurrentWorkflow(updated);
         } catch (requestError) {
+          await refreshDocuments();
           onUpdated?.();
           setError(requestErrorMessage(requestError, "The assessment is saved, but automatic clearance completion failed."));
           return;
@@ -192,7 +193,10 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
       setCurrentWorkflow(completed);
       onUpdated?.(completed);
     }).catch((requestError) => {
-      if (active) setError(requestErrorMessage(requestError, "Could not resume clearance completion."));
+      if (active) {
+        setError(requestErrorMessage(requestError, "Could not resume clearance completion."));
+        refreshDocuments();
+      }
     }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [activeWorkflow.status, activeWorkflow.providerApproval?.approvedBy?._id, activeWorkflow.providerApproval?.approvedBy, workflow._id, user.id, user._id, onUpdated]);
