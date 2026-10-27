@@ -787,18 +787,18 @@ export default function EMRPage() {
             {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} />}
             {tab === "files" && <div className="emr-files-sections">
               <p className="page-subtitle">Clearance records and certificates, submitted documents, and other medical files are grouped below.</p>
-              <section className="emr-files-section">
-                <h2 className="section-title">Medical Clearances ({record.medicalWorkflows?.length || 0})</h2>
+              <details className="emr-files-section" open>
+                <summary className="section-title">Medical Clearances ({record.medicalWorkflows?.length || 0})</summary>
                 <MedicalClearanceForms workflows={record.medicalWorkflows || []} documents={record.documents || []} />
-              </section>
-              <section className="emr-files-section">
-                <h2 className="section-title">Submitted Documents ({medicalDocumentFiles.length})</h2>
+              </details>
+              <details className="emr-files-section">
+                <summary className="section-title">Submitted Documents ({medicalDocumentFiles.length})</summary>
                 <MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} onRetryCertificate={retryClearanceCertificate} />
-              </section>
-              <section className="emr-files-section">
-                <h2 className="section-title">Other Medical Files ({(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && !(document.recordType === "clearance_certificate" && (document.sourceDocument || document.sourceWorkflow)) && !document.clearanceWorkflow && document.formSource !== "Kiosk Document Submission").length})</h2>
+              </details>
+              <details className="emr-files-section">
+                <summary className="section-title">Other Medical Files ({(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && !(document.recordType === "clearance_certificate" && (document.sourceDocument || document.sourceWorkflow)) && !document.clearanceWorkflow && document.formSource !== "Kiosk Document Submission").length})</summary>
                 <DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && !(document.recordType === "clearance_certificate" && (document.sourceDocument || document.sourceWorkflow)) && !document.clearanceWorkflow && document.formSource !== "Kiosk Document Submission")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />
-              </section>
+              </details>
             </div>}
           </div>
         </div>

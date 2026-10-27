@@ -129,7 +129,11 @@
 .emr-tab-content { max-width: 770px; margin: 0 auto; padding: 0; }
 .emr-files-sections { display: grid; gap: 22px; }
 .emr-files-section { min-width: 0; }
-.emr-files-section > .section-title { margin: 0 0 10px; }
+.emr-files-section > .section-title { display: flex; align-items: center; gap: 8px; margin: 0; padding: 11px 12px; border: 1px solid #dce3ed; border-radius: 8px; background: #fff; cursor: pointer; }
+.emr-files-section > .section-title::before { content: "+"; display: inline-grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: #eef4ff; color: var(--nu-blue); font-weight: 700; }
+.emr-files-section[open] > .section-title { margin-bottom: 10px; }
+.emr-files-section[open] > .section-title::before { content: "−"; }
+.emr-files-section > .section-title::-webkit-details-marker { display: none; }
 .emr-files-section > .page-subtitle { margin: -4px 0 10px; }
 .emr-document-list { display: grid; gap: 12px; width: 100%; }
 .emr-document-card { min-width: 0; padding: 14px; border: 1px solid #dce3ed; border-radius: 9px; background: #fff; box-shadow: 0 1px 3px rgba(20, 40, 70, .06); }
