@@ -31,7 +31,8 @@
 .clearance-documents-heading h3 { margin: 0; }
 .clearance-submitted-documents ul { display: grid; gap: 8px; padding-left: 20px; }
 .clearance-submitted-documents li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid #d8e0e8; border-radius: 6px; background: #f8fafc; }
-@media (max-width: 600px) { .clearance-submitted-documents li { align-items: flex-start; flex-direction: column; } }
+.clearance-document-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 700px) { .clearance-submitted-documents li { align-items: flex-start; flex-direction: column; } .clearance-document-row-actions { width: 100%; } .clearance-document-row-actions .btn { flex: 1 1 auto; } }
 
 .active-session-header {
   background: var(--nu-blue);
