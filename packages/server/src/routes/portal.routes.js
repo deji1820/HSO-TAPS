@@ -182,7 +182,11 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
   if (workflow.service !== "Medical Clearance") return res.status(403).json({ message: "Only medical clearance can issue a clearance certificate." });
   const resumingApproval = workflow.status === "approval_in_progress" && String(workflow.providerApproval?.approvedBy) === String(req.user.id);
   if ((!resumingApproval && workflow.status !== "ready_for_approval") || hasUnresolvedRequirements(workflow) || !workflow.assessment?.recordedAt) return res.status(409).json({ message: "Complete the required assessments and verify every required item or record why a conditional item does not apply." });
-  const providerStatement = (resumingApproval ? workflow.providerStatement : String(req.body?.providerStatement || "").trim() || "Clearance assessment and required documents reviewed and approved by the authorized nurse.").slice(0, 2000);
+  const providerStatement = String((resumingApproval && workflow.providerStatement) || req.body?.providerStatement || "Clearance assessment and required documents reviewed and approved by the authorized nurse.").trim().slice(0, 2000);
+  if (resumingApproval && !workflow.providerStatement) {
+    workflow.providerStatement = providerStatement;
+    await workflow.save();
+  }
   const provider = await User.findById(req.user.id).select("name role");
   if (!provider || provider.role !== "nurse") return res.status(401).json({ message: "Authorized nurse account not found." });
   if (!resumingApproval) {
