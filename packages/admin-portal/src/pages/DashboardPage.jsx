@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getQueue, getQuickScreeningAlerts, getQueueHistory, updateQueueStatus, updateQueueExpirationExemption, updateElevatedVitalsAlert, getAnnouncement, saveAnnouncement } from "../services/api.js";
+import { getQueue, getQueueHistory, updateQueueStatus, updateQueueExpirationExemption, updateElevatedVitalsAlert, getAnnouncement, saveAnnouncement } from "../services/api.js";
 import { socket } from "../services/socket.js";
 import ActiveSessionModal from "../components/ActiveSessionModal.jsx";
 import NursingAssessmentModal from "../components/NursingAssessmentModal.jsx";
@@ -26,7 +26,6 @@ function filterQueueEntries(entries, { provider, providerRole, filter, search })
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [queue, setQueue] = useState([]);
-  const [screeningAlerts, setScreeningAlerts] = useState([]);
   const [history, setHistory] = useState([]);
   const [historyFrom, setHistoryFrom] = useState("");
   const [historyTo, setHistoryTo] = useState("");
@@ -53,11 +52,6 @@ export default function DashboardPage() {
     getQueue().then(setQueue).catch((error) => console.warn("Could not refresh the live queue:", error));
   }, []);
 
-  const refreshScreeningAlerts = useCallback(() => {
-    if (!isNursingTeam(user.role)) return;
-    getQuickScreeningAlerts().then(setScreeningAlerts).catch((error) => console.warn("Could not refresh quick screening alerts:", error));
-  }, [user.role]);
-
   const refreshHistory = useCallback(() => {
     getQueueHistory({ from: historyFrom, to: historyTo, page: historyPage }).then((result) => {
       setHistory(result.entries || []);
@@ -74,18 +68,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     refreshQueue();
-    refreshScreeningAlerts();
     refreshHistory();
     getAnnouncement().then((value) => setAnnouncement(value.text)).catch(() => {});
     socket.connect();
     const onNew = (entry) => {
       refreshQueue();
-      refreshScreeningAlerts();
       setSelectedId((current) => current || entry._id);
     };
     const onUpdate = (entry) => {
       refreshQueue();
-      refreshScreeningAlerts();
       refreshHistory();
       if (["completed", "cancelled", "expired"].includes(entry.status)) setSelectedId((current) => current === entry._id ? null : current);
     };
@@ -94,7 +85,7 @@ export default function DashboardPage() {
     const onAnnouncement = (value) => setAnnouncement(value.text);
     socket.on("announcement:update", onAnnouncement);
     return () => { socket.off("queue:new", onNew); socket.off("queue:update", onUpdate); socket.off("announcement:update", onAnnouncement); socket.disconnect(); };
-  }, [refreshQueue, refreshScreeningAlerts, refreshHistory]);
+  }, [refreshQueue, refreshHistory]);
 
   const visibleQueue = useMemo(() => filterQueueEntries(queue, { provider, providerRole, filter, search }).sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) * (sortOrder === "asc" ? 1 : -1)), [queue, filter, search, provider, providerRole, sortOrder]);
   const visibleHistory = useMemo(() => filterQueueEntries(history, { provider, providerRole, filter, search }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [history, filter, search, provider, providerRole]);
@@ -122,28 +113,9 @@ export default function DashboardPage() {
     try {
       const updated = await updateQueueExpirationExemption(entry._id, exempt, reason || "");
       setQueue((items) => items.map((item) => item._id === updated._id ? updated : item));
-      setScreeningAlerts((items) => items.map((item) => item._id === updated._id ? updated : item));
       if (updated.serviceType !== "Quick Health Screening") setSelectedId(updated._id);
     } catch (error) {
       await appDialog.alert(error.response?.data?.message || "Could not update the queue expiration exception.");
-    }
-  }
-
-  async function handleScreeningAlert(entry) {
-    try {
-      if (entry.status === "waiting") {
-        await updateQueueStatus(entry._id, "called");
-        refreshScreeningAlerts();
-      } else if (entry.status === "called") {
-        const started = await updateQueueStatus(entry._id, "in_session");
-        refreshScreeningAlerts();
-        setSessionEntry(started);
-      } else if (entry.status === "in_session") {
-        setSessionEntry(entry);
-      }
-    } catch (error) {
-      await appDialog.alert(error.response?.data?.message || "Could not open this screening follow-up.");
-      refreshScreeningAlerts();
     }
   }
 
@@ -157,11 +129,6 @@ export default function DashboardPage() {
     {sessionNotice && <p className="nurse-greeting" role="status">{sessionNotice}</p>}
     <section className="announcement-banner"><div><strong>📣 Announcement:</strong><p>{announcement}</p></div>{supervisor && <button type="button" className="announcement-edit" onClick={async () => { const next = await appDialog.prompt("Announcement text", announcement, "Edit announcement", true); if (next?.trim()) { try { const saved = await saveAnnouncement(next.trim()); setAnnouncement(saved.text); } catch { appDialog.alert("Could not save the announcement to the server."); } } }}>Edit Banner</button>}</section>
     {["nurse", "supervisor"].includes(user.role) && <div className="dashboard-create-row"><button className="btn btn-success" onClick={() => navigate("/new-record")}>＋ New Medical Record</button></div>}
-
-    {isNursingTeam(user.role) && screeningAlerts.length > 0 && <section className="card dashboard-queue-card dashboard-screening-alerts" aria-labelledby="screening-alerts-title">
-      <div className="queue-list-header"><div><h2 id="screening-alerts-title">Urgent Quick Health Screening Follow-ups</h2><p>Abnormal screening results are routed here separately from the Active Queue.</p></div><button className="btn btn-secondary" type="button" onClick={refreshScreeningAlerts}>Refresh</button></div>
-      <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient</th><th>Temperature</th><th>Queued</th><th>Encounter Status</th><th>Action</th></tr></thead><tbody>{screeningAlerts.map((entry) => <tr key={entry._id}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}<span className="appointment-cell-secondary">{entry.student?.studentId}</span></td><td>{entry.linkedVitals?.temperatureC ?? "—"} °C · {entry.linkedVitals?.temperatureStatus || "Alert"}</td><td>{clock(entry.createdAt)}</td><td>{entry.encounterStatusLabel || STATUS_LABEL[entry.status] || entry.status}{entry.expirationExempt && <span className="appointment-cell-secondary">Exception: {entry.expirationExemptionReason}</span>}</td><td><button type="button" className="btn btn-primary btn-sm" onClick={() => handleScreeningAlert(entry)}>{entry.status === "waiting" ? "Call Patient to Nurse Station" : entry.status === "called" ? "Start Nurse Follow-up" : "Resume Nurse Follow-up"}</button>{entry.status !== "in_session" && <button type="button" className="btn btn-secondary btn-sm" onClick={() => changeExpirationException(entry)}>{entry.expirationExempt ? "Remove exception" : "Keep in queue"}</button>}</td></tr>)}</tbody></table></div>
-    </section>}
 
     <div className="dashboard-grid">
       <section className="card dashboard-queue-card">
@@ -239,7 +206,7 @@ export default function DashboardPage() {
     </div>
 
     {nursingEntry && <NursingAssessmentModal entry={nursingEntry} onClose={() => setNursingEntry(null)} onSaved={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setSelectedId(entry._id); setNursingEntry(null); }} onRouted={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setSelectedId(entry._id); setNursingEntry(null); }} />}
-    {sessionEntry && <ActiveSessionModal entry={sessionEntry} onClose={() => setSessionEntry(null)} onCompleted={(entry) => { setQueue((items) => items.filter((item) => item._id !== entry._id)); setSelectedId(null); setSessionEntry(null); setSessionNotice("Session saved to the patient's EMR and marked complete."); refreshHistory(); refreshScreeningAlerts(); window.setTimeout(() => setSessionNotice(""), 6000); }} />}
+    {sessionEntry && <ActiveSessionModal entry={sessionEntry} onClose={() => setSessionEntry(null)} onCompleted={(entry) => { setQueue((items) => items.filter((item) => item._id !== entry._id)); setSelectedId(null); setSessionEntry(null); setSessionNotice("Session saved to the patient's EMR and marked complete."); refreshHistory(); window.setTimeout(() => setSessionNotice(""), 6000); }} />}
   </div>;
 }
 
