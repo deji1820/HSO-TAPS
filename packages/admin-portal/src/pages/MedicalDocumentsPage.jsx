@@ -63,10 +63,17 @@ export default function MedicalDocumentsPage() {
   }
 
   async function updateStatus(file, status) {
+    const decisionRemark = window.prompt(`Add a brief ${status === "Verified" ? "acceptance" : "rejection"} remark:`);
+    if (decisionRemark === null) return;
+    const remarks = decisionRemark.trim();
+    if (remarks.length < 3) {
+      setNotice("Add a remark with at least 3 characters before saving this decision.");
+      return;
+    }
     setUpdatingStatusId(file._id);
     setNotice("");
     try {
-      const updated = await updateMedicalDocumentStatus(file._id, status);
+      const updated = await updateMedicalDocumentStatus(file._id, status, remarks);
       setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated, issuedCertificate: updated.issuedCertificate || item.issuedCertificate } : item));
       setNotice(updated.notificationQueued ? `Document status changed to ${statusLabel(status)}. The email send was started.` : `Document status changed to ${statusLabel(status)}, but the email could not be started. ${updated.notificationMessage || "Check the backend email settings."}`);
     } catch (error) {
