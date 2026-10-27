@@ -43,6 +43,7 @@ export const startMedicalWorkflow = (id, payload) => api.post(`/students/${id}/m
 export const saveClearanceAssessment = (id, assessment) => api.post(`/medical-workflows/${encodeURIComponent(id)}/assessment`, { assessment }).then((r) => r.data);
 export const updateClearanceRequirement = (id, index, payload) => api.patch(`/medical-workflows/${encodeURIComponent(id)}/requirements/${index}`, payload).then((r) => r.data);
 export const approveMedicalClearance = (id, providerStatement) => api.post(`/medical-workflows/${encodeURIComponent(id)}/approve`, { providerStatement }).then((r) => r.data);
+export const completeMedicalClearance = (id) => api.post(`/medical-workflows/${encodeURIComponent(id)}/complete`).then((r) => r.data);
 export const getMedicalProfiles = (id) => api.get(`/students/${id}/medical-profiles`).then((r) => r.data);
 export const updateMedicalProfile = (id, payload) => api.put(`/medical-profiles/${id}`, payload).then((r) => r.data);
 export const getPatientHistory = (id) => api.get(`/students/${id}/history`).then((r) => r.data);

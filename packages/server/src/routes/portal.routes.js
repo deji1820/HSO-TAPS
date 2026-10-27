@@ -240,32 +240,7 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
     { new: true }
   );
   if (!approved) return res.status(409).json({ message: "The certificate was saved, but the approval state changed. Refresh and resume approval to finish the workflow." });
-  let queueCompletionWarning;
-  if (approved.queueEntry) {
-    const linkedQueue = await QueueEntry.findById(approved.queueEntry).select("status appointment");
-    if (linkedQueue && ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session"].includes(linkedQueue.status)) {
-      const completedAt = new Date();
-      const completedQueue = await QueueEntry.findOneAndUpdate(
-        { _id: linkedQueue._id, status: linkedQueue.status },
-        { $set: { status: "completed", completedAt }, $push: { statusHistory: { from: linkedQueue.status, to: "completed", actor: req.user.id, at: completedAt, reason: "Nurse completed the clearance and saved its certificate to Medical Files." } } },
-        { new: true },
-      );
-      if (completedQueue) {
-        req.app.get("io")?.to("clinical-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
-        req.app.get("io")?.to("frontdesk-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
-        if (linkedQueue.appointment) {
-          const completedAppointment = await Appointment.findOneAndUpdate(
-            { _id: linkedQueue.appointment, queueEntry: completedQueue._id, status: "checked_in" },
-            { $set: { status: "completed" } },
-            { new: true },
-          ).select("_id status");
-          if (completedAppointment) req.app.get("io")?.emit("appointment:update", { _id: completedAppointment._id, status: completedAppointment.status, queueEntry: completedQueue._id });
-        }
-      } else queueCompletionWarning = "The clearance was saved and approved, but its queue entry changed. Please refresh the queue.";
-    }
-  }
   const result = await approved.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile");
-  if (queueCompletionWarning) return res.status(200).json({ ...result.toObject(), queueCompletionWarning });
   res.json(result);
   } catch (error) {
     console.error("[clearance] Completion failed:", error);
@@ -287,6 +262,45 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
     }
     return res.status(500).json({ message: "Clearance completion failed while saving the certificate. Your assessment and requirements remain saved; retry completion." });
   }
+});
+router.post("/medical-workflows/:id/complete", requireRole("nurse"), async (req, res) => {
+  if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
+  const workflow = await MedicalWorkflow.findById(req.params.id);
+  if (!workflow) return res.status(404).json({ message: "Medical workflow not found." });
+  if (workflow.service !== "Medical Clearance" || !["approved", "completed"].includes(workflow.status) || !workflow.medicalFile || !workflow.certificateIssuedAt) {
+    return res.status(409).json({ message: "Approve the completed clearance and issue its certificate before completing this process." });
+  }
+  if (workflow.status === "completed") return res.json(await workflow.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+
+  const io = req.app.get("io");
+  if (workflow.queueEntry) {
+    const linkedQueue = await QueueEntry.findById(workflow.queueEntry).select("status appointment");
+    if (linkedQueue && ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session"].includes(linkedQueue.status)) {
+      const completedAt = new Date();
+      const completedQueue = await QueueEntry.findOneAndUpdate(
+        { _id: linkedQueue._id, status: linkedQueue.status },
+        { $set: { status: "completed", completedAt }, $push: { statusHistory: { from: linkedQueue.status, to: "completed", actor: req.user.id, at: completedAt, reason: "Nurse completed the approved clearance after reviewing its certificate." } } },
+        { new: true },
+      );
+      if (!completedQueue) return res.status(409).json({ message: "The queue entry changed. Refresh the queue and try again." });
+      io?.to("clinical-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
+      io?.to("frontdesk-queue").emit("queue:update", { _id: completedQueue._id, status: completedQueue.status, completedAt });
+      if (linkedQueue.appointment) {
+        const completedAppointment = await Appointment.findOneAndUpdate(
+          { _id: linkedQueue.appointment, queueEntry: completedQueue._id, status: "checked_in" },
+          { $set: { status: "completed" } },
+          { new: true },
+        ).select("_id status");
+        if (completedAppointment) io?.emit("appointment:update", { _id: completedAppointment._id, status: completedAppointment.status, queueEntry: completedQueue._id });
+      }
+    } else if (linkedQueue && linkedQueue.status !== "completed") {
+      return res.status(409).json({ message: `The linked queue entry is ${linkedQueue.status}; refresh it before completing this clearance.` });
+    }
+  }
+  workflow.status = "completed";
+  pushWorkflowEvent(workflow, "completed", "Nurse completed the approved clearance process after reviewing its certificate.", req.user.id);
+  await workflow.save();
+  res.json(await workflow.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
 });
 router.get("/medical-workflows/:id/certificate", requireWorkflowRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
