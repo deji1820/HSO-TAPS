@@ -27,6 +27,11 @@
 .clearance-workflow-modal .exam-grid { margin-top: 12px; }
 .clearance-workflow-modal .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .clearance-workflow-modal .text-input { width: 100%; }
+.clearance-documents-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.clearance-documents-heading h3 { margin: 0; }
+.clearance-submitted-documents ul { display: grid; gap: 8px; padding-left: 20px; }
+.clearance-submitted-documents li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid #d8e0e8; border-radius: 6px; background: #f8fafc; }
+@media (max-width: 600px) { .clearance-submitted-documents li { align-items: flex-start; flex-direction: column; } }
 
 .active-session-header {
   background: var(--nu-blue);
