@@ -12,6 +12,7 @@ import {
   updateYearLevelOverride,
 } from "../services/api.js";
 import "../styles/pages/Admin.css";
+import { appDialog } from "../../../shared-ui/src/dialogService.js";
 
 // Small hand-rolled CSV parser — no papaparse in this project's dependencies,
 // so this avoids assuming one. Handles comma-separated + double-quoted fields;
@@ -166,10 +167,10 @@ export default function AdminPage() {
 
   async function editYearLevelOverride() {
     if (!rosterRecord?.person || rosterRecord.person.affiliation !== "Student") return;
-    const next = window.prompt("Official year-level override (leave blank to use the cohort expectation):", rosterRecord.person.yearLevelOverride || "");
+    const next = await appDialog.prompt("Official year-level override (leave blank to use the cohort expectation):", rosterRecord.person.yearLevelOverride || "", "Edit year-level override");
     if (next === null) return;
     const override = next.trim();
-    const reason = override ? window.prompt("Reason for this authorized override:", rosterRecord.person.yearLevelOverrideReason || "") : "";
+    const reason = override ? await appDialog.prompt("Reason for this authorized override:", rosterRecord.person.yearLevelOverrideReason || "", "Override reason", true) : "";
     if (override && reason === null) return;
     try {
       await updateYearLevelOverride(rosterRecord.person.personId, override, reason || "");
@@ -191,7 +192,7 @@ export default function AdminPage() {
       restore: `Restore ${person.firstName} ${person.lastName} to the active roster? They may need to register their RFID card again.`,
       delete: `Permanently delete ${person.firstName} ${person.lastName}'s roster record? This cannot be undone.`,
     };
-    if (!window.confirm(prompts[action])) return;
+    if (!await appDialog.confirm(prompts[action], "Confirm roster action")) return;
 
     setRosterAction(true);
     setRosterError("");

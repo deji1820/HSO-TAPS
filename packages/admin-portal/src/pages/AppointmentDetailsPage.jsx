@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { assignAppointmentProvider, checkInAppointment, getAppointment, getAppointmentNotifications, getProviderOptions, retryAppointmentEmail, updateAppointmentDecision, updateAppointmentNoShowException } from "../services/api.js";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/AppointmentDetails.css";
+import { appDialog } from "../../../shared-ui/src/dialogService.js";
 
 function valueOrDash(value) { return value || "—"; }
 
@@ -141,9 +142,9 @@ export default function AppointmentDetailsPage({ user }) {
 
   async function toggleNoShowException() {
     const exempt = !appointment.noShowExempt;
-    const reason = exempt ? window.prompt("Reason for allowing a late check-in:") : "";
+    const reason = exempt ? await appDialog.prompt("Reason for allowing a late check-in:", "", "Late check-in exception", true) : "";
     if (exempt && !reason?.trim()) return;
-    if (!exempt && !window.confirm("Remove this no-show exception? The appointment may be marked no-show after the configured grace period.")) return;
+    if (!exempt && !await appDialog.confirm("Remove this no-show exception? The appointment may be marked no-show after the configured grace period.")) return;
     setError("");
     try {
       const { appointment: updated } = await updateAppointmentNoShowException(appointment._id, exempt, reason || "");
@@ -189,7 +190,7 @@ export default function AppointmentDetailsPage({ user }) {
   }
 
   async function decide(decisionStatus) {
-    if (decisionStatus === "rejected" && !window.confirm("Reject this appointment? Its time slot will become available again.")) return;
+    if (decisionStatus === "rejected" && !await appDialog.confirm("Reject this appointment? Its time slot will become available again.")) return;
     setDecisionBusy(true);
     setDecisionNotice("");
     setError("");

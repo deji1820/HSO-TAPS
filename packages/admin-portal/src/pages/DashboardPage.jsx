@@ -5,6 +5,7 @@ import { socket } from "../services/socket.js";
 import ActiveSessionModal from "../components/ActiveSessionModal.jsx";
 import NursingAssessmentModal from "../components/NursingAssessmentModal.jsx";
 import "../styles/pages/Dashboard.css";
+import { appDialog } from "../../../shared-ui/src/dialogService.js";
 
 const SERVICE_TYPES = ["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription/OTC Pickup", "General Inquiry", "Quick Health Screening"];
 const BADGE = { "High Priority": "badge-high", "Standard Priority": "badge-standard", "Routine Check": "badge-routine" };
@@ -101,7 +102,7 @@ export default function DashboardPage() {
   const visibleServiceTypes = provider ? SERVICE_TYPES.slice(0, 2) : queueView === "history" ? SERVICE_TYPES : SERVICE_TYPES.filter((service) => service !== "Quick Health Screening");
 
   async function changeStatus(id, status) {
-    if (status === "cancelled" && !window.confirm("Cancel this queue entry?")) return;
+    if (status === "cancelled" && !await appDialog.confirm("Cancel this queue entry?", "Cancel queue entry")) return;
     const updated = await updateQueueStatus(id, status);
     if (["completed", "cancelled"].includes(status)) {
       setQueue((items) => items.filter((item) => item._id !== id));
@@ -115,16 +116,16 @@ export default function DashboardPage() {
 
   async function changeExpirationException(entry) {
     const exempt = !entry.expirationExempt;
-    const reason = exempt ? window.prompt("Reason for keeping this patient in the queue beyond the expiration time:") : "";
+    const reason = exempt ? await appDialog.prompt("Reason for keeping this patient in the queue beyond the expiration time:", "", "Queue expiration exception", true) : "";
     if (exempt && !reason?.trim()) return;
-    if (!exempt && !window.confirm("Remove this queue expiration exception?")) return;
+    if (!exempt && !await appDialog.confirm("Remove this queue expiration exception?")) return;
     try {
       const updated = await updateQueueExpirationExemption(entry._id, exempt, reason || "");
       setQueue((items) => items.map((item) => item._id === updated._id ? updated : item));
       setScreeningAlerts((items) => items.map((item) => item._id === updated._id ? updated : item));
       if (updated.serviceType !== "Quick Health Screening") setSelectedId(updated._id);
     } catch (error) {
-      window.alert(error.response?.data?.message || "Could not update the queue expiration exception.");
+      await appDialog.alert(error.response?.data?.message || "Could not update the queue expiration exception.");
     }
   }
 
@@ -141,7 +142,7 @@ export default function DashboardPage() {
         setSessionEntry(entry);
       }
     } catch (error) {
-      window.alert(error.response?.data?.message || "Could not open this screening follow-up.");
+      await appDialog.alert(error.response?.data?.message || "Could not open this screening follow-up.");
       refreshScreeningAlerts();
     }
   }
@@ -154,7 +155,7 @@ export default function DashboardPage() {
       <label className="dashboard-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search..." aria-label="Search queue" /></label>
     </div>
     {sessionNotice && <p className="nurse-greeting" role="status">{sessionNotice}</p>}
-    <section className="announcement-banner"><div><strong>📣 Announcement:</strong><p>{announcement}</p></div>{supervisor && <button type="button" className="announcement-edit" onClick={async () => { const next = window.prompt("Announcement text", announcement); if (next?.trim()) { try { const saved = await saveAnnouncement(next.trim()); setAnnouncement(saved.text); } catch { window.alert("Could not save the announcement to the server."); } } }}>Edit Banner</button>}</section>
+    <section className="announcement-banner"><div><strong>📣 Announcement:</strong><p>{announcement}</p></div>{supervisor && <button type="button" className="announcement-edit" onClick={async () => { const next = await appDialog.prompt("Announcement text", announcement, "Edit announcement", true); if (next?.trim()) { try { const saved = await saveAnnouncement(next.trim()); setAnnouncement(saved.text); } catch { appDialog.alert("Could not save the announcement to the server."); } } }}>Edit Banner</button>}</section>
     {["nurse", "supervisor"].includes(user.role) && <div className="dashboard-create-row"><button className="btn btn-success" onClick={() => navigate("/new-record")}>＋ New Medical Record</button></div>}
 
     {isNursingTeam(user.role) && screeningAlerts.length > 0 && <section className="card dashboard-queue-card dashboard-screening-alerts" aria-labelledby="screening-alerts-title">
@@ -203,7 +204,7 @@ export default function DashboardPage() {
         {queueView === "active" ? <>
           <div className="snapshot-field"><span>Encounter Status:</span> {queueStatusLabel(selected)}</div>
           {selected.expirationExempt && isNursingTeam(user.role) && <div className="snapshot-field"><span>Expiration exception:</span> {selected.expirationExemptionReason || "Authorized exception"}</div>}
-          {selected.elevatedVitalsAlert?.active && <div className="snapshot-field elevated-vitals-alert" role="alert"><strong>&#9888; Elevated vital signs alert: {selected.elevatedVitalsAlert.reason || "Review required"}</strong><p>Next action: assess the patient and follow the clinic escalation procedure. This alert does not change encounter status.</p>{clinicalRole && <button type="button" className="btn btn-warning" onClick={async () => { try { const updated = await updateElevatedVitalsAlert(selected._id, selected.elevatedVitalsAlert.acknowledgedAt ? "resolve" : "acknowledge"); setQueue((items) => items.map((item) => item._id === updated._id ? updated : item)); setSelectedId(updated._id); } catch (error) { window.alert(error.response?.data?.message || "Could not update the elevated-vitals alert."); } }}>{selected.elevatedVitalsAlert.acknowledgedAt ? "Resolve Alert" : "Acknowledge and Review Alert"}</button>}</div>}
+          {selected.elevatedVitalsAlert?.active && <div className="snapshot-field elevated-vitals-alert" role="alert"><strong>&#9888; Elevated vital signs alert: {selected.elevatedVitalsAlert.reason || "Review required"}</strong><p>Next action: assess the patient and follow the clinic escalation procedure. This alert does not change encounter status.</p>{clinicalRole && <button type="button" className="btn btn-warning" onClick={async () => { try { const updated = await updateElevatedVitalsAlert(selected._id, selected.elevatedVitalsAlert.acknowledgedAt ? "resolve" : "acknowledge"); setQueue((items) => items.map((item) => item._id === updated._id ? updated : item)); setSelectedId(updated._id); } catch (error) { appDialog.alert(error.response?.data?.message || "Could not update the elevated-vitals alert."); } }}>{selected.elevatedVitalsAlert.acknowledgedAt ? "Resolve Alert" : "Acknowledge and Review Alert"}</button>}</div>}
           <div className="snapshot-actions">
             {selected.status === "waiting" && <button className="btn btn-warning" onClick={() => changeStatus(selected._id, "called")}>Call Patient to Nurse Station</button>}
             {isNursingTeam(user.role) && selected.status === "called" && isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setNursingEntry(entry); }}>Start Nursing Assessment</button>}

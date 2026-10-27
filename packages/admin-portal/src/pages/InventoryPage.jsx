@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createInventoryItem, deleteInventoryItem, getInventory, updateInventoryItem } from "../services/api.js";
 import "../styles/pages/Inventory.css";
+import { appDialog } from "../../../shared-ui/src/dialogService.js";
 
 const EMPTY_FORM = {
   name: "", genericName: "", category: "Medicine", quantity: "", unit: "units",
@@ -98,7 +99,7 @@ export default function InventoryPage() {
   }
 
   async function removeItem(item) {
-    if (!window.confirm(`Remove ${item.name} from the active inventory?`)) return;
+    if (!await appDialog.confirm(`Remove ${item.name} from the active inventory?`)) return;
     setError("");
     try {
       await deleteInventoryItem(item._id);

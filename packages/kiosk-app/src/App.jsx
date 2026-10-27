@@ -34,6 +34,7 @@ import PrescriptionIntakeScreen from "./screens/PrescriptionIntakeScreen.jsx";
 import ScreeningReadingsScreen from "./screens/ScreeningReadingsScreen.jsx";
 import { classifyBP } from "./utils/bp.js";
 import "./styles/kiosk-idle.css";
+import { appDialog } from "../../shared-ui/src/dialogService.js";
 
 // Leave time for non-BP sensors and BLE connection before the cuff's 120s wait ends.
 const BP_READING_TIMEOUT_MS = 180_000;
@@ -1047,7 +1048,7 @@ async function handleMedicineSubmit() {
   } catch (error) {
     console.warn("[handleMedicineSubmit] intake submission failed:", error);
     submittingRef.current = false;
-    alert("We couldn't complete your request. Please try again or see the clinic staff.");
+    await appDialog.alert("We couldn't complete your request. Please try again or see the clinic staff.");
   }
 }
 
@@ -1173,7 +1174,7 @@ async function handleWalkInSubmit() {
   } catch (err) {
     console.warn("[handleWalkInSubmit] intake submission failed:", err);
     submittingRef.current = false;
-    alert("We couldn't check you in. Please try again or see the clinic staff.");
+    await appDialog.alert("We couldn't check you in. Please try again or see the clinic staff.");
   }
 }
 
@@ -1204,7 +1205,7 @@ async function handleSkipWalkInIntake() {
   } catch (err) {
     console.warn("[handleSkipWalkInIntake] intake submission failed:", err);
     submittingRef.current = false;
-    alert("We couldn't add you to the queue. Please try again or see clinic staff.");
+    await appDialog.alert("We couldn't add you to the queue. Please try again or see clinic staff.");
   }
 }
 
@@ -1568,7 +1569,7 @@ async function handleScreeningOptionSelect(mode) {
     if (!targetStudentId) {
       submittingRef.current = false;
       if (mobileMode) throw new Error("Student verification is missing. Go back and restart check-in.");
-      alert("Please verify the student before saving these readings.");
+      await appDialog.alert("Please verify the student before saving these readings.");
       await resetSession("cancelled");
       return;
     }
@@ -1614,7 +1615,7 @@ async function handleScreeningOptionSelect(mode) {
       console.warn("[finishCapture] API intake submission fallback:", err);
       submittingRef.current = false;
       if (mobileMode) throw new Error("The readings could not be saved. Please try again or contact clinic staff.");
-      alert("The readings could not be saved to the clinic server. Please repeat the screening or contact clinic staff.");
+      await appDialog.alert("The readings could not be saved to the clinic server. Please repeat the screening or contact clinic staff.");
       await resetSession("cancelled");
     }
   }

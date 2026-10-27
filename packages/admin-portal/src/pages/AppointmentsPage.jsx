@@ -6,6 +6,7 @@ import AppointmentTable from "../components/AppointmentTable.jsx";
 import { Link } from "react-router-dom";
 import { normalizeRole } from "../utils/roles.js";
 import "../styles/pages/Appointments.css";
+import { appDialog } from "../../../shared-ui/src/dialogService.js";
 
 const INITIAL_FILTERS = { from: "", to: "", serviceType: "", decisionStatus: "", status: "" };
 
@@ -81,7 +82,7 @@ export default function AppointmentsPage({ user }) {
   }
 
   async function decide(appointment, decisionStatus) {
-    if (decisionStatus === "rejected" && !window.confirm("Reject this appointment? Its time slot will become available again.")) return;
+    if (decisionStatus === "rejected" && !await appDialog.confirm("Reject this appointment? Its time slot will become available again.")) return;
     setBusyId(appointment._id);
     setError("");
     setNotice("");

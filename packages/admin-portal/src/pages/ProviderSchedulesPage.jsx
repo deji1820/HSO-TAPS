@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { disableProviderSchedule, getProviderOptions, getProviderSchedules, saveProviderSchedule } from "../services/api.js";
 import "../styles/pages/ProviderSchedules.css";
+import { appDialog } from "../../../shared-ui/src/dialogService.js";
 
 const SERVICES = ["Medical Consultation", "Dental Consultation"];
 const DAYS = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"]];
@@ -81,7 +82,7 @@ export default function ProviderSchedulesPage() {
   }
 
   async function disable(schedule) {
-    if (!window.confirm(`Disable ${schedule.provider?.name || "this provider"}'s ${schedule.serviceType} schedule?`)) return;
+    if (!await appDialog.confirm(`Disable ${schedule.provider?.name || "this provider"}'s ${schedule.serviceType} schedule?`)) return;
     setError("");
     setNotice("");
     try {
