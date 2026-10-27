@@ -4,7 +4,6 @@ import Appointment from "../models/Appointment.js";
 import AppointmentNotification from "../models/AppointmentNotification.js";
 import QueueEntry from "../models/QueueEntry.js";
 import ConsultationRecord from "../models/ConsultationRecord.js";
-import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import User from "../models/User.js";
 import ProviderSchedule from "../models/ProviderSchedule.js";
 import { CLEARANCE_REQUIREMENTS, findClearanceRequirement } from "../services/clearanceRequirements.js";
@@ -394,28 +393,6 @@ export async function checkInAppointment(req, res) {
         reason: current.purpose || "Scheduled appointment",
       }], { session });
       queueEntry = created[0];
-      if (current.serviceType === "Medical Clearance") {
-        const student = await Student.findById(current.student).select("affiliation studentId").session(session);
-        const requirementSet = findClearanceRequirement(student?.affiliation, current.purpose);
-        if (!student || !requirementSet) {
-          const invalidClearance = new Error("The patient's clearance purpose is no longer valid for their affiliation.");
-          invalidClearance.appointmentConflict = true;
-          throw invalidClearance;
-        }
-        const [workflow] = await MedicalWorkflow.create([{
-          student: student._id,
-          queueEntry: queueEntry._id,
-          service: "Medical Clearance",
-          purpose: requirementSet.purpose,
-          affiliation: student.affiliation,
-          initialFields: { appointmentId: current._id },
-          status: "assessment",
-          requirements: requirementSet.requirements.map((item) => ({ text: item.text, kind: item.kind, required: item.conditional ? false : Boolean(item.required || item.kind === "action"), conditional: Boolean(item.conditional), condition: item.condition || "" })),
-          events: [{ type: "created", description: "Medical clearance workflow started from the checked-in appointment.", actor: req.user.id, at: checkedInAt }],
-        }], { session });
-        queueEntry.medicalWorkflow = workflow._id;
-        await queueEntry.save({ session });
-      }
       appointment = await Appointment.findOneAndUpdate(
         { _id: current._id, status: "scheduled", decisionStatus: "accepted", $or: [{ queueEntry: { $exists: false } }, { queueEntry: null }] },
         { $set: { status: "checked_in", checkedInAt, checkedInBy: req.user.id, queueEntry: queueEntry._id } },

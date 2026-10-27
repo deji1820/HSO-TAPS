@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { getMedicalDocuments, getStudents, uploadMedicalDocument, updateMedicalDocumentStatus } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
+import VerifiedClearanceCertificate from "../components/VerifiedClearanceCertificate.jsx";
 
 const STATUS_ORDER = { Pending: 0, Rejected: 1, Verified: 2, Accepted: 2 };
 const statusLabel = (status) => status === "Verified" ? "Accepted" : status || "Pending";
+
+function CertificateAction({ certificate, label = "View / Print Certificate" }) {
+  const [open, setOpen] = useState(false);
+  return certificate ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => setOpen(true)}>{label}</button>{open && <VerifiedClearanceCertificate certificate={certificate} onClose={() => setOpen(false)} />}</> : null;
+}
 
 export default function MedicalDocumentsPage() {
   const [files, setFiles] = useState([]);
@@ -18,7 +23,7 @@ export default function MedicalDocumentsPage() {
   const [statusSortDirection, setStatusSortDirection] = useState("asc");
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const canReviewDocuments = ["nurse", "supervisor"].includes(normalizeRole(user.role));
-  const sortedFiles = [...files].sort((left, right) => {
+  const sortedFiles = files.filter((file) => !(file.recordType === "clearance_certificate" && file.sourceDocument)).sort((left, right) => {
     const statusDifference = (STATUS_ORDER[left.status || "Pending"] ?? 3) - (STATUS_ORDER[right.status || "Pending"] ?? 3);
     if (statusDifference) return statusSortDirection === "asc" ? statusDifference : -statusDifference;
     return new Date(right.submittedAt || right.createdAt) - new Date(left.submittedAt || left.createdAt);
@@ -62,10 +67,24 @@ export default function MedicalDocumentsPage() {
     setNotice("");
     try {
       const updated = await updateMedicalDocumentStatus(file._id, status);
-      setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated } : item));
+      setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated, issuedCertificate: updated.issuedCertificate || item.issuedCertificate } : item));
       setNotice(updated.notificationQueued ? `Document status changed to ${statusLabel(status)}. The email send was started.` : `Document status changed to ${statusLabel(status)}, but the email could not be started. ${updated.notificationMessage || "Check the backend email settings."}`);
     } catch (error) {
       setNotice(error?.response?.data?.message || "Could not update this document status.");
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  }
+
+  async function retryCertificate(file) {
+    setUpdatingStatusId(file._id);
+    setNotice("");
+    try {
+      const updated = await updateMedicalDocumentStatus(file._id, "Verified", "Certificate generation retry after existing verification.");
+      setFiles((current) => current.map((item) => item._id === file._id ? { ...item, ...updated, issuedCertificate: updated.issuedCertificate || item.issuedCertificate } : item));
+      setNotice(updated.issuedCertificate ? "Purpose-specific clearance certificate generated." : "This verified document is not eligible for an automatic clearance certificate.");
+    } catch (error) {
+      setNotice(error?.response?.data?.message || "Could not generate the clearance certificate.");
     } finally {
       setUpdatingStatusId(null);
     }
@@ -87,7 +106,7 @@ export default function MedicalDocumentsPage() {
     </form>
     <h2 className="section-title">Submission List</h2>
     <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>File Category</th><th>Document</th><th>Purpose</th><th>Exam / Issue Date</th><th>Date Submitted</th><th>File Name</th><th aria-sort={statusSortDirection === "asc" ? "ascending" : "descending"}><button type="button" className="table-sort-button" onClick={() => setStatusSortDirection((direction) => direction === "asc" ? "desc" : "asc")}>Status <span aria-hidden="true">{statusSortDirection === "asc" ? "↑" : "↓"}</span></button></th><th>Actions</th></tr></thead><tbody>
-      {sortedFiles.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name || "—"}</td><td>{canReviewDocuments && file.recordType !== "clearance_certificate" ? <select className="text-input document-status-select" aria-label={`Change status for ${file.documentTitle || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingStatusId === file._id || ["Verified", "Rejected"].includes(file.status)} onChange={(event) => updateStatus(file, event.target.value)}><option>Pending</option><option value="Verified">Accepted</option><option>Rejected</option></select> : <span className={`badge ${file.status === "Verified" || file.status === "Issued" ? "badge-routine" : file.status === "Rejected" ? "badge-high" : "badge-standard"}`}>{file.status === "Issued" ? "Certificate Issued" : statusLabel(file.status)}</span>}</td><td>{file.recordType === "clearance_certificate" ? <Link className="btn btn-outline btn-sm" to={`/medical-workflows?workflowId=${encodeURIComponent(file.sourceWorkflow || file.submissionDetails?.clearance?.workflowId || "")}#clearance-certificate`}>View / Print Certificate</Link> : <div className="document-actions">{(file.validationWorkflows || []).map((workflow) => <Link key={workflow._id} className="btn btn-outline btn-sm" to={`/medical-workflows?workflowId=${encodeURIComponent(workflow._id)}${workflow.status === "approved" ? "#clearance-certificate" : ""}`}>{workflow.status === "approved" ? `View / Print Certificate - ${workflow.purpose}` : `Open ${workflow.purpose} Review`}</Link>)}{file.name && <button className="btn btn-secondary btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name).catch((error) => window.alert(error.message || "Could not open the submitted file."))}>View Submitted File</button>}</div>}</td></tr>)}
+      {sortedFiles.map((file) => <tr key={file._id}><td>{file.student ? `${file.student.firstName} ${file.student.lastName}` : file.studentName || "—"}</td><td>{file.category || "—"}</td><td>{file.documentTitle || file.title || "—"}</td><td>{file.submissionDetails?.purpose || file.submissionDetails?.clearance?.purpose || "—"}</td><td>{file.examDate ? new Date(file.examDate).toLocaleDateString() : "—"}</td><td>{new Date(file.submittedAt || file.createdAt).toLocaleDateString()}</td><td>{file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name || "—"}</td><td>{canReviewDocuments && file.recordType !== "clearance_certificate" ? <select className="text-input document-status-select" aria-label={`Change status for ${file.documentTitle || file.name || "document"}`} value={file.status || "Pending"} disabled={updatingStatusId === file._id || ["Verified", "Rejected"].includes(file.status)} onChange={(event) => updateStatus(file, event.target.value)}><option>Pending</option><option value="Verified">Accepted</option><option>Rejected</option></select> : <span className={`badge ${file.status === "Verified" || file.status === "Issued" ? "badge-routine" : file.status === "Rejected" ? "badge-high" : "badge-standard"}`}>{file.status === "Issued" ? "Certificate Issued" : statusLabel(file.status)}</span>}</td><td><div className="document-actions">{file.recordType === "clearance_certificate" ? <CertificateAction certificate={file} /> : file.issuedCertificate ? <CertificateAction certificate={file.issuedCertificate} /> : canReviewDocuments && file.clearanceCertificateEligible && file.status === "Verified" && <button type="button" className="btn btn-outline btn-sm" disabled={updatingStatusId === file._id} onClick={() => retryCertificate(file)}>Generate Clearance</button>}{file.recordType !== "clearance_certificate" && file.name && <button className="btn btn-secondary btn-sm" type="button" onClick={() => openMedicalDocument(file._id, file.name).catch((error) => window.alert(error.message || "Could not open the submitted file."))}>View Submitted File</button>}</div></td></tr>)}
     </tbody></table>{!files.length && <div className="table-empty">No document submissions in this browser.</div>}</div>
   </div>;
 }

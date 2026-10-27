@@ -6,10 +6,11 @@ import QueueEntry from "../models/QueueEntry.js";
 import { SyncLog } from "../models/FormPipeline.js";
 import Appointment from "../models/Appointment.js";
 import MedicalProfile from "../models/MedicalProfile.js";
-import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import PatientHistory from "../models/PatientHistory.js";
 import AcademicCalendar from "../models/AcademicCalendar.js";
 import { calculateAge, decoratePatientYearLevel, expectedYearLevel, parseAcademicYearStart } from "../services/patientInformation.js";
+import { findClearanceRequirement } from "../services/clearanceRequirements.js";
+import { issueVerifiedClearanceDocument } from "../services/clearanceCertificate.service.js";
 
 function decoratePatient(person, academicYear) {
   return decoratePatientYearLevel(person, academicYear);
@@ -252,24 +253,19 @@ export async function getFullEmr(req, res) {
     Student.findById(req.params.id),
     VitalsLog.find({ student: req.params.id }).sort({ capturedAt: -1 }),
     ConsultationRecord.find({ student: req.params.id }).sort({ visitDate: -1 }),
-    ExternalDocument.find({ student: req.params.id }).select("-fileData").populate("verifiedBy", "name role").populate("verificationHistory.actor", "name role").populate("declarationHistory.actor", "name role").sort({ submittedAt: -1 }),
+    ExternalDocument.find({ student: req.params.id }).select("-fileData").populate("student", "studentId firstName lastName affiliation program department").populate("verifiedBy", "name role").populate("verificationHistory.actor", "name role").populate("declarationHistory.actor", "name role").sort({ submittedAt: -1 }),
     QueueEntry.find({ student: req.params.id, status: { $ne: "cancelled" } }).sort({ createdAt: -1 }),
     SyncLog.find({ matchedStudent: req.params.id }).sort({ createdAt: -1 }),
   ]);
   if (!student) return res.status(404).json({ message: "Student not found" });
-  const workflows = await MedicalWorkflow.find({ student: req.params.id, service: "Medical Clearance", "requirements.document": { $in: documents.map((document) => document._id) } }).select("purpose status medicalFile requirements.document").lean();
-  const workflowByDocument = new Map();
-  workflows.forEach((workflow) => workflow.requirements.forEach((requirement) => {
-    if (!requirement.document) return;
-    const key = String(requirement.document);
-    const current = workflowByDocument.get(key) || [];
-    current.push({ _id: workflow._id, purpose: workflow.purpose, status: workflow.status, medicalFile: workflow.medicalFile });
-    workflowByDocument.set(key, current);
-  }));
+  await Promise.all(documents.filter((document) => document.status === "Verified").map((document) => issueVerifiedClearanceDocument(document)));
+  const generatedCertificates = await ExternalDocument.find({ student: req.params.id, sourceDocument: { $in: documents.map((document) => document._id) } }).select("-fileData").lean();
+  const certificatesBySource = new Map(generatedCertificates.map((certificate) => [String(certificate.sourceDocument), certificate]));
   const safeDocuments = documents.map((document) => {
     const result = document.toObject();
     if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
-    result.validationWorkflows = workflowByDocument.get(String(result._id)) || [];
+    result.issuedCertificate = certificatesBySource.get(String(result._id)) || null;
+    result.clearanceCertificateEligible = result.recordType !== "clearance_certificate" && Boolean(findClearanceRequirement(student.affiliation, result.submissionDetails?.purpose));
     return result;
   });
   res.json({ student: decoratePatient(student, await currentAcademicYear()), vitals, consultations, documents: safeDocuments, kioskRequests, formSubmissions });

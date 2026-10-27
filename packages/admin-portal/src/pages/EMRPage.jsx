@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePatientHistory, updateHealthDeclaration, updateMedicalDocumentStatus, updateMedicalProfile } from "../services/api.js";
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
+import VerifiedClearanceCertificate from "../components/VerifiedClearanceCertificate.jsx";
 import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/EMR.css";
 
@@ -147,6 +148,11 @@ function ConsultationsTab({ consultations }) {
   );
 }
 
+function ClearanceCertificateAction({ certificate, label = "View / Print Certificate" }) {
+  const [open, setOpen] = useState(false);
+  return certificate ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => setOpen(true)}>{label}</button>{open && <VerifiedClearanceCertificate certificate={certificate} onClose={() => setOpen(false)} />}</> : null;
+}
+
 function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentId, onStatusChange, emptyMessage = "No external documents synced yet." }) {
   if (!documents?.length) return <div className="table-empty">{emptyMessage}</div>;
   return <div className="emr-document-list">{documents.map((document) => <article className="emr-document-card" key={document._id}>
@@ -159,7 +165,7 @@ function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentI
     {document.submissionDetails?.clearance?.approval && <p className="emr-document-review-remarks"><strong>Approved by:</strong> {document.submissionDetails.clearance.approval.providerName} · {document.submissionDetails.clearance.approval.providerRole}. {document.submissionDetails.clearance.approval.providerStatement}</p>}
     {document.verificationHistory?.length > 0 && <details className="emr-document-details"><summary>Review history</summary><ul>{document.verificationHistory.map((event, index) => <li key={`${event.at || index}-${index}`}>{event.status} · {formatDate(event.at)}{event.actor?.name ? ` · ${event.actor.name}` : ""}{event.remarks ? ` — ${event.remarks}` : ""}</li>)}</ul></details>}
     {document.submissionDetails?.clearance?.requirements?.length > 0 && <details className="emr-document-details"><summary>Verified clearance requirements</summary><ul>{document.submissionDetails.clearance.requirements.map((requirement, index) => <li key={`${requirement.text}-${index}`}>{requirement.text}: {requirement.status?.replaceAll("_", " ")}{requirement.evidence ? ` — ${requirement.evidence}` : ""}</li>)}</ul></details>}
-    <div className="document-actions">{document.recordType === "clearance_certificate" ? <Link className="btn btn-outline btn-sm" to={`/medical-workflows?workflowId=${encodeURIComponent(document.sourceWorkflow || document.submissionDetails?.clearance?.workflowId || "")}#clearance-certificate`}>View / Print Certificate</Link> : document.validationWorkflows?.length ? <div className="document-actions">{document.validationWorkflows.map((workflow) => <Link key={workflow._id} className="btn btn-outline btn-sm" to={`/medical-workflows?workflowId=${encodeURIComponent(workflow._id)}${workflow.status === "approved" ? "#clearance-certificate" : ""}`}>{workflow.status === "approved" ? `View / Print Certificate - ${workflow.purpose}` : `Open ${workflow.purpose} Review`}</Link>)}{document.name && <button type="button" className="btn btn-secondary btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => window.alert(error.message || "Could not open the submitted file."))}>View Submitted File</button>}</div> : document.fileUrl ? document.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(document._id, document.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <a href={document.fileUrl} target="_blank" rel="noreferrer">View file</a> : <span>No file attached</span>}</div>
+    <div className="document-actions">{document.recordType === "clearance_certificate" ? <ClearanceCertificateAction certificate={document} /> : document.fileUrl ? document.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(document._id, document.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <a href={document.fileUrl} target="_blank" rel="noreferrer">View file</a> : <span>No file attached</span>}</div>
   </article>)}</div>;
 }
 
@@ -216,7 +222,7 @@ function HealthStatusDeclarationTab({ submissions, canReviewDocuments, canEditDe
   </div>;
 }
 
-function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumentId, onStatusChange }) {
+function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumentId, onStatusChange, onRetryCertificate }) {
   if (!files.length) return <div className="table-empty">No documents have been submitted for this patient.</div>;
   return <div className="emr-document-list">{files.map((file) => <article className="emr-document-card" key={file.id}>
     <header><h3>{file.title || file.name || "Medical document submission"}</h3><span>Submitted {formatDate(file.date)}</span></header>
@@ -230,7 +236,7 @@ function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumen
     {file.verificationRemarks && <p className="emr-document-review-remarks"><strong>Review remarks:</strong> {file.verificationRemarks}</p>}
     {Object.keys(file.details || {}).length > 0 && <details className="emr-document-details"><summary>View submitted details</summary><dl>{flattenFormPayload(file.details || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{value}</dd></div>)}</dl></details>}
     {file.verificationHistory?.length > 0 && <details className="emr-document-details"><summary>Review history</summary><ul>{file.verificationHistory.map((event, index) => <li key={`${event.at || index}-${index}`}>{event.status} · {formatDate(event.at)}{event.actor?.name ? ` · ${event.actor.name}` : ""}{event.remarks ? ` — ${event.remarks}` : ""}</li>)}</ul></details>}
-    <div className="document-actions">{(file.validationWorkflows || []).map((workflow) => <Link key={workflow._id} className="btn btn-outline btn-sm" to={`/medical-workflows?workflowId=${encodeURIComponent(workflow._id)}${workflow.status === "approved" ? "#clearance-certificate" : ""}`}>{workflow.status === "approved" ? `View / Print Certificate - ${workflow.purpose}` : `Open ${workflow.purpose} Review`}</Link>)}{file.name ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View Submitted File</button> : !file.validationWorkflows?.length && <span>No file attached</span>}</div>
+    <div className="document-actions">{file.issuedCertificate ? <ClearanceCertificateAction certificate={file.issuedCertificate} /> : canReviewDocuments && file.clearanceCertificateEligible && file.status === "Verified" && <button type="button" className="btn btn-outline btn-sm" disabled={updatingDocumentId === file.id} onClick={() => onRetryCertificate(file.id)}>Generate Clearance</button>}{file.name ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View Submitted File</button> : !file.issuedCertificate && <span>No file attached</span>}</div>
   </article>)}</div>;
 }
 
@@ -507,7 +513,7 @@ export default function EMRPage() {
       const [full, profiles, histories] = await Promise.all([getFullEmr(id), getMedicalProfiles(id), getPatientHistory(id)]);
       setRecord(full);
       setProfileHistory(profiles.map((profile) => ({ ...profile, id: profile._id })));
-      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission" && !isHealthStatusDeclaration(file)).map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name, fileUrl: file.fileUrl, status: file.status, details: file.submissionDetails, verificationRemarks: file.verificationRemarks, verificationHistory: file.verificationHistory, validationWorkflows: file.validationWorkflows || [] })));
+      setMedicalDocumentFiles((full.documents || []).filter((file) => file.formSource === "Kiosk Document Submission" && !isHealthStatusDeclaration(file)).map((file) => ({ id: file._id, category: file.category, title: file.documentTitle, purpose: file.submissionDetails?.purpose, examDate: file.examDate, date: file.submittedAt, name: file.contentType === "application/json" ? file.name?.replace(/\.json$/i, ".pdf") : file.name, fileUrl: file.fileUrl, status: file.status, details: file.submissionDetails, verificationRemarks: file.verificationRemarks, verificationHistory: file.verificationHistory, issuedCertificate: file.issuedCertificate, clearanceCertificateEligible: file.clearanceCertificateEligible })));
       const kioskHealthForms = (full.documents || []).filter((document) => document.submissionDetails?.healthDeclaration).map((document) => ({
         _id: document._id,
         createdAt: document.submittedAt || document.createdAt,
@@ -545,10 +551,24 @@ export default function EMRPage() {
     try {
       const updated = await updateMedicalDocumentStatus(id, status, remarks);
       setRecord((current) => current ? { ...current, ...(updated.patient ? { student: updated.patient } : {}), documents: (current.documents || []).map((document) => document._id === id ? { ...document, ...updated } : document) } : current);
-      setMedicalDocumentFiles((current) => current.map((file) => file.id === id ? { ...file, status: updated.status, verificationRemarks: updated.verificationRemarks, verificationHistory: updated.verificationHistory } : file));
+      setMedicalDocumentFiles((current) => current.map((file) => file.id === id ? { ...file, status: updated.status, verificationRemarks: updated.verificationRemarks, verificationHistory: updated.verificationHistory, issuedCertificate: updated.issuedCertificate || file.issuedCertificate, clearanceCertificateEligible: updated.clearanceCertificateEligible } : file));
       setHealthStatusSubmissions((current) => current.map((submission) => submission._id === id ? { ...submission, status: updated.status, verificationRemarks: updated.verificationRemarks, verificationHistory: updated.verificationHistory } : submission));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || "Could not update this document status.");
+    } finally {
+      setUpdatingDocumentId(null);
+    }
+  }
+
+  async function retryClearanceCertificate(id) {
+    setUpdatingDocumentId(id);
+    setError(null);
+    try {
+      const updated = await updateMedicalDocumentStatus(id, "Verified", "Certificate generation retry after existing verification.");
+      setRecord((current) => current ? { ...current, documents: (current.documents || []).map((document) => document._id === id ? { ...document, ...updated } : document) } : current);
+      setMedicalDocumentFiles((current) => current.map((file) => file.id === id ? { ...file, issuedCertificate: updated.issuedCertificate, clearanceCertificateEligible: updated.clearanceCertificateEligible } : file));
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || "Could not generate the clearance certificate.");
     } finally {
       setUpdatingDocumentId(null);
     }
@@ -729,12 +749,10 @@ export default function EMRPage() {
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
             {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} />}
             {tab === "files" && <>
-              <h2 className="section-title">Issued Medical Clearance Certificates</h2>
-              <DocumentsTab documents={(record.documents || []).filter((document) => document.recordType === "clearance_certificate")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} emptyMessage="No certificate has been issued yet. A submitted document marked Verified is accepted evidence; the purpose-specific certificate appears here after the clearance requirements, assessment, and authorized provider approval are complete." />
               <h2 className="section-title">Medical Document Submissions</h2>
-              <MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />
+              <MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} onRetryCertificate={retryClearanceCertificate} />
               <h2 className="section-title">Other Synced Medical Files</h2>
-              <DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && document.recordType !== "clearance_certificate" && document.formSource !== "Kiosk Document Submission")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />
+              <DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && !(document.recordType === "clearance_certificate" && document.sourceDocument) && document.formSource !== "Kiosk Document Submission")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />
             </>}
           </div>
         </div>

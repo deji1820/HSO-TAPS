@@ -213,7 +213,6 @@ export default function DashboardPage() {
             {!provider && <button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button>}
             {isNursingTeam(user.role) && ["waiting", "called"].includes(selected.status) && <button className="btn btn-secondary" onClick={() => changeExpirationException(selected)}>{selected.expirationExempt ? "Remove Expiration Exception" : "Keep in Queue"}</button>}
           </div>
-          {selected.serviceType === "Medical Clearance" && selected.medicalWorkflow?._id && <div className="snapshot-actions"><button className="btn btn-success" onClick={() => navigate(`/medical-workflows?workflowId=${encodeURIComponent(selected.medicalWorkflow._id)}`)}>Open Clearance Workflow</button></div>}
           {clinicalRole && <div className="snapshot-actions"><button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Open Full Medical Record</button></div>}
         </> : <>
           <div className="snapshot-field"><span>Encounter Status:</span> {selected.encounterStatusLabel || HISTORY_STATUS_LABEL[selected.status] || selected.status}</div>
