@@ -31,9 +31,9 @@
   .mobile-checkin-app .apt-card { width: 100%; margin: 14px 0; padding: 16px; box-sizing: border-box; }
   .mobile-checkin-app .wic-complaint-grid, .mobile-checkin-app .med-symptoms { grid-template-columns: 1fr; gap: 10px; }
   .mobile-checkin-app .wic-complaint-item, .mobile-checkin-app .med-symptoms label,
-  .mobile-checkin-app .med-answer-row label, .mobile-checkin-app .clearance-document-list label { min-height: 48px; align-items: center; font-size: 1rem; }
+  .mobile-checkin-app .med-answer-row label { min-height: 48px; align-items: center; font-size: 1rem; }
   .mobile-checkin-app .wic-complaint-item input, .mobile-checkin-app .med-symptoms input,
-  .mobile-checkin-app .med-answer-row input, .mobile-checkin-app .clearance-document-list input { width: 22px; height: 22px; flex: 0 0 22px; }
+  .mobile-checkin-app .med-answer-row input { width: 22px; height: 22px; flex: 0 0 22px; }
   .mobile-checkin-app .apt-booking-grid { grid-template-columns: 1fr; gap: 14px; }
   .mobile-checkin-app .apt-actions, .mobile-checkin-app .wic-actions, .mobile-checkin-app .med-actions,
   .mobile-checkin-app .clearance-actions { display: flex; flex-wrap: wrap; gap: 10px; }

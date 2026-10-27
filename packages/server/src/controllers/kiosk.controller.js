@@ -60,14 +60,7 @@ export async function submitIntake(req, res) {
   if (!student) return res.status(404).json({ message: "Unknown student" });
   if (serviceType === "Medical Clearance") {
     const requirement = findClearanceRequirement(student.affiliation, reason);
-    let details = requestDetails;
-    if (typeof details === "string") { try { details = JSON.parse(details); } catch { details = null; } }
     if (!requirement) return res.status(400).json({ message: "Choose a medical clearance purpose that matches the patient's affiliation." });
-    const checkedDocuments = new Set(Array.isArray(details?.documents) ? details.documents : []);
-    const missingDocument = requirement.requirements.find((item) => item.kind === "document" && item.required && !checkedDocuments.has(item.text));
-    if (details?.acknowledged !== true || missingDocument) {
-      return res.status(400).json({ message: "Confirm the clearance requirements and check each required document before joining the queue." });
-    }
   }
 
   let bmi;

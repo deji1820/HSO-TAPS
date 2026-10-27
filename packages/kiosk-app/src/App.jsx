@@ -1082,13 +1082,13 @@ async function handleAppointmentProceed(selection) {
   setStep("appointmentConfirmed");
 }
 
-async function handleClearanceSubmit({ purpose, documents, requirements, acknowledged }) {
+async function handleClearanceSubmit({ purpose, documents, requirements }) {
   const result = await submitIntake({
     studentId: student?.studentId || student?.rfidTagUid,
     serviceType: "Medical Clearance",
     source: "kiosk",
     reason: purpose,
-    requestDetails: JSON.stringify({ purpose, documents, requirements, acknowledged }),
+    requestDetails: JSON.stringify({ purpose, documents, requirements }),
   });
   setClearanceQueueNumber(result?.queueEntry?.queueNumber ?? null);
   const token = result?.clearanceWorkflow?.documentSubmissionToken;

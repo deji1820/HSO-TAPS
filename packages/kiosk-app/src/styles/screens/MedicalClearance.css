@@ -129,14 +129,15 @@
 .clearance-purpose-panel select {
   display: block;
   width: calc(100% - 34px);
-  height: 19px;
+  min-height: 48px;
   margin: 0 auto;
+  padding: 8px 12px;
   border: 1px solid #aaa;
   border-radius: 3px;
   background: #f8f8f8;
   color: var(--nu-blue-dark);
-  text-align: center;
-  font-size: 11px;
+  text-align: left;
+  font-size: 16px;
 }
 .clearance-field-label {
   display: block;
@@ -155,16 +156,13 @@
   color: var(--nu-blue-dark);
   font-size: 13px;
 }
-.clearance-document-list label, .clearance-acknowledge { display: flex; align-items: flex-start; gap: 8px; }
 .clearance-document-list p { margin: 0; }
-.clearance-document-list input, .clearance-acknowledge input { accent-color: var(--nu-blue); }
 .clearance-empty-documents { margin: 27px 0 0; color: var(--text-secondary); font-size: 13px; font-style: italic; text-align: center; }
-.clearance-policy { width: min(755px, 100%); margin: -4px auto 14px; color: var(--nu-blue-dark); font-size: 12px; font-style: italic; line-height: 1.35; }
-.clearance-acknowledge { width: min(755px, 100%); margin: 0 auto; color: var(--nu-blue-dark); font-size: 12px; font-style: italic; }
+.clearance-policy { width: min(755px, 100%); margin: -4px auto 14px; color: var(--nu-blue-dark); font-size: 14px; line-height: 1.45; }
 .clearance-actions { display: flex; gap: 13px; width: min(755px, 100%); margin: 30px auto 0; }
 .clearance-actions button:disabled { opacity: .55; cursor: not-allowed; }
 .clearance-error { width: min(755px, 100%); margin: 10px auto 0; color: var(--danger); font-size: 13px; }
-.clearance-intake .clearance-faq { bottom: 48px; }
+.clearance-intake .clearance-faq { position: static; display: block; width: fit-content; max-width: 100%; margin: 24px auto 0; transform: none; white-space: normal; text-align: center; }
 
 .clearance-result .clearance-content { padding-top: 34px; }
 .clearance-result .clearance-heading { margin-top: 22px; margin-bottom: 22px; }
@@ -199,7 +197,8 @@
   .clearance-heading h1 { font-size: 25px; }
   .clearance-intake .clearance-panel { padding: 14px; }
   .clearance-purpose-panel select { width: 100%; }
-  .clearance-faq { bottom: 20px; }
+  .clearance-intake .clearance-actions { flex-direction: column-reverse; }
+  .clearance-intake .clearance-actions button { width: 100%; }
 }
 .clearance-upload-qr { margin: 18px auto; padding: 16px; max-width: 420px; border: 1px solid #dbe4f0; border-radius: 12px; background: #fff; text-align: center; }
 .clearance-upload-qr h2 { margin: 0 0 8px; color: var(--nu-blue-dark); font-size: 1rem; }
