@@ -12,6 +12,8 @@ const queueEntrySchema = new mongoose.Schema(
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
     medicalWorkflow: { type: mongoose.Schema.Types.ObjectId, ref: "MedicalWorkflow", index: true },
     appointment: { type: mongoose.Schema.Types.ObjectId, ref: "Appointment" },
+    assignedProviderRole: { type: String, enum: ["physician", "dentist"] },
+    providerRouteAssignedAt: Date,
     queueNumber: String, // e.g. "R0003", "M0001"
     priorityLevel: { type: String, enum: ["High Priority", "Standard Priority", "Routine Check"], required: true },
     serviceType: {

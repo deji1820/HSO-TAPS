@@ -181,7 +181,7 @@ export default function DashboardPage() {
         </div>}
         {queueView === "history" && historyError && <div className="table-empty" role="alert">{historyError}</div>}
         {queueView === "active" ? (
-          visibleQueue.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th><th>Provider Route</th><th>Encounter Status</th></tr></thead><tbody>{visibleQueue.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}{entry.elevatedVitalsAlert?.active && <span className="appointment-cell-secondary" role="status">&#9888; Elevated vital signs alert</span>}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td><td>{providerTarget(entry.serviceType) || "—"}</td><td>{queueStatusLabel(entry)}</td></tr>)}</tbody></table></div> : <div className="table-empty">No active patients in the queue.</div>
+          visibleQueue.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Time-in</th><th>Purpose</th><th>Provider Route</th><th>Encounter Status</th></tr></thead><tbody>{visibleQueue.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "—"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}{entry.elevatedVitalsAlert?.active && <span className="appointment-cell-secondary" role="status">&#9888; Elevated vital signs alert</span>}</td><td>{clock(entry.createdAt)}</td><td>{entry.serviceType || "—"}</td><td>{providerRouteLabel(entry, providerRole)}</td><td>{queueStatusLabel(entry)}</td></tr>)}</tbody></table></div> : <div className="table-empty">No active patients in the queue.</div>
         ) : (
           visibleHistory.length ? <div className="table-wrap dashboard-queue-table-wrap"><table className="data-table dashboard-queue-table"><thead><tr><th>Queue Number</th><th>Patient Name</th><th>Date / time queued</th><th>Called at</th><th>Purpose</th><th>Encounter Status</th></tr></thead><tbody>{visibleHistory.map((entry) => <tr key={entry._id} className={entry._id === selectedId ? "selected" : ""} onClick={() => setSelectedId(entry._id)} tabIndex={0} onKeyDown={(event) => event.key === "Enter" && setSelectedId(entry._id)}><td><span className="queue-number">{entry.queueNumber || "-"}</span></td><td>{entry.student?.firstName} {entry.student?.lastName}</td><td>{dateTime(entry.createdAt)}</td><td>{entry.calledAt ? dateTime(entry.calledAt) : "-"}</td><td>{entry.serviceType || "-"}</td><td>{HISTORY_STATUS_LABEL[entry.status] || entry.status}</td></tr>)}</tbody></table></div> : !historyError && <div className="table-empty">No archived queue entries match this date range.</div>
         )}
@@ -199,7 +199,7 @@ export default function DashboardPage() {
         <div className="snapshot-field"><span>Student ID:</span> {selected.student?.studentId || "—"}</div>
         <div className="snapshot-field"><span>Department:</span> {selected.student?.program || "—"}</div>
         <div className="snapshot-field"><span>Purpose:</span> {selected.medicalWorkflow?.purpose || selected.serviceType || "—"}</div>
-        {providerTarget(selected.serviceType) && <div className="snapshot-field"><span>Provider Route:</span> {providerTarget(selected.serviceType)}{selected.status === "awaiting_provider" || selected.status === "provider_in_session" ? " · Provider queue" : " · After nursing assessment"}</div>}
+        {providerTarget(selected.serviceType) && <div className="snapshot-field"><span>Provider Route:</span> {providerRouteLabel(selected, user.role)}</div>}
         {queueView === "active" ? <>
           <div className="snapshot-field"><span>Encounter Status:</span> {queueStatusLabel(selected)}</div>
           {selected.expirationExempt && isNursingTeam(user.role) && <div className="snapshot-field"><span>Expiration exception:</span> {selected.expirationExemptionReason || "Authorized exception"}</div>}
@@ -246,4 +246,12 @@ function isNursingTeam(role) { return ["nurse", "supervisor"].includes(role); }
 function isConsultation(serviceType) { return ["Medical Consultation", "Dental Consultation"].includes(serviceType); }
 function providerTarget(serviceType) { return serviceType === "Dental Consultation" ? "Dentist" : serviceType === "Medical Consultation" ? "Physician" : null; }
 function providerHandlesService(role, serviceType) { return (String(role || "").toLowerCase() === "dentist") === (serviceType === "Dental Consultation") && isConsultation(serviceType); }
+function providerRouteLabel(entry, role) {
+  const target = providerTarget(entry.serviceType);
+  if (!target) return "—";
+  if (entry.status === "in_session" && entry.assignedProviderRole) return `${target} queue · Nursing intake in progress`;
+  if (["awaiting_provider", "provider_in_session"].includes(entry.status)) return `${target} queue`;
+  if (["physician", "doctor", "dentist"].includes(String(role || "").toLowerCase()) && providerHandlesService(role, entry.serviceType)) return `${target} route · Awaiting nurse handoff`;
+  return `${target} route · Assigned when nurse starts intake`;
+}
 function queueStatusLabel(entry, labels = STATUS_LABEL) { return entry.status === "awaiting_provider" && providerTarget(entry.serviceType) ? `Awaiting ${providerTarget(entry.serviceType)}` : entry.encounterStatusLabel || labels[entry.status] || entry.status; }

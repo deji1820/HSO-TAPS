@@ -46,7 +46,7 @@ export default function NursingAssessmentModal({ entry, onClose, onRouted, onSav
     <section className="active-session-modal" onMouseDown={(event) => event.stopPropagation()} aria-label="Nursing assessment">
       <header className="active-session-header"><span>Nursing assessment — {entry.queueNumber || "Patient"}</span><button className="active-session-close" onClick={onClose} aria-label="Close">×</button></header>
       <div className="active-session-body">
-        <div className="card patient-info-block"><strong>{entry.student?.firstName} {entry.student?.lastName}</strong><div>{entry.serviceType}</div><p>Record the physical and laboratory work completed by the nursing team. Saving and routing sends this encounter to the {providerTarget(entry.serviceType)} queue for consultation.</p></div>
+        <div className="card patient-info-block"><strong>{entry.student?.firstName} {entry.student?.lastName}</strong><div>{entry.serviceType}</div><p>{entry.assignedProviderRole ? `This session is assigned to the ${entry.assignedProviderRole} queue. Record the nursing intake, then route it for provider consultation.` : `Starting the nursing intake assigns this session to the ${providerTarget(entry.serviceType)} queue. Record the physical or laboratory assessment, then route it for provider consultation.`}</p></div>
         <label className="field-label" htmlFor="nursing-physical">Physical examination</label>
         <textarea id="nursing-physical" className="text-input" rows={4} value={physicalExam} onChange={(event) => setPhysicalExam(event.target.value)} />
         <label className="field-label" htmlFor="nursing-lab">Laboratory examination</label>

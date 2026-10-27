@@ -41,7 +41,7 @@ router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "de
   const providerRole = ["physician", "doctor", "dentist"].includes(role);
   const clinicalRole = ["nurse", "supervisor", "physician", "doctor", "dentist"].includes(role);
   const queryFilter = {
-    status: { $in: providerRole ? ["awaiting_provider", "provider_in_session"] : ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session"] },
+    status: { $in: providerRole ? ["in_session", "awaiting_provider", "provider_in_session"] : ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session"] },
   };
   if (providerRole) queryFilter.serviceType = role === "dentist" ? "Dental Consultation" : "Medical Consultation";
   else queryFilter.serviceType = { $ne: "Quick Health Screening" };
@@ -225,6 +225,12 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
     },
     $push: { statusHistory: { from: current.status, to: status, actor: req.user.id, at: changedAt } },
   };
+  if (status === "in_session" && isConsultation) {
+    const assignedProviderRole = current.serviceType === "Dental Consultation" ? "dentist" : "physician";
+    update.$set.assignedProviderRole = assignedProviderRole;
+    update.$set.providerRouteAssignedAt = changedAt;
+    update.$push.statusHistory.reason = `Assigned to the ${assignedProviderRole} queue; nursing intake is in progress.`;
+  }
   if (status === "awaiting_provider") {
     const assessment = req.body.nursingAssessment || {};
     const physicalExam = String(assessment.physicalExam || "").trim().slice(0, 4000);
