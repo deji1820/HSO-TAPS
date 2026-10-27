@@ -44,3 +44,29 @@
     font-size: 17px;
   }
 }
+
+/* Touch-first kiosk controls: keep ordinary controls comfortable while preserving screen-specific layouts. */
+#root > div:not(.mobile-checkin-app) :is(button, input, select, textarea) {
+  min-height: 48px;
+  font-size: max(16px, 1em);
+  touch-action: manipulation;
+}
+
+#root > div:not(.mobile-checkin-app) :is(button, input, select, textarea):focus-visible {
+  outline: 3px solid #f2b632;
+  outline-offset: 2px;
+}
+
+#root > div:not(.mobile-checkin-app) :is(.btn-primary, .btn-vitals-proceed, .btn-vitals-auto) {
+  min-height: 72px;
+}
+
+@media (orientation: portrait) {
+  #root > div:not(.mobile-checkin-app) .vitals-entry-body { grid-template-columns: 1fr; }
+}
+
+@media (orientation: landscape) and (max-height: 720px) {
+  #root > div:not(.mobile-checkin-app) .vitals-entry-container { max-width: 100%; }
+  #root > div:not(.mobile-checkin-app) .vitals-entry-body { padding: 14px 18px; gap: 16px; }
+  #root > div:not(.mobile-checkin-app) .vitals-entry-actions-footer { padding: 12px 18px; }
+}

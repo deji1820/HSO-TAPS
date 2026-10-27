@@ -36,6 +36,19 @@
   letter-spacing: 0.01em;
 }
 
+.vitals-entry-header p {
+  margin: 6px 0 0;
+  color: #e8f0ff;
+  font-weight: 600;
+}
+
+.vitals-review-list p {
+  margin: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border, #dfe3ea);
+  line-height: 1.5;
+}
+
 .vitals-entry-body {
   padding: 26px 30px;
   display: grid;

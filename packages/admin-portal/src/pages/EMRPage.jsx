@@ -87,7 +87,7 @@ function ConsultationEntry({ c, expanded, onToggle }) {
         <ul className="consultation-entry-body">
           {hasKioskVitals && (
             <li>
-              Kiosk Intake Vitals: Temp: {v.temperatureC ?? "—"}°C
+              Kiosk Intake Vital Signs: Temp: {v.temperatureC ?? "—"}°C
               {v.isFeverFlagged ? " (Fever Flagged)" : ""} | Height: {v.heightCm ?? "—"} cm | Weight: {v.weightKg ?? "—"} kg | BMI: {v.bmi ?? "—"} {v.bmiCategory ? `(${v.bmiCategory})` : ""}
             </li>
           )}
@@ -159,7 +159,7 @@ function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentI
     {document.submissionDetails?.clearance?.approval && <p className="emr-document-review-remarks"><strong>Approved by:</strong> {document.submissionDetails.clearance.approval.providerName} · {document.submissionDetails.clearance.approval.providerRole}. {document.submissionDetails.clearance.approval.providerStatement}</p>}
     {document.verificationHistory?.length > 0 && <details className="emr-document-details"><summary>Review history</summary><ul>{document.verificationHistory.map((event, index) => <li key={`${event.at || index}-${index}`}>{event.status} · {formatDate(event.at)}{event.actor?.name ? ` · ${event.actor.name}` : ""}{event.remarks ? ` — ${event.remarks}` : ""}</li>)}</ul></details>}
     {document.submissionDetails?.clearance?.requirements?.length > 0 && <details className="emr-document-details"><summary>Verified clearance requirements</summary><ul>{document.submissionDetails.clearance.requirements.map((requirement, index) => <li key={`${requirement.text}-${index}`}>{requirement.text}: {requirement.status?.replaceAll("_", " ")}{requirement.evidence ? ` — ${requirement.evidence}` : ""}</li>)}</ul></details>}
-    <div className="document-actions">{document.recordType === "clearance_certificate" ? <Link className="btn btn-outline btn-sm" to={`/medical-workflows?workflowId=${encodeURIComponent(document.sourceWorkflow || document.submissionDetails?.clearance?.workflowId || "")}`}>View / Print Certificate</Link> : document.fileUrl ? document.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(document._id, document.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <a href={document.fileUrl} target="_blank" rel="noreferrer">View file</a> : <span>No file attached</span>}</div>
+    <div className="document-actions">{document.recordType === "clearance_certificate" ? <Link className="btn btn-outline btn-sm" to={`/medical-workflows?workflowId=${encodeURIComponent(document.sourceWorkflow || document.submissionDetails?.clearance?.workflowId || "")}`}>View / Print Certificate</Link> : document.fileUrl ? document.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View Submitted File</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(document._id, document.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print Submitted File</button></> : <a href={document.fileUrl} target="_blank" rel="noreferrer">View file</a> : <span>No file attached</span>}</div>
   </article>)}</div>;
 }
 
@@ -230,7 +230,7 @@ function MedicalDocumentSubmissions({ files, canReviewDocuments, updatingDocumen
     {file.verificationRemarks && <p className="emr-document-review-remarks"><strong>Review remarks:</strong> {file.verificationRemarks}</p>}
     {Object.keys(file.details || {}).length > 0 && <details className="emr-document-details"><summary>View submitted details</summary><dl>{flattenFormPayload(file.details || {}).map(([key, value]) => <div key={key}><dt>{key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ")}</dt><dd>{value}</dd></div>)}</dl></details>}
     {file.verificationHistory?.length > 0 && <details className="emr-document-details"><summary>Review history</summary><ul>{file.verificationHistory.map((event, index) => <li key={`${event.at || index}-${index}`}>{event.status} · {formatDate(event.at)}{event.actor?.name ? ` · ${event.actor.name}` : ""}{event.remarks ? ` — ${event.remarks}` : ""}</li>)}</ul></details>}
-    <div className="document-actions">{file.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print</button></> : <span>No file attached</span>}</div>
+    <div className="document-actions">{file.name ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(file.id, file.name).catch((error) => window.alert(error.message || "Could not open this document."))}>View Submitted File</button><button type="button" className="btn btn-primary btn-sm" onClick={() => openMedicalDocument(file.id, file.name, { print: true }).catch((error) => window.alert(error.message || "Could not print this document."))}>Print Submitted File</button></> : <span>No file attached</span>}</div>
   </article>)}</div>;
 }
 
@@ -420,7 +420,7 @@ const TABS = [
   { key: "history", label: "Medical History", icon: "📄" },
   { key: "family", label: "Family History", icon: "👪" },
   { key: "forms", label: "Medical Forms", icon: "📝" },
-  { key: "files", label: "Medical Files", icon: "📁" },
+  { key: "files", label: "Documents & Attachments", icon: "📁" },
 ];
 
 export default function EMRPage() {
@@ -674,7 +674,7 @@ export default function EMRPage() {
       {!loadingRecord && record && (
         <div className="emr-detail-card">
           <div className="emr-full-heading">
-            <h1>Patient Full EMR</h1>
+            <h1>Full Medical Record</h1>
             <p>▰ &gt;&gt; Electronic Medical Records</p>
           </div>
           <div className="emr-patient-summary">

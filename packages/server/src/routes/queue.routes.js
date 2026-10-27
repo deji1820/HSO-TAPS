@@ -154,6 +154,26 @@ router.patch("/:id/expiration-exemption", requireAuth, requireRole("nurse", "sup
   res.json(entry);
 });
 
+router.patch("/:id/elevated-vitals-alert", requireAuth, requireRole("nurse", "supervisor", "physician", "doctor", "dentist"), async (req, res) => {
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ message: "Invalid queue entry ID." });
+  const { action, note = "" } = req.body || {};
+  if (!["acknowledge", "resolve"].includes(action)) return res.status(400).json({ message: "Choose acknowledge or resolve." });
+  const entry = await QueueEntry.findById(req.params.id);
+  if (!entry?.elevatedVitalsAlert?.active) return res.status(404).json({ message: "No active elevated-vitals alert was found." });
+  const now = new Date();
+  const alert = entry.elevatedVitalsAlert;
+  if (action === "acknowledge" && !alert.acknowledgedAt) { alert.acknowledgedAt = now; alert.acknowledgedBy = req.user.id; }
+  if (action === "resolve") {
+    if (!alert.acknowledgedAt) return res.status(409).json({ message: "Acknowledge the alert before resolving it." });
+    alert.active = false; alert.resolvedAt = now; alert.resolvedBy = req.user.id;
+  }
+  alert.history.push({ action, actor: req.user.id, at: now, note: String(note).trim().slice(0, 500) });
+  await entry.save();
+  const populated = await QueueEntry.findById(entry._id).populate("student", "studentId firstName lastName").populate("linkedVitals");
+  req.app.get("io")?.to("clinical-queue").emit("queue:update", populated);
+  res.json(populated);
+});
+
 router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "physician", "dentist", "staff"), async (req, res) => {
   const io = req.app.get("io");
   const { status } = req.body;

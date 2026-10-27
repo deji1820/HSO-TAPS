@@ -91,6 +91,7 @@ export async function submitIntake(req, res) {
       priorityLevel: isTempAlert ? "High Priority" : isSelfService ? "Routine Check" : "Standard Priority",
       serviceType,
       reason: isTempAlert ? (isFeverFlagged ? "High Temperature" : "Low Temperature") : reason,
+      ...(isTempAlert ? { elevatedVitalsAlert: { active: true, reason: temperatureStatus, flaggedAt: new Date(), history: [{ action: "flagged", at: new Date(), note: "Existing clinic temperature escalation rule" }] } } : {}),
       requestDetails,
       linkedVitals: vitals?._id,
     });

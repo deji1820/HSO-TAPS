@@ -85,6 +85,12 @@ const MODE_FIELDS = {
   temperature: ["temperatureC"],
 };
 
+const GUIDED_STEPS = {
+  complete: ["temperatureC", "bloodPressure", "heightCm", "weightKg", "review"],
+  physical: ["heightCm", "weightKg", "review"], temperature: ["temperatureC", "review"], bmi: ["heightCm", "weightKg", "review"],
+};
+const STEP_LABELS = { temperatureC: "Temperature", bloodPressure: "Blood pressure", heightCm: "Height", weightKg: "Weight", review: "Review and confirmation" };
+
 const KEYPAD_KEYS = [
   { key: "1", label: "1" },
   { key: "2", label: "2" },
@@ -110,7 +116,12 @@ export default function VitalsEntryScreen({
   isOnline,
 }) {
   const activeFieldKeys = MODE_FIELDS[mode] || MODE_FIELDS.complete;
-  const [activeField, setActiveField] = useState(activeFieldKeys[0]);
+  const firstGuidedStep = (GUIDED_STEPS[mode] || GUIDED_STEPS.complete)[0];
+  const [activeField, setActiveField] = useState(activeFieldKeys.includes(firstGuidedStep) ? firstGuidedStep : activeFieldKeys[0]);
+  const guidedSteps = GUIDED_STEPS[mode] || GUIDED_STEPS.complete;
+  const [stepIndex, setStepIndex] = useState(0);
+  const currentStep = guidedSteps[stepIndex];
+  const [submitting, setSubmitting] = useState(false);
 
   const [values, setValues] = useState(() => {
     const init = {};
@@ -139,6 +150,8 @@ export default function VitalsEntryScreen({
   };
 
   const handleProceed = () => {
+    if (submitting) return;
+    setSubmitting(true);
     const parsedReadings = {};
     activeFieldKeys.forEach((key) => {
       const val = values[key]?.trim();
@@ -148,10 +161,18 @@ export default function VitalsEntryScreen({
     });
     onProceed(parsedReadings);
   };
-
-  const filledCount = activeFieldKeys.filter(
-    (k) => values[k]?.trim() && !isNaN(Number(values[k])) && Number(values[k]) > 0
-  ).length;
+  const advance = () => {
+    if (currentStep === "review") return handleProceed();
+    const nextIndex = Math.min(stepIndex + 1, guidedSteps.length - 1);
+    setStepIndex(nextIndex);
+    if (activeFieldKeys.includes(guidedSteps[nextIndex])) setActiveField(guidedSteps[nextIndex]);
+  };
+  const previous = () => {
+    if (stepIndex === 0) return onBack?.();
+    const previousIndex = stepIndex - 1;
+    setStepIndex(previousIndex);
+    if (activeFieldKeys.includes(guidedSteps[previousIndex])) setActiveField(guidedSteps[previousIndex]);
+  };
 
   const currentFieldConfig = FIELD_CONFIGS[activeField];
 
@@ -164,17 +185,14 @@ export default function VitalsEntryScreen({
           <div className="vitals-entry-card">
             {/* Clean, institutional header aligned with NU Blue */}
             <div className="vitals-entry-header">
-              <h2>Vitals Entry & Measurement Preference</h2>
+              <div><h2>Guided Vital Signs</h2><p>Step {stepIndex + 1} of {guidedSteps.length}: {STEP_LABELS[currentStep]}</p></div>
             </div>
 
             <div className="vitals-entry-body">
               {/* Left Column: Selectable Metric Fields */}
               <div className="vitals-fields-list">
-                <p className="vitals-instruction-hint">
-                  Select a metric to enter known values, or leave blank to measure automatically:
-                </p>
-
-                {activeFieldKeys.map((key) => {
+                <p className="vitals-instruction-hint">Enter a value if available. If it was not measured, leave it blank; the connected equipment will be used where available.</p>
+                {currentStep === "bloodPressure" ? <div className="vitals-field-item active"><strong>Blood pressure</strong><p>Use the clinic blood pressure monitor. It will collect a reading after you review this form.</p><span className="vitals-field-status status-auto">Not yet collected</span></div> : currentStep === "review" ? <div className="vitals-review-list" aria-live="polite">{guidedSteps.filter((key) => key !== "review").map((key) => <p key={key}><strong>{STEP_LABELS[key]}:</strong> {key === "bloodPressure" ? "Will be collected by the blood pressure monitor" : values[key]?.trim() ? `${values[key]} ${FIELD_CONFIGS[key].unit}` : "Not entered - sensor measurement will be attempted where available"}</p>)}</div> : activeFieldKeys.filter((key) => key === currentStep).map((key) => {
                   const cfg = FIELD_CONFIGS[key];
                   const rawVal = values[key];
                   const hasVal = rawVal?.trim() && !isNaN(Number(rawVal)) && Number(rawVal) > 0;
@@ -218,7 +236,7 @@ export default function VitalsEntryScreen({
               </div>
 
               {/* Right Column: Numeric Touch Keypad */}
-              <div className="vitals-keypad-panel">
+              {currentStep !== "review" && currentStep !== "bloodPressure" && <div className="vitals-keypad-panel">
                 <div className="vitals-keypad-hint">
                   Typing for: <strong>{currentFieldConfig?.label} ({currentFieldConfig?.unit})</strong>
                 </div>
@@ -236,25 +254,15 @@ export default function VitalsEntryScreen({
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
             </div>
 
             {/* Bottom Navigation & Action Buttons */}
             <div className="vitals-entry-actions-footer">
-              <button type="button" className="btn-vitals-back" onClick={onBack}>
-                ← Back
-              </button>
-
+              <button type="button" className="btn-vitals-back" onClick={previous}>Back</button>
               <div className="vitals-actions-right">
-                <button type="button" className="btn-vitals-auto" onClick={onAutoScan}>
-                  Run Full Auto Scan
-                </button>
-                <button type="button" className="btn-vitals-proceed" onClick={handleProceed}>
-                  {filledCount === 0
-                    ? "Proceed to Auto Scan →"
-                    : filledCount === activeFieldKeys.length
-                    ? "Confirm Manual Vitals →"
-                    : "Continue (Hybrid Mode) →"}
+                <button type="button" className="btn-vitals-proceed" onClick={advance} disabled={submitting}>
+                  {currentStep === "review" ? "Submit Intake" : "Continue"}
                 </button>
               </div>
             </div>

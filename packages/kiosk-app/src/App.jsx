@@ -527,13 +527,17 @@ export default function App() {
     setShowIdlePrompt(false);
     setIdleCountdown(60);
 
-    if (mobileSessionToken || standaloneDocumentSubmission) {
+    if (mobileSessionToken) {
       idleTimer.current = null;
       return;
     }
 
     idleTimer.current = setTimeout(() => {
       idleTimer.current = null;
+      if (standaloneDocumentSubmission) {
+        window.location.replace(window.location.pathname);
+        return;
+      }
       setShowIdlePrompt(true);
       setIdleCountdown(60);
       idleCountdownInterval.current = setInterval(() => {
@@ -551,7 +555,7 @@ export default function App() {
   resetIdleTimerRef.current = resetIdleTimer;
 
   useEffect(() => {
-    if (mobileSessionToken || mobileProfileToken || standaloneDocumentSubmission) return undefined;
+    if (mobileSessionToken || mobileProfileToken) return undefined;
     const events = ["pointerdown", "keydown", "mousemove", "wheel", "touchstart", "input", "change"];
     const handleActivity = () => resetIdleTimerRef.current?.();
     events.forEach((eventName) => window.addEventListener(eventName, handleActivity, { passive: true }));
@@ -579,6 +583,7 @@ export default function App() {
     setBpWaiting(false);
     const sessionIdToUpdate = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
+    mobileSensorSessionIdRef.current = null;
     submittingRef.current = false;
     setStudent(null);
     setUnrecognizedRfid(false);
@@ -596,6 +601,7 @@ export default function App() {
     setServiceSensorStep(null);
     setCheckInInfo(null);
     setAppointmentSelection(null);
+    setClearanceAppointmentRequirements([]);
     setClearanceAppointmentPurpose(null);
     setClearanceQueueNumber(null);
     setStep("welcome");
@@ -2001,7 +2007,7 @@ async function handleScreeningOptionSelect(mode) {
       )}
       {step === "faq" && <KioskFaqScreen onBack={() => setStep(faqReturnStep)} isOnline={isOnline} />}
       </>}
-      {showIdlePrompt && !mobileSessionToken && !standaloneDocumentSubmission && (
+      {showIdlePrompt && !mobileSessionToken && (
         <div className="kiosk-idle-overlay">
           <section className="kiosk-idle-dialog" role="dialog" aria-modal="true" aria-labelledby="kiosk-idle-title" aria-describedby="kiosk-idle-description">
             <div className="kiosk-idle-icon" aria-hidden="true">2 min</div>

@@ -38,6 +38,14 @@ function notificationTypeLabel(type) {
   return ({ booking_received: "Booking acknowledgment", decision_accepted: "Appointment accepted", decision_rejected: "Appointment rejected" })[type] || "Appointment email";
 }
 
+function attendanceStatus(appointment) {
+  if (appointment.status === "checked_in") return "Checked In";
+  if (appointment.status === "no_show") return "No-show";
+  if (appointment.status === "completed") return "Completed";
+  if (appointment.status === "cancelled") return "Not applicable (cancelled)";
+  return "Not Arrived";
+}
+
 export default function AppointmentDetailsPage({ user }) {
   const { appointmentId } = useParams();
   const [appointment, setAppointment] = useState(null);
@@ -234,6 +242,8 @@ export default function AppointmentDetailsPage({ user }) {
               <LabelValue label="Time">{valueOrDash(appointment.timeSlot)}</LabelValue>
               <LabelValue label="Assigned provider">{valueOrDash(appointment.assignedProvider?.name)}</LabelValue>
               <LabelValue label="Booking status"><Status value={appointment.status} group="booking" /></LabelValue>
+              <LabelValue label="Attendance status">{attendanceStatus(appointment)}</LabelValue>
+              <LabelValue label="Encounter status">{appointment.queueEntry?.encounterStatusLabel || "Not checked in"}</LabelValue>
               <LabelValue label="Decision"><Status value={decision} group="decision" /></LabelValue>
               <LabelValue label="Decision recorded">{displayTimestamp(appointment.decisionAt)}</LabelValue>
               <LabelValue label="Created">{displayTimestamp(appointment.createdAt)}</LabelValue>

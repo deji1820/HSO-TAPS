@@ -274,10 +274,10 @@ export default function ActiveSessionModal({ entry, onClose, onCompleted }) {
 
           <div className="active-session-actions">
             <button className="btn btn-outline" onClick={() => navigate(`/emr?studentId=${student.studentId}`)}>
-              View Full EMR
+              Open Full Medical Record
             </button>
             <button className="btn btn-primary" onClick={handleComplete} disabled={saving || (tab === "clinical" && (!assessment.trim() || !plan.trim()))}>
-              {saving ? "Saving…" : "Complete and Save Session"}
+              {saving ? "Saving…" : "Mark Encounter Complete"}
             </button>
           </div>
         </div>

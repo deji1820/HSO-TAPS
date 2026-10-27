@@ -76,7 +76,7 @@ router.get("/medical-workflows", requireWorkflowRole, async (_req, res) => {
 });
 router.get("/medical-workflows/:id", requireWorkflowRole, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
-  const workflow = await MedicalWorkflow.findById(req.params.id).populate("student", "studentId affiliation firstName lastName department program email").populate("queueEntry", "queueNumber status nursingAssessment appointment").populate("medicalProfile").populate("medicalFile").populate("providerApproval.approvedBy", "name role").populate("events.actor", "name role");
+  const workflow = await MedicalWorkflow.findById(req.params.id).populate("student", "studentId affiliation firstName lastName department program email").populate("queueEntry", "queueNumber status nursingAssessment appointment").populate("medicalProfile").populate("medicalFile").populate("requirements.document", "documentTitle category name contentType examDate").populate("providerApproval.approvedBy", "name role").populate("events.actor", "name role");
   if (!workflow) return res.status(404).json({ message: "Medical workflow not found" });
   res.json(workflow);
 });
@@ -178,6 +178,7 @@ router.patch("/medical-workflows/:id/requirements/:index", requireRole("nurse", 
   requirement.verifiedBy = req.user.id;
   requirement.verifiedAt = new Date();
   requirement.evidence = evidence;
+  requirement.document = requirement.kind === "document" && status === "satisfied" ? req.body.documentId : undefined;
   const missing = hasUnresolvedRequirements(workflow);
   const hasAssessment = Boolean(workflow.assessment?.physicalExam || workflow.assessment?.laboratoryExamination || workflow.assessment?.notes);
   workflow.status = !hasAssessment ? "assessment" : missing ? "requirements_pending" : "ready_for_approval";

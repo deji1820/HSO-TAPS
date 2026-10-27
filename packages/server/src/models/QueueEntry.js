@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getEncounterStatus } from "../services/encounterStatus.js";
 
 /**
  * Live queue row — created the moment a student finishes the kiosk flow
@@ -44,6 +45,16 @@ const queueEntrySchema = new mongoose.Schema(
     expirationExemptionBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     expirationExemptionAt: Date,
     statusHistory: [{ from: String, to: String, actor: String, at: Date, reason: String }],
+    elevatedVitalsAlert: {
+      active: { type: Boolean, default: false },
+      reason: { type: String, enum: ["Fever", "Hypothermia"] },
+      flaggedAt: Date,
+      acknowledgedAt: Date,
+      acknowledgedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      resolvedAt: Date,
+      resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      history: [{ action: String, actor: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, at: Date, note: String }],
+    },
     nursingAssessment: {
       physicalExam: { type: String, maxlength: 4000 },
       laboratoryExamination: { type: String, maxlength: 4000 },
@@ -52,8 +63,11 @@ const queueEntrySchema = new mongoose.Schema(
       recordedAt: Date,
     },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+queueEntrySchema.virtual("encounterStatus").get(function () { return getEncounterStatus(this.status).value; });
+queueEntrySchema.virtual("encounterStatusLabel").get(function () { return getEncounterStatus(this.status).label; });
 
 queueEntrySchema.index({ appointment: 1 }, { unique: true, partialFilterExpression: { appointment: { $type: "objectId" } } });
 queueEntrySchema.index({ status: 1, serviceType: 1, createdAt: 1 });

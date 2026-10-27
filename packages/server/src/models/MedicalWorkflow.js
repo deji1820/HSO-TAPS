@@ -13,7 +13,7 @@ const medicalWorkflowSchema = new mongoose.Schema({
   physicalExamIncluded: { type: Boolean, default: false },
   laboratoryExamIncluded: { type: Boolean, default: false },
   status: { type: String, enum: ["queued", "assessment", "provider_review", "requirements_pending", "ready_for_approval", "approval_in_progress", "approved", "completed", "cancelled", "expired"], default: "queued", index: true },
-  requirements: [{ text: String, kind: String, required: Boolean, conditional: Boolean, condition: String, status: { type: String, enum: ["pending", "satisfied", "not_applicable"], default: "pending" }, verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, verifiedAt: Date, evidence: String }],
+  requirements: [{ text: String, kind: String, required: Boolean, conditional: Boolean, condition: String, status: { type: String, enum: ["pending", "satisfied", "not_applicable"], default: "pending" }, verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, verifiedAt: Date, evidence: String, document: { type: mongoose.Schema.Types.ObjectId, ref: "ExternalDocument" } }],
   assessment: { type: mongoose.Schema.Types.Mixed, default: {} },
   diagnosis: String,
   treatment: String,
