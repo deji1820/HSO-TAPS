@@ -9,6 +9,7 @@ import MobileSensorReadingsScreen from "./screens/MobileSensorReadingsScreen.jsx
 import ProfileCompletionScreen from "./screens/ProfileCompletionScreen.jsx";
 import ProfileCompletionAccessScreen from "./screens/ProfileCompletionAccessScreen.jsx";
 import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen.jsx";
+import ClearanceDocumentSubmissionScreen from "./screens/ClearanceDocumentSubmissionScreen.jsx";
 import "./styles/mobile-flow.css";
 import ConsultationTypeScreen from "./screens/ConsultationTypeScreen.jsx";
 import CheckedInScreen from "./screens/CheckedInScreen.jsx";
@@ -42,6 +43,7 @@ const KIOSK_IDLE_TIMEOUT_MS = 2 * 60_000;
 const KIOSK_IDLE_PROMPT_MS = 60_000;
 const isMock = import.meta.env.VITE_MOCK_HARDWARE === "true";
 const standaloneDocumentSubmission = new URLSearchParams(window.location.search).get("documentSubmission") === "1";
+const clearanceDocumentSubmissionToken = new URLSearchParams(window.location.search).get("clearanceSubmission");
 function hasCompleteProfile(person) {
   const baseComplete = Boolean(person?.dateOfBirth)
     && Boolean(person?.sex && person?.email && person?.guardianContact);
@@ -102,6 +104,7 @@ export default function App() {
   const [clearanceAppointmentPurpose, setClearanceAppointmentPurpose] = useState(null);
   const [clearanceAppointmentRequirements, setClearanceAppointmentRequirements] = useState([]);
   const [clearanceQueueNumber, setClearanceQueueNumber] = useState(null);
+  const [clearanceDocumentSubmissionUrl, setClearanceDocumentSubmissionUrl] = useState("");
   const [walkInComplaints, setWalkInComplaints] = useState([]); // array of complaint keys
   const [medicineSymptoms, setMedicineSymptoms] = useState([]);
   const [medicineSafetyAnswers, setMedicineSafetyAnswers] = useState({});
@@ -1088,6 +1091,8 @@ async function handleClearanceSubmit({ purpose, documents, requirements, acknowl
     requestDetails: JSON.stringify({ purpose, documents, requirements, acknowledged }),
   });
   setClearanceQueueNumber(result?.queueEntry?.queueNumber ?? null);
+  const token = result?.clearanceWorkflow?.documentSubmissionToken;
+  setClearanceDocumentSubmissionUrl(token ? `${window.location.origin}${window.location.pathname}?clearanceSubmission=${encodeURIComponent(token)}` : "");
   setStep("clearanceResult");
 }
 
@@ -1643,6 +1648,8 @@ async function handleScreeningOptionSelect(mode) {
     /></div>;
   }
 
+  if (clearanceDocumentSubmissionToken) return <ClearanceDocumentSubmissionScreen token={clearanceDocumentSubmissionToken} isOnline={isOnline} />;
+
   return (
     <div className={mobileSessionToken || mobileProfileToken ? "mobile-checkin-app" : undefined}>
       {mobileProfileToken && mobileProfileStatus === "loading" && <main className="mobile-session-status"><h1>Opening your profile form</h1><p>Verifying your roster record…</p></main>}
@@ -1783,6 +1790,7 @@ async function handleScreeningOptionSelect(mode) {
       {step === "clearanceResult" && (
   <ClearanceResultScreen
     queueNumber={clearanceQueueNumber}
+          documentSubmissionUrl={clearanceDocumentSubmissionUrl}
     onDone={onFlowDone}
     onFaq={openFaq}
     isOnline={isOnline}

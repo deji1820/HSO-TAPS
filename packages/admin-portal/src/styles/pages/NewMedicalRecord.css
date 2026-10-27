@@ -35,5 +35,9 @@
 .result-fields input, .result-fields select, .result-fields textarea { margin-top: 5px; }
 .required-documents { padding: 28px; color: #777; font-size: .85rem; text-align: center; border: 1px solid #eee; }
 .record-save-notice { padding: 12px 16px; color: #765512; background: #fff5d9; border: 1px solid #f0d990; }
+.clearance-submission-qr { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; padding: 12px; border: 1px solid #d8e1ed; background: #fff; color: #344054; }
+.clearance-submission-qr p { margin: 5px 0; }
+.clearance-submission-qr small { display: block; max-width: 680px; overflow-wrap: anywhere; color: #667085; font-size: .72rem; }
+.clearance-submission-qr img { width: 160px; height: 160px; padding: 4px; border: 1px solid #e5e7eb; background: #fff; }
 .record-footer-actions .btn-danger { background: #e33a3a; color: #fff; border-radius: 2px; }
 @media (max-width: 700px) { .new-record-grid, .record-summary, .exam-grid, .result-fields { grid-template-columns: 1fr; } .exam-wide { grid-column: auto; } .record-section { padding: 16px; } .record-footer-actions { flex-wrap: wrap; } }

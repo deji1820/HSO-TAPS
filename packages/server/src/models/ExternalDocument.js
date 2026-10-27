@@ -10,6 +10,8 @@ const externalDocumentSchema = new mongoose.Schema(
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
     recordType: { type: String, enum: ["submission", "clearance_certificate", "health_declaration"], default: "submission", index: true },
     sourceWorkflow: { type: mongoose.Schema.Types.ObjectId, ref: "MedicalWorkflow" },
+    clearanceWorkflow: { type: mongoose.Schema.Types.ObjectId, ref: "MedicalWorkflow", index: true },
+    clearanceRequirementText: String,
     sourceDocument: { type: mongoose.Schema.Types.ObjectId, ref: "ExternalDocument" },
     documentTitle: String, // "Health Status Declaration"
     formSource: { type: String, default: "MS Forms" },

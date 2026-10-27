@@ -201,3 +201,7 @@
   .clearance-purpose-panel select { width: 100%; }
   .clearance-faq { bottom: 20px; }
 }
+.clearance-upload-qr { margin: 18px auto; padding: 16px; max-width: 420px; border: 1px solid #dbe4f0; border-radius: 12px; background: #fff; text-align: center; }
+.clearance-upload-qr h2 { margin: 0 0 8px; color: var(--nu-blue-dark); font-size: 1rem; }
+.clearance-upload-qr p { margin: 4px 0 10px; font-size: .82rem; }
+.clearance-upload-qr img { width: 180px; height: 180px; padding: 8px; border: 1px solid #e5e7eb; background: #fff; }

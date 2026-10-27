@@ -2,10 +2,12 @@ import Student from "../models/Student.js";
 import VitalsLog from "../models/VitalsLog.js";
 import QueueEntry from "../models/QueueEntry.js";
 import ExternalDocument from "../models/ExternalDocument.js";
+import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 import { healthDeclarationToPdf } from "../services/healthDeclarationPdf.js";
 import { areDocumentNotificationsConfigured, sendDocumentStatusNotification } from "../services/documentNotifications.service.js";
 import { findClearanceRequirement, findDocumentPurposeRequirement } from "../services/clearanceRequirements.js";
+import { createMedicalClearanceWorkflow } from "../services/medicalClearanceWorkflow.js";
 import { applyDeclarationToPatient, declarationStatusLabel, declarationSubmissionAction, materialDeclarationChanges, normalizeDeclaration, validateDeclaration } from "../services/patientInformation.js";
 
 // Per HSO-TAP_SYSTEM_NOTES: Hypothermia < 35.5, Normal 35.5-37.5, Fever >= 37.8
@@ -84,8 +86,9 @@ export async function submitIntake(req, res) {
   const needsQueueEntry = !isSelfService || isTempAlert; // the override rule
 
   let queueEntry = null;
+  let clearanceWorkflow = null;
   if (needsQueueEntry) {
-    queueEntry = await QueueEntry.create({
+    const queueData = {
       student: student._id,
       queueNumber: await nextQueueNumber(serviceType),
       priorityLevel: isTempAlert ? "High Priority" : isSelfService ? "Routine Check" : "Standard Priority",
@@ -94,13 +97,24 @@ export async function submitIntake(req, res) {
       ...(isTempAlert ? { elevatedVitalsAlert: { active: true, reason: temperatureStatus, flaggedAt: new Date(), history: [{ action: "flagged", at: new Date(), note: "Existing clinic temperature escalation rule" }] } } : {}),
       requestDetails,
       linkedVitals: vitals?._id,
-    });
+    };
+    if (serviceType === "Medical Clearance") {
+      clearanceWorkflow = createMedicalClearanceWorkflow({ student, purpose: reason, actor: null });
+      queueData.medicalWorkflow = clearanceWorkflow._id;
+    }
+    queueEntry = await QueueEntry.create(queueData);
+    if (clearanceWorkflow) {
+      clearanceWorkflow.queueEntry = queueEntry._id;
+      clearanceWorkflow.events.push({ type: "queued", description: `Walk-in clearance added to the clinical queue (${queueEntry.queueNumber}).`, at: new Date() });
+      await clearanceWorkflow.save();
+    }
     io?.to("clinical-queue").to("frontdesk-queue").emit("queue:new", { _id: queueEntry._id });
   }
 
   res.status(201).json({
     vitals,
     queueEntry,
+    ...(clearanceWorkflow ? { clearanceWorkflow: { id: clearanceWorkflow._id, purpose: clearanceWorkflow.purpose, documentSubmissionToken: clearanceWorkflow.documentSubmissionToken } } : {}),
     overrideTriggered: isSelfService && isTempAlert,
     message:
       isSelfService && isTempAlert
@@ -118,9 +132,17 @@ export async function submitDocument(req, res) {
   if (typeof fileData !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(fileData)) {
     return res.status(400).json({ message: "The uploaded file is invalid." });
   }
-  const student = await Student.findOne({ $or: [{ studentId }, { rfidTagUid: String(studentId).toUpperCase() }] });
+  const clearanceSubmissionToken = String(req.body?.clearanceSubmissionToken || "").trim();
+  const clearanceWorkflow = clearanceSubmissionToken
+    ? await MedicalWorkflow.findOne({ documentSubmissionToken: clearanceSubmissionToken }).select("+documentSubmissionToken").populate("student", "studentId employeeId firstName lastName email affiliation program department")
+    : null;
+  if (clearanceSubmissionToken && (!clearanceWorkflow || !clearanceWorkflow.student || !["assessment", "requirements_pending", "ready_for_approval"].includes(clearanceWorkflow.status))) return res.status(404).json({ message: "This clearance document link is invalid or no longer accepting documents." });
+  const student = clearanceWorkflow
+    ? clearanceWorkflow.student
+    : await Student.findOne({ $or: [{ studentId }, { rfidTagUid: String(studentId).toUpperCase() }] });
   if (!student) return res.status(404).json({ message: "No student or employee record matched that ID." });
-  const purpose = submissionDetails?.purpose;
+  if (clearanceWorkflow && studentId && ![student.studentId, student.employeeId, student.rfidTagUid].filter(Boolean).some((value) => String(value).toLowerCase() === String(studentId).toLowerCase())) return res.status(403).json({ message: "This secure link belongs to a different patient." });
+  const purpose = clearanceWorkflow?.purpose || submissionDetails?.purpose;
   if (purpose && !findDocumentPurposeRequirement(student.affiliation, purpose)) {
     return res.status(400).json({ message: "Choose a document purpose that matches the patient's affiliation." });
   }
@@ -130,6 +152,9 @@ export async function submitDocument(req, res) {
   if (bytes.length > 12 * 1024 * 1024) return res.status(413).json({ message: "Files cannot exceed the current 12 MB server limit." });
   const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/json"]);
   if (contentType && !allowedTypes.has(contentType)) return res.status(415).json({ message: "Upload a PDF, JPG, PNG, DOCX, or JSON health declaration file." });
+
+  const clearanceRequirementText = String(req.body?.clearanceRequirementText || "").trim();
+  if (clearanceWorkflow && (!clearanceRequirementText || !clearanceWorkflow.requirements.some((item) => item.kind === "document" && item.text === clearanceRequirementText))) return res.status(400).json({ message: "Choose a document requirement for this clearance." });
 
   let storedBytes = bytes;
   let storedContentType = contentType;
@@ -230,6 +255,7 @@ export async function submitDocument(req, res) {
 
   const document = await ExternalDocument.create({
     student: student._id,
+    ...(clearanceWorkflow ? { clearanceWorkflow: clearanceWorkflow._id, clearanceRequirementText } : {}),
     documentTitle: title,
     formSource: "Kiosk Document Submission",
     category,
@@ -237,7 +263,7 @@ export async function submitDocument(req, res) {
     contentType: storedContentType,
     fileData: storedBytes,
     examDate: new Date(examDate),
-    submissionDetails: submissionDetails || {},
+    submissionDetails: { ...(submissionDetails || {}), ...(clearanceWorkflow ? { purpose: clearanceWorkflow.purpose, clearanceRequirementText } : {}) },
     status: "Pending",
     notificationEmail: student.email || notificationEmail,
     submittedAt: new Date(),
@@ -249,6 +275,15 @@ export async function submitDocument(req, res) {
     console.warn(`[Email] Pending notice not started for document ${document._id}: email settings are incomplete.`);
   }
   res.status(201).json({ id: document._id, name: document.name, category: document.category, status: document.status, notificationQueued, notificationMessage: notificationQueued ? undefined : "Email settings are incomplete on the server." });
+}
+
+export async function getClearanceDocumentSubmission(req, res) {
+  const token = String(req.params.token || "");
+  if (!/^[a-f\d]{64}$/i.test(token)) return res.status(400).json({ message: "Invalid clearance document link." });
+  const workflow = await MedicalWorkflow.findOne({ documentSubmissionToken: token }).select("+documentSubmissionToken").populate("student", "studentId employeeId firstName lastName email affiliation program department");
+  if (!workflow || !workflow.student || !["assessment", "requirements_pending", "ready_for_approval"].includes(workflow.status)) return res.status(404).json({ message: "This clearance document link is invalid or no longer accepting documents." });
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.json({ workflowId: workflow._id, purpose: workflow.purpose, affiliation: workflow.affiliation, requirements: workflow.requirements.filter((item) => item.kind === "document").map((item) => ({ text: item.text, required: item.required, conditional: item.conditional, condition: item.condition })), student: workflow.student });
 }
 
 export async function getHealthDeclarationStatus(req, res) {

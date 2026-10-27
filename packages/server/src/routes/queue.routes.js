@@ -43,12 +43,14 @@ router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "de
   const queryFilter = {
     status: { $in: providerRole ? ["awaiting_provider", "provider_in_session"] : ["waiting", "called", "in_session"] },
   };
-  if (providerRole) queryFilter.serviceType = role === "dentist" ? "Dental Consultation" : "Medical Consultation";
+  if (role === "dentist") queryFilter.serviceType = "Dental Consultation";
+  else if (role === "physician") queryFilter.serviceType = { $in: ["Medical Consultation", "Medical Clearance"] };
+  else if (providerRole) queryFilter.serviceType = "Medical Consultation";
   else queryFilter.serviceType = { $ne: "Quick Health Screening" };
   let query = QueueEntry.find(queryFilter)
     .populate("student", "studentId affiliation firstName lastName program department yearLevel yearLevelOverride")
     .sort({ createdAt: 1 });
-  if (clinicalRole) query = query.populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded").populate("consultationRecord");
+  if (clinicalRole) query = query.populate("linkedVitals").populate("medicalWorkflow").populate("consultationRecord");
   const entries = await query;
   const decoratedStudents = await decoratePatients(entries.map((entry) => entry.student));
   entries.forEach((entry, index) => { entry.student = decoratedStudents[index]; });
@@ -102,7 +104,8 @@ router.get("/history", requireAuth, requireRole("nurse", "supervisor", "physicia
   // Filter before pagination so a provider's routed entries cannot be pushed off
   // the page by another specialty's queue history. This also limits the records
   // returned to each provider to the consultation type they handle.
-  if (role === "physician" || role === "doctor") match.serviceType = "Medical Consultation";
+  if (role === "physician") match.serviceType = { $in: ["Medical Consultation", "Medical Clearance"] };
+  else if (role === "doctor") match.serviceType = "Medical Consultation";
   else if (role === "dentist") match.serviceType = "Dental Consultation";
   if (fromStart || toStart) {
     match.createdAt = {
@@ -195,7 +198,7 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
   };
   const transition = transitions[status];
   if (!transition || !transition.roles.includes(role)) return res.status(403).json({ message: "You do not have access to this queue action" });
-  const current = await QueueEntry.findById(req.params.id).select("status serviceType");
+  const current = await QueueEntry.findById(req.params.id).select("status serviceType medicalWorkflow");
   if (!current) return res.status(404).json({ message: "Queue entry not found" });
   const isConsultation = ["Medical Consultation", "Dental Consultation"].includes(current.serviceType);
   if (status === "in_session" && current.status === "in_session" && isNurse && isConsultation) {
@@ -220,9 +223,15 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
     return res.status(409).json({ message: "This queue entry has already been called or is no longer active" });
   }
   if (status === "awaiting_provider" && !isConsultation) return res.status(403).json({ message: "Only medical and dental consultations are routed from nursing to a provider." });
-  if (status === "provider_in_session" && !isConsultation) return res.status(403).json({ message: "Provider handoff is only used for medical and dental consultations." });
-  if (status === "provider_in_session" && !providerRoleMatches(current.serviceType, role)) {
+  const isClearance = current.serviceType === "Medical Clearance";
+  if (status === "provider_in_session" && !isConsultation && !isClearance) return res.status(403).json({ message: "Provider handoff is only used for medical, dental, and medical-clearance workflows." });
+  if (status === "provider_in_session" && isConsultation && !providerRoleMatches(current.serviceType, role)) {
     return res.status(403).json({ message: "This encounter must be handled by the matching physician or dentist." });
+  }
+  if (status === "provider_in_session" && isClearance) {
+    if (role !== "physician") return res.status(403).json({ message: "Medical clearance approval must be handled by a physician." });
+    const workflow = await MedicalWorkflow.findOne({ _id: current.medicalWorkflow, service: "Medical Clearance", status: "ready_for_approval" }).select("_id");
+    if (!workflow) return res.status(409).json({ message: "The clearance assessment and requirement review must be complete before provider approval." });
   }
   const timestampField = { called: "calledAt", in_session: "startedAt", provider_in_session: "providerStartedAt", completed: "completedAt" }[status];
   const changedAt = new Date();
@@ -249,7 +258,7 @@ router.patch("/:id/status", requireAuth, requireRole("nurse", "supervisor", "phy
     }
     update.$set.nursingAssessment = { physicalExam, laboratoryExamination, notes, physicalExamIncluded: Boolean(assessment.physicalExamIncluded), laboratoryExamIncluded: Boolean(assessment.laboratoryExamIncluded), fields: sanitizeNursingFields(assessment.fields), recordedBy: req.user.id, recordedAt: new Date() };
   }
-  const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: current.status }, update, { new: true }).populate("student").populate("linkedVitals").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded").populate("consultationRecord");
+  const entry = await QueueEntry.findOneAndUpdate({ _id: req.params.id, status: current.status }, update, { new: true }).populate("student").populate("linkedVitals").populate("medicalWorkflow").populate("consultationRecord");
   if (!entry) return res.status(409).json({ message: "This queue entry has already changed" });
   const workflow = await MedicalWorkflow.findOne({ queueEntry: entry._id });
   if (workflow) {

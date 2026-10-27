@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getClearanceRequirements, getStudents, saveMedicalProfile, startMedicalWorkflow } from "../services/api.js";
 import useMedicineInventory, { inventoryItemLabel, isInventoryItemUnavailable } from "../hooks/useMedicineInventory.js";
+import ClearanceSubmissionQr from "../components/ClearanceSubmissionQr.jsx";
 import "../styles/pages/NewMedicalRecord.css";
 
 const PURPOSES = ["Medical Consultation", "Dental Consultation", "Prescription & Medicine", "Medical Clearance"];
@@ -67,7 +68,7 @@ export default function NewMedicalRecordPage() {
     setSaving(true);
     setSaveError("");
     try {
-      if (["Medical Consultation", "Dental Consultation"].includes(purpose)) {
+      if (["Medical Consultation", "Dental Consultation", "Medical Clearance"].includes(purpose)) {
         const workflow = await startMedicalWorkflow(student._id, { service: purpose, purpose: purpose === "Medical Clearance" ? clearancePurpose : fields.visit_purpose || purpose, fields, physicalExamIncluded: physicalOn, laboratoryExamIncluded: labOn, requestKey: submissionKey.current });
         setStartedWorkflow(workflow);
       } else {
@@ -101,7 +102,7 @@ export default function NewMedicalRecordPage() {
         <Section title="Medical Result"><div className="result-fields"><label>Findings<input name="medical_findings" className="text-input" /></label><label>Diagnosis<select name="diagnosis" className="text-input"><option value="">Select diagnosis</option><option>Pending assessment</option></select></label><label>Treatment / Remarks<textarea name="treatment_remarks" className="text-input" rows={2} /></label><label>Medicine Issued<select name="medicine_issued" className="text-input"><option value="">{inventoryLoading ? "Loading inventory…" : "Select medicine"}</option>{inventoryItems.map((item) => <option key={item._id} value={item.name} disabled={isInventoryItemUnavailable(item)}>{inventoryItemLabel(item)}</option>)}</select>{inventoryError && <small className="error-text">{inventoryError}</small>}{!inventoryLoading && !inventoryItems.length && <small className="record-hint">No active inventory items are available.</small>}</label></div></Section>
       </>}
       </div>
-      {saveNotice && <div className="record-save-notice" role="status">{startedWorkflow ? <>{purpose} added to the clinical queue; the nurse and {purpose === "Dental Consultation" ? "dentist" : "physician"} assessment will continue from the queue. <Link to="/dashboard">Open clinical queue</Link></> : purpose === "Medical Clearance" ? "Clearance record saved. After a nurse verifies the submitted document for this purpose, its certificate will appear beside the document in Full EMR → Documents & Attachments." : "Medical profile saved. It will appear in this patient's EMR history."}</div>}
+      {saveNotice && <div className="record-save-notice" role="status">{startedWorkflow ? <>{purpose === "Medical Clearance" ? `${clearancePurpose} clearance` : purpose} added to the clinical queue for assessment and approval. <Link to="/dashboard">Open clinical queue</Link>{purpose === "Medical Clearance" && <ClearanceSubmissionQr token={startedWorkflow.documentSubmissionToken} purpose={clearancePurpose} />}</> : "Medical profile saved. It will appear in this patient's EMR history."}</div>}
       {saveError && <p className="error-text" role="alert">{saveError}</p>}
       <div className="record-footer-actions"><Link className="btn btn-primary" to={`/emr?studentId=${student.studentId}`}>Open Full Medical Record</Link><Link className="btn btn-danger" to="/dashboard">Cancel</Link><button type="button" className="btn btn-success" onClick={saveRecord} disabled={saving || saveNotice || (purpose === "Medical Clearance" && (!selectedClearance || clearanceRequirementsLoading || Boolean(clearanceRequirementsError)))}>{saving ? "Saving…" : saveNotice ? "Saved" : "Save"}</button></div>
     </>}

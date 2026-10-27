@@ -11,6 +11,7 @@ import { sendAppointmentDecisionNotification, retryAppointmentNotification } fro
 import { escapeRegex, parseAppointmentListFilters } from "../services/appointmentListFilters.js";
 import { checkInEligibility } from "../services/appointmentCheckIn.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
+import { createMedicalClearanceWorkflow } from "../services/medicalClearanceWorkflow.js";
 import { getAppointmentWeekdays, findAvailableProviders, isProviderSchedulingConfigured } from "../services/providerScheduling.service.js";
 import { PROVIDER_SERVICES, providerRoleMatches, slotFitsSchedule, validWeekdays } from "../services/providerAvailability.js";
 import { decoratePatientYearLevel } from "../services/patientInformation.js";
@@ -393,6 +394,18 @@ export async function checkInAppointment(req, res) {
         reason: current.purpose || "Scheduled appointment",
       }], { session });
       queueEntry = created[0];
+      if (current.serviceType === "Medical Clearance") {
+        const student = await Student.findById(current.student).session(session);
+        if (!student) {
+          const conflict = new Error("The patient record is unavailable for this clearance.");
+          conflict.appointmentConflict = true;
+          throw conflict;
+        }
+        const workflow = createMedicalClearanceWorkflow({ student, purpose: current.purpose, queueEntry: queueEntry._id, actor: req.user.id });
+        await workflow.save({ session });
+        queueEntry.medicalWorkflow = workflow._id;
+        await queueEntry.save({ session });
+      }
       appointment = await Appointment.findOneAndUpdate(
         { _id: current._id, status: "scheduled", decisionStatus: "accepted", $or: [{ queueEntry: { $exists: false } }, { queueEntry: null }] },
         { $set: { status: "checked_in", checkedInAt, checkedInBy: req.user.id, queueEntry: queueEntry._id } },

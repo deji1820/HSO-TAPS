@@ -11,6 +11,7 @@ import MedicalProfile from "../models/MedicalProfile.js";
 import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import User from "../models/User.js";
 import { findClearanceRequirement } from "../services/clearanceRequirements.js";
+import { createMedicalClearanceWorkflow } from "../services/medicalClearanceWorkflow.js";
 import { providerRoleMatches } from "../services/providerAvailability.js";
 import { clearancePurposeFor, issueVerifiedClearanceDocument } from "../services/clearanceCertificate.service.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
@@ -33,6 +34,18 @@ const requireWorkflowRole = requireRole("nurse", "supervisor", "physician", "den
 
 function pushWorkflowEvent(workflow, type, description, actor) {
   workflow.events.push({ type, description, actor, at: new Date() });
+}
+
+async function routeReadyClearanceToPhysician(workflow, req, actor) {
+  if (workflow.status !== "ready_for_approval" || !workflow.queueEntry) return;
+  const queueEntry = await QueueEntry.findOneAndUpdate(
+    { _id: workflow.queueEntry, status: "in_session" },
+    { $set: { status: "awaiting_provider" }, $push: { statusHistory: { from: "in_session", to: "awaiting_provider", actor, at: new Date(), reason: "Clearance assessment and required-document review are ready for physician approval." } } },
+    { new: true },
+  ).populate("student", "studentId affiliation firstName lastName program department").populate("medicalWorkflow");
+  if (!queueEntry) return;
+  req.app.get("io")?.to("clinical-queue").emit("queue:update", queueEntry);
+  req.app.get("io")?.to("frontdesk-queue").emit("queue:update", { _id: queueEntry._id, status: queueEntry.status, queueNumber: queueEntry.queueNumber });
 }
 
 function matchesRequiredDocument(requirementText, document) {
@@ -77,55 +90,46 @@ router.post("/students/:id/medical-workflows", requireRole("nurse", "supervisor"
   const { service, purpose, fields = {}, physicalExamIncluded = false, laboratoryExamIncluded = false, requestKey } = req.body || {};
   const idempotencyKey = String(requestKey || "").trim();
   if (idempotencyKey.length < 8 || idempotencyKey.length > 120) return res.status(400).json({ message: "A valid request key is required to prevent duplicate records." });
-  const priorRequest = await MedicalWorkflow.findOne({ requestKey: idempotencyKey });
+  const priorRequest = await MedicalWorkflow.findOne({ requestKey: idempotencyKey }).select("+documentSubmissionToken");
   if (priorRequest) {
     if (String(priorRequest.student) !== req.params.id || priorRequest.service !== service || priorRequest.purpose !== String(purpose || "").trim()) return res.status(409).json({ message: "This request key has already been used for a different medical record." });
     return res.status(200).json(await priorRequest.populate("student", "studentId affiliation firstName lastName").populate("queueEntry", "queueNumber status"));
   }
-  if (!["Medical Consultation", "Dental Consultation"].includes(service)) return res.status(400).json({ message: "Only medical and dental consultations use the clinical consultation queue." });
+  if (!["Medical Consultation", "Dental Consultation", "Medical Clearance"].includes(service)) return res.status(400).json({ message: "Choose a supported clinical service." });
   if (typeof purpose !== "string" || !purpose.trim()) return res.status(400).json({ message: "Visit purpose is required." });
   if (!fields || typeof fields !== "object" || Array.isArray(fields)) return res.status(400).json({ message: "Record fields must be an object." });
   const student = await Student.findById(req.params.id);
   if (!student || !student.isActive) return res.status(404).json({ message: "Active patient not found." });
-  let requirementSet = null;
-  if (service === "Medical Clearance") {
-    requirementSet = findClearanceRequirement(student.affiliation, purpose);
-    if (!requirementSet) return res.status(400).json({ message: "That clearance purpose is not valid for this patient's affiliation." });
-  }
-  const workflow = new MedicalWorkflow({
-    student: student._id, requestKey: idempotencyKey, service, purpose: purpose.trim(), affiliation: student.affiliation,
-    initialFields: fields, physicalExamIncluded: Boolean(physicalExamIncluded), laboratoryExamIncluded: Boolean(laboratoryExamIncluded),
-    status: service === "Medical Clearance" ? "assessment" : "queued",
-    requirements: (requirementSet?.requirements || []).map((item) => ({ text: item.text, kind: item.kind, required: item.conditional ? false : Boolean(item.required || item.kind === "action"), conditional: Boolean(item.conditional), condition: item.condition || "" })),
-    events: [{ type: "created", description: `New ${service.toLowerCase()} workflow started from the staff medical record.`, actor: req.user.id, at: new Date() }],
-  });
-  if (service !== "Medical Clearance") {
-    const queueEntry = await QueueEntry.create({ student: student._id, medicalWorkflow: workflow._id, queueNumber: await nextQueueNumber(service), priorityLevel: "Standard Priority", serviceType: service, reason: "Staff-created medical record", requestDetails: purpose.trim(), status: "waiting" });
-    workflow.queueEntry = queueEntry._id;
-    pushWorkflowEvent(workflow, "queued", `Added to the ${service.toLowerCase()} clinical queue (${queueEntry.queueNumber}).`, req.user.id);
-  }
+  if (service === "Medical Clearance" && !findClearanceRequirement(student.affiliation, purpose)) return res.status(400).json({ message: "That clearance purpose is not valid for this patient's affiliation." });
+  const workflow = service === "Medical Clearance"
+    ? createMedicalClearanceWorkflow({ student, purpose, requestKey: idempotencyKey, fields, physicalExamIncluded, laboratoryExamIncluded, actor: req.user.id })
+    : new MedicalWorkflow({ student: student._id, requestKey: idempotencyKey, service, purpose: purpose.trim(), affiliation: student.affiliation, initialFields: fields, physicalExamIncluded: Boolean(physicalExamIncluded), laboratoryExamIncluded: Boolean(laboratoryExamIncluded), status: "queued", events: [{ type: "created", description: `New ${service.toLowerCase()} workflow started from the staff medical record.`, actor: req.user.id, at: new Date() }] });
+  const queueEntry = await QueueEntry.create({ student: student._id, medicalWorkflow: workflow._id, queueNumber: await nextQueueNumber(service), priorityLevel: "Standard Priority", serviceType: service, reason: "Staff-created medical record", requestDetails: purpose.trim(), status: "waiting" });
+  workflow.queueEntry = queueEntry._id;
+  pushWorkflowEvent(workflow, "queued", `Added to the ${service.toLowerCase()} clinical queue (${queueEntry.queueNumber}).`, req.user.id);
   try {
     await workflow.save();
   } catch (saveError) {
     if (saveError?.code !== 11000) throw saveError;
     if (workflow.queueEntry) await QueueEntry.deleteOne({ _id: workflow.queueEntry });
-    const existing = await MedicalWorkflow.findOne({ requestKey: idempotencyKey });
+    const existing = await MedicalWorkflow.findOne({ requestKey: idempotencyKey }).select("+documentSubmissionToken");
     if (!existing) throw saveError;
     return res.status(200).json(await existing.populate("student", "studentId affiliation firstName lastName").populate("queueEntry", "queueNumber status"));
   }
   const io = req.app.get("io");
   if (workflow.queueEntry) {
-    const queueEntry = await QueueEntry.findById(workflow.queueEntry).populate("student").populate("medicalWorkflow", "purpose initialFields physicalExamIncluded laboratoryExamIncluded");
-    io?.to("clinical-queue").emit("queue:update", queueEntry);
-    io?.to("frontdesk-queue").emit("queue:update", { _id: queueEntry._id, status: queueEntry.status, queueNumber: queueEntry.queueNumber });
+    const populatedQueueEntry = await QueueEntry.findById(workflow.queueEntry).populate("student").populate("medicalWorkflow");
+    io?.to("clinical-queue").emit("queue:update", populatedQueueEntry);
+    io?.to("frontdesk-queue").emit("queue:update", { _id: populatedQueueEntry._id, status: populatedQueueEntry.status, queueNumber: populatedQueueEntry.queueNumber });
   }
-  res.status(201).json(await MedicalWorkflow.findById(workflow._id).populate("student", "studentId affiliation firstName lastName").populate("queueEntry", "queueNumber status"));
+  res.status(201).json(await MedicalWorkflow.findById(workflow._id).select("+documentSubmissionToken").populate("student", "studentId affiliation firstName lastName").populate("queueEntry", "queueNumber status"));
 });
 router.post("/medical-workflows/:id/assessment", requireRole("nurse", "supervisor"), async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({ message: "Invalid workflow ID" });
   const workflow = await MedicalWorkflow.findById(req.params.id);
   if (!workflow) return res.status(404).json({ message: "Medical workflow not found." });
   if (workflow.service !== "Medical Clearance" || !["assessment", "requirements_pending", "ready_for_approval"].includes(workflow.status)) return res.status(409).json({ message: "This workflow is not accepting nursing clearance assessments." });
+  if (workflow.queueEntry && await QueueEntry.exists({ _id: workflow.queueEntry, status: { $in: ["awaiting_provider", "provider_in_session", "completed"] } })) return res.status(409).json({ message: "This clearance has been handed to the physician and its nursing assessment is locked." });
   const assessment = req.body?.assessment || {};
   const allowed = ["physicalExam", "laboratoryExamination", "notes"];
   const nextAssessment = Object.fromEntries(allowed.map((key) => [key, String(assessment[key] || "").trim().slice(0, 4000)]));
@@ -135,6 +139,7 @@ router.post("/medical-workflows/:id/assessment", requireRole("nurse", "superviso
   workflow.status = missing ? "requirements_pending" : "ready_for_approval";
   pushWorkflowEvent(workflow, "assessment", "Nursing clearance assessment saved.", req.user.id);
   await workflow.save();
+  await routeReadyClearanceToPhysician(workflow, req, req.user.id);
   res.json(await workflow.populate("student", "studentId affiliation firstName lastName"));
 });
 router.patch("/medical-workflows/:id/requirements/:index", requireRole("nurse", "supervisor"), async (req, res) => {
@@ -143,6 +148,7 @@ router.patch("/medical-workflows/:id/requirements/:index", requireRole("nurse", 
   if (!Number.isInteger(index) || index < 0) return res.status(400).json({ message: "Invalid requirement index" });
   const workflow = await MedicalWorkflow.findById(req.params.id);
   if (!workflow) return res.status(404).json({ message: "Medical workflow not found." });
+  if (workflow.queueEntry && await QueueEntry.exists({ _id: workflow.queueEntry, status: { $in: ["awaiting_provider", "provider_in_session", "completed"] } })) return res.status(409).json({ message: "This clearance has been handed to the physician and its requirement review is locked." });
   const requirement = workflow.requirements[index];
   if (!requirement) return res.status(404).json({ message: "Requirement not found." });
   if (["approval_in_progress", "approved", "completed"].includes(workflow.status)) return res.status(409).json({ message: "This workflow is locked while approval is in progress or after approval." });
@@ -152,8 +158,9 @@ router.patch("/medical-workflows/:id/requirements/:index", requireRole("nurse", 
   if (requirement.kind === "action" && status === "satisfied" && !evidence) return res.status(400).json({ message: "Enter a brief note describing how this action was completed." });
   if (requirement.kind === "document" && status === "satisfied") {
     if (!validId(req.body?.documentId)) return res.status(400).json({ message: "Select a verified patient document to satisfy this requirement." });
-    const document = await ExternalDocument.findOne({ _id: req.body.documentId, student: workflow.student, status: "Verified" }).select("documentTitle category name submissionDetails examDate");
+    const document = await ExternalDocument.findOne({ _id: req.body.documentId, student: workflow.student, status: "Verified", $or: [{ clearanceWorkflow: { $exists: false } }, { clearanceWorkflow: workflow._id }] }).select("documentTitle category name submissionDetails examDate clearanceWorkflow clearanceRequirementText");
     if (!document) return res.status(400).json({ message: "Only a verified document belonging to this patient can satisfy this requirement." });
+    if (document.clearanceWorkflow && document.clearanceRequirementText !== requirement.text) return res.status(400).json({ message: "This document was submitted for a different clearance requirement." });
     if (!matchesRequiredDocument(requirement.text, document)) return res.status(400).json({ message: "The verified document type does not match this clearance requirement." });
     if (!hasCurrentExamDate(requirement.text, document)) return res.status(400).json({ message: "The exam or issue date is missing, in the future, or outside the validity period for this requirement." });
     evidence = [document.documentTitle, document.category, document.name].filter(Boolean).join(" — ");
@@ -176,6 +183,7 @@ router.patch("/medical-workflows/:id/requirements/:index", requireRole("nurse", 
   workflow.status = !hasAssessment ? "assessment" : missing ? "requirements_pending" : "ready_for_approval";
   pushWorkflowEvent(workflow, "requirement", `${requirement.text}: ${status.replaceAll("_", " ")}.`, req.user.id);
   await workflow.save();
+  await routeReadyClearanceToPhysician(workflow, req, req.user.id);
   res.json(workflow);
 });
 router.post("/medical-workflows/:id/approve", requireRole("physician"), async (req, res) => {
@@ -183,6 +191,7 @@ router.post("/medical-workflows/:id/approve", requireRole("physician"), async (r
   const workflow = await MedicalWorkflow.findById(req.params.id);
   if (!workflow) return res.status(404).json({ message: "Medical workflow not found." });
   if (workflow.service !== "Medical Clearance") return res.status(403).json({ message: "Only medical clearance can issue a clearance certificate." });
+  if (workflow.queueEntry && !await QueueEntry.exists({ _id: workflow.queueEntry, status: "provider_in_session" })) return res.status(409).json({ message: "Start this routed clearance from the physician queue before approving it." });
   const resumingApproval = workflow.status === "approval_in_progress" && String(workflow.providerApproval?.approvedBy) === String(req.user.id);
   if ((!resumingApproval && workflow.status !== "ready_for_approval") || hasUnresolvedRequirements(workflow) || !workflow.assessment?.recordedAt) return res.status(409).json({ message: "Complete the required assessments and verify every required item or record why a conditional item does not apply." });
   const providerStatement = (resumingApproval ? workflow.providerStatement : String(req.body?.providerStatement || "").trim()).slice(0, 2000);

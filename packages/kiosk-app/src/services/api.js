@@ -28,4 +28,6 @@ export const createAppointment = (payload) =>
 
 export const submitKioskDocument = (payload) =>
   api.post("/kiosk/documents", payload).then((r) => r.data);
+export const getClearanceDocumentSubmission = (token) => api.get(`/kiosk/clearance-submissions/${encodeURIComponent(token)}`).then((r) => r.data);
+export const submitClearanceKioskDocument = (token, payload) => api.post(`/kiosk/clearance-submissions/${encodeURIComponent(token)}/documents`, payload).then((r) => r.data);
 export const getHealthDeclarationStatus = (studentId) => api.get(`/kiosk/documents/health-declaration/${encodeURIComponent(studentId)}`).then((r) => r.data);

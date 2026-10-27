@@ -4,6 +4,7 @@ import { getQueue, getQueueHistory, updateQueueStatus, updateQueueExpirationExem
 import { socket } from "../services/socket.js";
 import ActiveSessionModal from "../components/ActiveSessionModal.jsx";
 import NursingAssessmentModal from "../components/NursingAssessmentModal.jsx";
+import ClearanceWorkflowModal from "../components/ClearanceWorkflowModal.jsx";
 import "../styles/pages/Dashboard.css";
 import { appDialog } from "../../../shared-ui/src/dialogService.js";
 
@@ -39,6 +40,7 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [sessionEntry, setSessionEntry] = useState(null);
   const [nursingEntry, setNursingEntry] = useState(null);
+  const [clearanceEntry, setClearanceEntry] = useState(null);
   const [sessionNotice, setSessionNotice] = useState("");
   const user = JSON.parse(localStorage.getItem("hsotap_user") || "{}");
   const provider = ["physician", "doctor", "dentist"].includes(user.role);
@@ -93,7 +95,7 @@ export default function DashboardPage() {
     : visibleQueue.filter((entry) => !["awaiting_provider", "provider_in_session"].includes(entry.status));
   const visibleHistory = useMemo(() => filterQueueEntries(history, { provider, providerRole, filter, search }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), [history, filter, search, provider, providerRole]);
   const selected = (queueView === "history" ? history : queue).find((entry) => entry._id === selectedId) || null;
-  const visibleServiceTypes = provider ? SERVICE_TYPES.slice(0, 2) : queueView === "history" ? SERVICE_TYPES : SERVICE_TYPES.filter((service) => service !== "Quick Health Screening");
+  const visibleServiceTypes = provider ? SERVICE_TYPES.filter((service) => providerHandlesService(user.role, service)) : queueView === "history" ? SERVICE_TYPES : SERVICE_TYPES.filter((service) => service !== "Quick Health Screening");
 
   async function changeStatus(id, status) {
     if (status === "cancelled" && !await appDialog.confirm("Cancel this queue entry?", "Cancel queue entry")) return;
@@ -124,6 +126,13 @@ export default function DashboardPage() {
 
   async function selectQueueEntry(entry) {
     setSelectedId(entry._id);
+    if (isNursingTeam(user.role) && entry.serviceType === "Medical Clearance" && ["called", "in_session"].includes(entry.status)) {
+      try {
+        const started = entry.status === "called" ? await changeStatus(entry._id, "in_session") : entry;
+        if (started) setClearanceEntry(started);
+      } catch (error) { await appDialog.alert(error.response?.data?.message || "Could not open this clearance workflow."); }
+      return;
+    }
     if (isNursingTeam(user.role) && isConsultation(entry.serviceType) && ["called", "in_session"].includes(entry.status)) {
       try {
         if (entry.status === "called") {
@@ -191,10 +200,12 @@ export default function DashboardPage() {
             {selected.status === "waiting" && <button className="btn btn-warning" onClick={() => changeStatus(selected._id, "called")}>Call Patient to Nurse Station</button>}
             {isNursingTeam(user.role) && selected.status === "called" && isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setNursingEntry(entry); }}>Start Nursing Assessment</button>}
             {isNursingTeam(user.role) && selected.status === "in_session" && isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={() => setNursingEntry(selected)}>Resume Nursing Assessment</button>}
+            {isNursingTeam(user.role) && selected.status === "called" && selected.serviceType === "Medical Clearance" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setClearanceEntry(entry); }}>Start Medical Clearance</button>}
+            {isNursingTeam(user.role) && selected.status === "in_session" && selected.serviceType === "Medical Clearance" && <button className="btn btn-success" onClick={() => setClearanceEntry(selected)}>Resume Medical Clearance</button>}
             {isNursingTeam(user.role) && selected.status === "called" && !isConsultation(selected.serviceType) && selected.serviceType !== "Medical Clearance" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setSessionEntry(entry); }}>Start Nursing Assessment</button>}
             {isNursingTeam(user.role) && selected.status === "in_session" && !isConsultation(selected.serviceType) && selected.serviceType !== "Medical Clearance" && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Nursing Assessment</button>}
-            {provider && providerHandlesService(user.role, selected.serviceType) && selected.status === "awaiting_provider" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>Start {providerTarget(selected.serviceType)} Consultation</button>}
-            {provider && providerHandlesService(user.role, selected.serviceType) && selected.status === "provider_in_session" && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Consultation</button>}
+            {provider && providerHandlesService(user.role, selected.serviceType) && selected.status === "awaiting_provider" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "provider_in_session"); if (entry) selected.serviceType === "Medical Clearance" ? setClearanceEntry(entry) : setSessionEntry(entry); }}>Start {selected.serviceType === "Medical Clearance" ? "Clearance Review" : `${providerTarget(selected.serviceType)} Consultation`}</button>}
+            {provider && providerHandlesService(user.role, selected.serviceType) && selected.status === "provider_in_session" && <button className="btn btn-success" onClick={() => selected.serviceType === "Medical Clearance" ? setClearanceEntry(selected) : setSessionEntry(selected)}>Resume {selected.serviceType === "Medical Clearance" ? "Clearance Review" : "Consultation"}</button>}
             {!provider && <button className="btn btn-danger" onClick={() => changeStatus(selected._id, "cancelled")}>Cancel</button>}
             {isNursingTeam(user.role) && ["waiting", "called"].includes(selected.status) && <button className="btn btn-secondary" onClick={() => changeExpirationException(selected)}>{selected.expirationExempt ? "Remove Expiration Exception" : "Keep in Queue"}</button>}
           </div>
@@ -213,7 +224,7 @@ export default function DashboardPage() {
           {selected.requestDetails && <div className="snapshot-field"><span>Request details:</span> {selected.requestDetails}</div>}
           {selected.linkedVitals && <div className="snapshot-archive-vitals"><strong>Vital Signs</strong><div>Temperature: {selected.linkedVitals.temperatureC ?? "—"} °C</div><div>Height: {selected.linkedVitals.heightCm ?? "—"} cm</div><div>Weight: {selected.linkedVitals.weightKg ?? "—"} kg</div><div>Blood pressure: {selected.linkedVitals.bloodPressure || "—"}</div></div>}
           <div className="snapshot-actions">
-            {provider && providerHandlesService(user.role, selected.serviceType) && ["awaiting_provider", "provider_in_session"].includes(selected.status) && <button className="btn btn-success" onClick={async () => { const entry = selected.status === "provider_in_session" ? selected : await changeStatus(selected._id, "provider_in_session"); if (entry) setSessionEntry(entry); }}>{selected.status === "provider_in_session" ? "Resume Consultation" : `Start ${providerTarget(selected.serviceType)} Consultation`}</button>}
+            {provider && providerHandlesService(user.role, selected.serviceType) && ["awaiting_provider", "provider_in_session"].includes(selected.status) && <button className="btn btn-success" onClick={async () => { const entry = selected.status === "provider_in_session" ? selected : await changeStatus(selected._id, "provider_in_session"); if (entry) selected.serviceType === "Medical Clearance" ? setClearanceEntry(entry) : setSessionEntry(entry); }}>{selected.status === "provider_in_session" ? "Resume Consultation" : `Start ${selected.serviceType === "Medical Clearance" ? "Clearance Review" : `${providerTarget(selected.serviceType)} Consultation`}`}</button>}
             {clinicalRole && <button className="btn btn-primary" onClick={() => navigate(`/emr?studentId=${selected.student?.studentId || ""}`)}>Open Full Medical Record</button>}
           </div>
         </>}
@@ -221,14 +232,20 @@ export default function DashboardPage() {
     </div>
 
     {nursingEntry && <NursingAssessmentModal entry={nursingEntry} onClose={() => setNursingEntry(null)} onSaved={(entry) => { setQueue((items) => items.map((item) => item._id === entry._id ? entry : item)); setSelectedId(entry._id); setNursingEntry(null); }} onRouted={(entry) => { setQueue((items) => items.filter((item) => item._id !== entry._id)); setSelectedId(null); setNursingEntry(null); refreshHistory(); }} />}
+    {clearanceEntry && <ClearanceWorkflowModal entry={clearanceEntry} onClose={() => { setClearanceEntry(null); refreshQueue(); refreshHistory(); }} onUpdated={() => { refreshQueue(); refreshHistory(); }} />}
     {sessionEntry && <ActiveSessionModal entry={sessionEntry} onClose={() => setSessionEntry(null)} onCompleted={(entry) => { setQueue((items) => items.filter((item) => item._id !== entry._id)); setSelectedId(null); setSessionEntry(null); setSessionNotice("Session saved to the patient's EMR and marked complete."); refreshHistory(); window.setTimeout(() => setSessionNotice(""), 6000); }} />}
   </div>;
 }
 
 function isNursingTeam(role) { return ["nurse", "supervisor"].includes(role); }
 function isConsultation(serviceType) { return ["Medical Consultation", "Dental Consultation"].includes(serviceType); }
-function providerTarget(serviceType) { return serviceType === "Dental Consultation" ? "Dentist" : serviceType === "Medical Consultation" ? "Physician" : null; }
-function providerHandlesService(role, serviceType) { return (String(role || "").toLowerCase() === "dentist") === (serviceType === "Dental Consultation") && isConsultation(serviceType); }
+function providerTarget(serviceType) { return serviceType === "Dental Consultation" ? "Dentist" : ["Medical Consultation", "Medical Clearance"].includes(serviceType) ? "Physician" : null; }
+function providerHandlesService(role, serviceType) {
+  const normalized = String(role || "").toLowerCase();
+  if (serviceType === "Medical Clearance") return normalized === "physician";
+  if (serviceType === "Dental Consultation") return normalized === "dentist";
+  return ["physician", "doctor"].includes(normalized) && serviceType === "Medical Consultation";
+}
 function providerRouteLabel(entry, role) {
   const target = providerTarget(entry.serviceType);
   if (!target) return "—";

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 const medicalWorkflowSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
   requestKey: { type: String, unique: true, sparse: true },
+  documentSubmissionToken: { type: String, unique: true, sparse: true, select: false },
   medicalProfile: { type: mongoose.Schema.Types.ObjectId, ref: "MedicalProfile" },
   medicalFile: { type: mongoose.Schema.Types.ObjectId, ref: "ExternalDocument" },
   queueEntry: { type: mongoose.Schema.Types.ObjectId, ref: "QueueEntry" },
