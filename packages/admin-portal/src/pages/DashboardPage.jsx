@@ -126,7 +126,7 @@ export default function DashboardPage() {
 
   async function selectQueueEntry(entry) {
     setSelectedId(entry._id);
-    if (isNursingTeam(user.role) && entry.serviceType === "Medical Clearance" && ["called", "in_session"].includes(entry.status)) {
+    if (user.role === "nurse" && entry.serviceType === "Medical Clearance" && ["called", "in_session"].includes(entry.status)) {
       try {
         const started = entry.status === "called" ? await changeStatus(entry._id, "in_session") : entry;
         if (started) setClearanceEntry(started);
@@ -200,8 +200,8 @@ export default function DashboardPage() {
             {selected.status === "waiting" && <button className="btn btn-warning" onClick={() => changeStatus(selected._id, "called")}>Call Patient to Nurse Station</button>}
             {isNursingTeam(user.role) && selected.status === "called" && isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setNursingEntry(entry); }}>Start Nursing Assessment</button>}
             {isNursingTeam(user.role) && selected.status === "in_session" && isConsultation(selected.serviceType) && <button className="btn btn-success" onClick={() => setNursingEntry(selected)}>Resume Nursing Assessment</button>}
-            {isNursingTeam(user.role) && selected.status === "called" && selected.serviceType === "Medical Clearance" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setClearanceEntry(entry); }}>Start Medical Clearance</button>}
-            {isNursingTeam(user.role) && selected.status === "in_session" && selected.serviceType === "Medical Clearance" && <button className="btn btn-success" onClick={() => setClearanceEntry(selected)}>Resume Medical Clearance</button>}
+            {user.role === "nurse" && selected.status === "called" && selected.serviceType === "Medical Clearance" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setClearanceEntry(entry); }}>Start Medical Clearance</button>}
+            {user.role === "nurse" && selected.status === "in_session" && selected.serviceType === "Medical Clearance" && <button className="btn btn-success" onClick={() => setClearanceEntry(selected)}>Resume Medical Clearance</button>}
             {isNursingTeam(user.role) && selected.status === "called" && !isConsultation(selected.serviceType) && selected.serviceType !== "Medical Clearance" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "in_session"); if (entry) setSessionEntry(entry); }}>Start Nursing Assessment</button>}
             {isNursingTeam(user.role) && selected.status === "in_session" && !isConsultation(selected.serviceType) && selected.serviceType !== "Medical Clearance" && <button className="btn btn-success" onClick={() => setSessionEntry(selected)}>Resume Nursing Assessment</button>}
             {provider && providerHandlesService(user.role, selected.serviceType) && selected.status === "awaiting_provider" && <button className="btn btn-success" onClick={async () => { const entry = await changeStatus(selected._id, "provider_in_session"); if (entry) selected.serviceType === "Medical Clearance" ? setClearanceEntry(entry) : setSessionEntry(entry); }}>Start {selected.serviceType === "Medical Clearance" ? "Clearance Review" : `${providerTarget(selected.serviceType)} Consultation`}</button>}
@@ -239,14 +239,14 @@ export default function DashboardPage() {
 
 function isNursingTeam(role) { return ["nurse", "supervisor"].includes(role); }
 function isConsultation(serviceType) { return ["Medical Consultation", "Dental Consultation"].includes(serviceType); }
-function providerTarget(serviceType) { return serviceType === "Dental Consultation" ? "Dentist" : ["Medical Consultation", "Medical Clearance"].includes(serviceType) ? "Physician" : null; }
+function providerTarget(serviceType) { return serviceType === "Dental Consultation" ? "Dentist" : serviceType === "Medical Consultation" ? "Physician" : null; }
 function providerHandlesService(role, serviceType) {
   const normalized = String(role || "").toLowerCase();
-  if (serviceType === "Medical Clearance") return normalized === "physician";
   if (serviceType === "Dental Consultation") return normalized === "dentist";
   return ["physician", "doctor"].includes(normalized) && serviceType === "Medical Consultation";
 }
 function providerRouteLabel(entry, role) {
+  if (entry.serviceType === "Medical Clearance") return "Handled by nurse";
   const target = providerTarget(entry.serviceType);
   if (!target) return "—";
   if (entry.status === "in_session" && entry.assignedProviderRole) return `${target} queue · Nursing intake in progress`;

@@ -265,7 +265,7 @@ export async function getFullEmr(req, res) {
     const result = document.toObject();
     if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
     result.issuedCertificate = certificatesBySource.get(String(result._id)) || null;
-    result.clearanceCertificateEligible = result.recordType !== "clearance_certificate" && Boolean(findClearanceRequirement(student.affiliation, result.submissionDetails?.purpose));
+    result.clearanceCertificateEligible = result.recordType !== "clearance_certificate" && !result.clearanceWorkflow && Boolean(findClearanceRequirement(student.affiliation, result.submissionDetails?.purpose));
     return result;
   });
   res.json({ student: decoratePatient(student, await currentAcademicYear()), vitals, consultations, documents: safeDocuments, kioskRequests, formSubmissions });

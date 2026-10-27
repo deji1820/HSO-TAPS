@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import { findClearanceRequirement } from "./clearanceRequirements.js";
 
 export function clearancePurposeFor(document) {
+  if (document?.clearanceWorkflow) return null;
   const purpose = String(document?.submissionDetails?.purpose || "").trim();
   const affiliation = document?.student?.affiliation || "Student";
   return findClearanceRequirement(affiliation, purpose) ? purpose : null;
