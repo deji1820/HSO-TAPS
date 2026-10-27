@@ -507,9 +507,19 @@ router.post("/students/:id/documents", requireDocumentRole, async (req, res) => 
 });
 router.get("/documents", requireDocumentRole, async (_req, res) => {
   const documents = await ExternalDocument.find().select("-fileData").populate("student", "studentId firstName lastName").sort({ submittedAt: -1, createdAt: -1 });
+  const workflows = await MedicalWorkflow.find({ service: "Medical Clearance", "requirements.document": { $in: documents.map((document) => document._id) } }).select("purpose status medicalFile requirements.document").lean();
+  const workflowByDocument = new Map();
+  workflows.forEach((workflow) => workflow.requirements.forEach((requirement) => {
+    if (!requirement.document) return;
+    const key = String(requirement.document);
+    const current = workflowByDocument.get(key) || [];
+    current.push({ _id: workflow._id, purpose: workflow.purpose, status: workflow.status, medicalFile: workflow.medicalFile });
+    workflowByDocument.set(key, current);
+  }));
   res.json(documents.map((document) => {
     const result = document.toObject();
     if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
+    result.validationWorkflows = workflowByDocument.get(String(result._id)) || [];
     return result;
   }));
 });

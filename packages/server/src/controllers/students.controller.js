@@ -6,6 +6,7 @@ import QueueEntry from "../models/QueueEntry.js";
 import { SyncLog } from "../models/FormPipeline.js";
 import Appointment from "../models/Appointment.js";
 import MedicalProfile from "../models/MedicalProfile.js";
+import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import PatientHistory from "../models/PatientHistory.js";
 import AcademicCalendar from "../models/AcademicCalendar.js";
 import { calculateAge, decoratePatientYearLevel, expectedYearLevel, parseAcademicYearStart } from "../services/patientInformation.js";
@@ -256,9 +257,19 @@ export async function getFullEmr(req, res) {
     SyncLog.find({ matchedStudent: req.params.id }).sort({ createdAt: -1 }),
   ]);
   if (!student) return res.status(404).json({ message: "Student not found" });
+  const workflows = await MedicalWorkflow.find({ student: req.params.id, service: "Medical Clearance", "requirements.document": { $in: documents.map((document) => document._id) } }).select("purpose status medicalFile requirements.document").lean();
+  const workflowByDocument = new Map();
+  workflows.forEach((workflow) => workflow.requirements.forEach((requirement) => {
+    if (!requirement.document) return;
+    const key = String(requirement.document);
+    const current = workflowByDocument.get(key) || [];
+    current.push({ _id: workflow._id, purpose: workflow.purpose, status: workflow.status, medicalFile: workflow.medicalFile });
+    workflowByDocument.set(key, current);
+  }));
   const safeDocuments = documents.map((document) => {
     const result = document.toObject();
     if (result.name) result.fileUrl = `/api/documents/${result._id}/file`;
+    result.validationWorkflows = workflowByDocument.get(String(result._id)) || [];
     return result;
   });
   res.json({ student: decoratePatient(student, await currentAcademicYear()), vitals, consultations, documents: safeDocuments, kioskRequests, formSubmissions });

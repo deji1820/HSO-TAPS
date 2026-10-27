@@ -90,6 +90,12 @@ export default function MedicalWorkflowsPage({ user }) {
 
   useEffect(() => { refresh(); }, [workflowId]);
 
+  useEffect(() => {
+    if (!certificate || window.location.hash !== "#clearance-certificate") return undefined;
+    const frame = window.requestAnimationFrame(() => document.getElementById("clearance-certificate")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [certificate]);
+
   const patientDocuments = useMemo(() => documents.filter((item) => item.student?._id === workflow?.student?._id && item.status === "Verified"), [documents, workflow]);
   const completedSteps = workflow?.service === "Medical Clearance"
     ? Number(Boolean(workflow.assessment?.recordedAt)) + workflow.requirements.filter((item) => item.required ? item.status === "satisfied" : item.conditional && ["satisfied", "not_applicable"].includes(item.status)).length + Number(Boolean(workflow.providerApproval?.approvedAt))
