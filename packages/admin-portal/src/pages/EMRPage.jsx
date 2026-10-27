@@ -147,8 +147,8 @@ function ConsultationsTab({ consultations }) {
   );
 }
 
-function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentId, onStatusChange }) {
-  if (!documents?.length) return <div className="table-empty">No external documents synced yet.</div>;
+function DocumentsTab({ documents, canReviewDocuments = false, updatingDocumentId, onStatusChange, emptyMessage = "No external documents synced yet." }) {
+  if (!documents?.length) return <div className="table-empty">{emptyMessage}</div>;
   return <div className="emr-document-list">{documents.map((document) => <article className="emr-document-card" key={document._id}>
     <header><h3>{document.documentTitle || document.name || "Medical document"}</h3><span>{formatDate(document.submittedAt)}</span></header>
     <div className="emr-document-card-grid">
@@ -728,7 +728,14 @@ export default function EMRPage() {
             {tab === "history" && <MedicalHistoryTab value={medicalHistory} onChange={setMedicalHistory} editing={editingMedicalHistory} onToggleEdit={toggleMedicalHistoryEdit} />}
             {tab === "family" && <FamilyHistoryTab value={familyHistory} onChange={setFamilyHistory} editing={editingFamilyHistory} onToggleEdit={toggleFamilyHistoryEdit} />}
             {tab === "forms" && <HealthStatusDeclarationTab submissions={healthStatusSubmissions} canReviewDocuments={canReviewDocuments} canEditDeclaration={canEditDeclaration} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} editingDeclarationId={editingDeclarationId} declarationDraft={declarationDraft} setDeclarationDraft={setDeclarationDraft} onEdit={beginDeclarationEdit} onCancelEdit={() => { setEditingDeclarationId(null); setDeclarationDraft(""); }} onSaveEdit={saveDeclarationEdit} savingDeclaration={savingDeclaration} />}
-            {tab === "files" && <><h2 className="section-title">Medical Document Submissions</h2><MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /><h2 className="section-title">Synced Medical Files</h2><DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && document.formSource !== "Kiosk Document Submission")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} /></>}
+            {tab === "files" && <>
+              <h2 className="section-title">Issued Medical Clearance Certificates</h2>
+              <DocumentsTab documents={(record.documents || []).filter((document) => document.recordType === "clearance_certificate")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} emptyMessage="No certificate has been issued yet. A submitted document marked Verified is accepted evidence; the purpose-specific certificate appears here after the clearance requirements, assessment, and authorized provider approval are complete." />
+              <h2 className="section-title">Medical Document Submissions</h2>
+              <MedicalDocumentSubmissions files={medicalDocumentFiles} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />
+              <h2 className="section-title">Other Synced Medical Files</h2>
+              <DocumentsTab documents={(record.documents || []).filter((document) => !isHealthStatusDeclaration(document) && document.recordType !== "clearance_certificate" && document.formSource !== "Kiosk Document Submission")} canReviewDocuments={canReviewDocuments} updatingDocumentId={updatingDocumentId} onStatusChange={changeDocumentStatus} />
+            </>}
           </div>
         </div>
       )}
