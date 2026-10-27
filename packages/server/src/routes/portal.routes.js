@@ -184,6 +184,28 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
   const workflow = await MedicalWorkflow.findById(req.params.id);
   if (!workflow) return res.status(404).json({ message: "Medical workflow not found." });
   if (workflow.service !== "Medical Clearance") return res.status(403).json({ message: "Only medical clearance can issue a clearance certificate." });
+  if (["approved", "completed"].includes(workflow.status)) {
+    const savedCertificate = await ExternalDocument.findOne({ sourceWorkflow: workflow._id });
+    if (!savedCertificate && workflow.status === "approved") {
+      workflow.status = "ready_for_approval";
+      workflow.medicalFile = undefined;
+      workflow.certificateIssuedAt = undefined;
+      workflow.certificateIssuedBy = undefined;
+      workflow.providerApproval = undefined;
+      workflow.providerStatement = undefined;
+      pushWorkflowEvent(workflow, "approval_retry_available", "The approval record had no saved certificate; restored the completed clearance for safe certificate retry.", req.user.id);
+      await workflow.save();
+    } else if (!savedCertificate) {
+      return res.status(409).json({ message: "The completed clearance is missing its certificate record. Contact an administrator to repair the medical file." });
+    } else {
+      if (String(workflow.medicalFile || "") !== String(savedCertificate._id)) {
+        workflow.medicalFile = savedCertificate._id;
+        workflow.certificateIssuedAt ||= savedCertificate.submittedAt || savedCertificate.createdAt || new Date();
+        await workflow.save();
+      }
+      return res.json(await workflow.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+    }
+  }
   const resumingApproval = workflow.status === "approval_in_progress" && String(workflow.providerApproval?.approvedBy) === String(req.user.id);
   if ((!resumingApproval && workflow.status !== "ready_for_approval") || hasUnresolvedRequirements(workflow) || !workflow.assessment?.recordedAt) return res.status(409).json({ message: "Complete the required assessments and verify every required item or record why a conditional item does not apply." });
   const providerStatement = String((resumingApproval && workflow.providerStatement) || req.body?.providerStatement || "Clearance assessment and required documents reviewed and approved by the authorized nurse.").trim().slice(0, 2000);
@@ -247,13 +269,23 @@ router.post("/medical-workflows/:id/approve", requireRole("nurse"), async (req, 
     if (res.headersSent) return;
     try {
       const pending = await MedicalWorkflow.findById(req.params.id);
-      if (pending?.status === "approval_in_progress" && String(pending.providerApproval?.approvedBy || "") === String(req.user.id)) {
-        const certificateExists = await ExternalDocument.exists({ sourceWorkflow: pending._id });
-        if (!certificateExists) {
+      if (pending && ["approval_in_progress", "approved"].includes(pending.status) && String(pending.providerApproval?.approvedBy || "") === String(req.user.id)) {
+        const savedCertificate = await ExternalDocument.findOne({ sourceWorkflow: pending._id });
+        if (savedCertificate) {
+          pending.status = "approved";
+          pending.medicalFile = savedCertificate._id;
+          pending.certificateIssuedAt ||= savedCertificate.submittedAt || savedCertificate.createdAt || new Date();
+          pending.certificateIssuedBy ||= pending.providerApproval.approvedBy;
+          pending.providerApproval.approvedAt ||= pending.certificateIssuedAt;
+          pushWorkflowEvent(pending, "approval_recovered", "Certificate record recovered and clearance approval finalized after an interrupted response.", req.user.id);
+          await pending.save();
+          return res.json(await pending.populate("student", "studentId affiliation firstName lastName department program").populate("providerApproval.approvedBy", "name role").populate("medicalFile"));
+        }
+        if (pending.status === "approval_in_progress") {
           pending.status = "ready_for_approval";
           pending.providerApproval = undefined;
           pending.providerStatement = undefined;
-          pushWorkflowEvent(pending, "approval_retry_available", "Automatic certificate creation did not finish; the completed clearance is ready to retry.", req.user.id);
+          pushWorkflowEvent(pending, "approval_retry_available", "Certificate creation did not finish; the clearance is ready to retry.", req.user.id);
           await pending.save();
         }
       }

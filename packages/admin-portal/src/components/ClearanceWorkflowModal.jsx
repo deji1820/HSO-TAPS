@@ -124,8 +124,10 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
   async function reviewDocument(document, status) {
     setBusy(true);
     setError("");
+    let decisionSaved = false;
     try {
       const result = await updateMedicalDocumentStatus(document._id, status, "");
+      decisionSaved = true;
       let updatedWorkflow = result.clearanceWorkflowRecord || currentWorkflow;
       if (updatedWorkflow?._id) setCurrentWorkflow(updatedWorkflow);
       if (status === "Verified" && updatedWorkflow?.status === "ready_for_approval" && String(user.role || "").toLowerCase() === "nurse") {
@@ -137,7 +139,22 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
       await refreshDocuments();
       onUpdated?.(updatedWorkflow);
     } catch (requestError) {
+      if (decisionSaved) await refreshDocuments();
       setError(requestErrorMessage(requestError, `Could not ${status === "Verified" ? "accept" : "reject"} this document.`));
+    } finally { setBusy(false); }
+  }
+
+  async function resumeCertificateApproval() {
+    setBusy(true);
+    setError("");
+    try {
+      const updated = await approveMedicalClearance(workflow._id, "");
+      setCurrentWorkflow(updated);
+      await refreshDocuments();
+      onUpdated?.(updated);
+    } catch (requestError) {
+      await refreshDocuments();
+      setError(requestErrorMessage(requestError, "Could not finish issuing this clearance certificate."));
     } finally { setBusy(false); }
   }
 
@@ -160,6 +177,9 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
   const clearanceCertificate = activeWorkflow.medicalFile && typeof activeWorkflow.medicalFile === "object"
     ? activeWorkflow.medicalFile
     : documents.find((doc) => doc.recordType === "clearance_certificate" && String(doc.sourceWorkflow?._id || doc.sourceWorkflow) === String(workflow?._id));
+  const approvalActor = activeWorkflow.providerApproval?.approvedBy?._id || activeWorkflow.providerApproval?.approvedBy;
+  const currentUserId = user.id || user._id;
+  const canResumeCertificateApproval = activeWorkflow.status === "ready_for_approval" || (activeWorkflow.status === "approval_in_progress" && String(approvalActor || "") === String(currentUserId || ""));
   useEffect(() => {
     if (activeWorkflow.status !== "approval_in_progress") return undefined;
     const approvedBy = activeWorkflow.providerApproval?.approvedBy?._id || activeWorkflow.providerApproval?.approvedBy;
@@ -200,7 +220,8 @@ export default function ClearanceWorkflowModal({ entry, onClose, onUpdated }) {
         })}</section>}
         {assessmentOpen && <form onSubmit={saveAssessment} className="record-section"><h3>Nurse Assessment and Requirement Review</h3><div className="exam-grid"><label>Physical Examination<textarea className="text-input" rows={3} value={assessment.physicalExam} onChange={(event) => setAssessment({ ...assessment, physicalExam: event.target.value })} /></label><label>Laboratory Examination<textarea className="text-input" rows={3} value={assessment.laboratoryExamination} onChange={(event) => setAssessment({ ...assessment, laboratoryExamination: event.target.value })} /></label><label className="exam-wide">Notes<textarea className="text-input" rows={2} value={assessment.notes} onChange={(event) => setAssessment({ ...assessment, notes: event.target.value })} /></label></div><button className="btn btn-primary" disabled={busy}>Save Nurse Assessment</button></form>}
         {!(["approved", "completed"].includes(activeWorkflow.status)) && activeWorkflow.requirements?.map((item, index) => item.kind === "document" ? null : <section className="record-section" key={`req-${index}`}><h3>{item.text}</h3><label>Completion note<textarea className="text-input" rows={2} value={evidence[index] || ""} onChange={(event) => setEvidence({ ...evidence, [index]: event.target.value })} /></label><div className="modal-actions"><button type="button" className="btn btn-success" disabled={busy} onClick={() => setRequirement(index, "satisfied", item)}>Mark Satisfied</button>{item.conditional && <button type="button" className="btn btn-secondary" disabled={busy || !evidence[index]?.trim()} onClick={() => setRequirement(index, "not_applicable", item)}>Not Applicable</button>}{item.status !== "pending" && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRequirement(index, "pending", item)}>Reset to Pending</button>}</div></section>)}
-        {activeWorkflow.status === "approved" || activeWorkflow.status === "completed" ? <section className="record-section clearance-issued-certificate"><h3>Clearance Certificate</h3><p role="status">Certificate issued and saved in Documents &amp; Attachments.</p><div className="modal-actions">{clearanceCertificate && <button type="button" className="btn btn-primary" onClick={() => setCertificatePreview(clearanceCertificate)}>View / Print Certificate</button>}{activeWorkflow.status === "approved" ? <button type="button" className="btn btn-success" disabled={busy} onClick={completeProcess}>{busy ? "Completing…" : "Complete Clearance Process"}</button> : <strong>Clearance process completed.</strong>}</div></section> : null}
+        {clearanceCertificate && <section className="record-section clearance-issued-certificate"><h3>Clearance Certificate</h3><p role="status">Certificate issued and saved in Documents &amp; Attachments.</p><div className="modal-actions"><button type="button" className="btn btn-primary" onClick={() => setCertificatePreview(clearanceCertificate)}>View / Print Certificate</button>{activeWorkflow.status === "approved" ? <button type="button" className="btn btn-success" disabled={busy} onClick={completeProcess}>{busy ? "Completing…" : "Complete Clearance Process"}</button> : activeWorkflow.status === "completed" ? <strong>Clearance process completed.</strong> : <button type="button" className="btn btn-secondary" disabled={busy} onClick={resumeCertificateApproval}>{busy ? "Finishing…" : "Finish Certificate Approval"}</button>}</div></section>}
+        {!clearanceCertificate && canResumeCertificateApproval && <section className="record-section clearance-issued-certificate"><h3>Certificate Issuance</h3><p>Assessment and requirements are saved, but certificate issuance has not finished. Retry to complete the approval.</p><button type="button" className="btn btn-primary" disabled={busy} onClick={resumeCertificateApproval}>{busy ? "Retrying…" : "Retry Certificate Issuance"}</button></section>}
         {error && <p className="error-text" role="alert">{error}</p>}
       </div>
     </section>
