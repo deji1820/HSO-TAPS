@@ -93,9 +93,12 @@ router.post("/students/:id/medical-workflows", requireRole("nurse", "supervisor"
   const workflow = service === "Medical Clearance"
     ? createMedicalClearanceWorkflow({ student, purpose, requestKey: idempotencyKey, fields, physicalExamIncluded, laboratoryExamIncluded, actor: req.user.id })
     : new MedicalWorkflow({ student: student._id, requestKey: idempotencyKey, service, purpose: purpose.trim(), affiliation: student.affiliation, initialFields: fields, physicalExamIncluded: Boolean(physicalExamIncluded), laboratoryExamIncluded: Boolean(laboratoryExamIncluded), status: "queued", events: [{ type: "created", description: `New ${service.toLowerCase()} workflow started from the staff medical record.`, actor: req.user.id, at: new Date() }] });
-  const queueEntry = await QueueEntry.create({ student: student._id, medicalWorkflow: workflow._id, queueNumber: await nextQueueNumber(service), priorityLevel: "Standard Priority", serviceType: service, reason: "Staff-created medical record", requestDetails: purpose.trim(), status: "waiting" });
-  workflow.queueEntry = queueEntry._id;
-  pushWorkflowEvent(workflow, "queued", `Added to the ${service.toLowerCase()} clinical queue (${queueEntry.queueNumber}).`, req.user.id);
+  let queueEntry = null;
+  if (service !== "Medical Clearance") {
+    queueEntry = await QueueEntry.create({ student: student._id, medicalWorkflow: workflow._id, queueNumber: await nextQueueNumber(service), priorityLevel: "Standard Priority", serviceType: service, reason: "Staff-created medical record", requestDetails: purpose.trim(), status: "waiting" });
+    workflow.queueEntry = queueEntry._id;
+    pushWorkflowEvent(workflow, "queued", `Added to the ${service.toLowerCase()} clinical queue (${queueEntry.queueNumber}).`, req.user.id);
+  }
   try {
     await workflow.save();
   } catch (saveError) {

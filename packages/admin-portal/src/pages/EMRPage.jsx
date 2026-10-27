@@ -4,6 +4,7 @@ import { getStudents, getFullEmr, getMedicalProfiles, getPatientHistory, savePat
 import { openMedicalDocument } from "../utils/medicalDocuments.js";
 import { normalizeRole } from "../utils/roles.js";
 import VerifiedClearanceCertificate from "../components/VerifiedClearanceCertificate.jsx";
+import ClearanceWorkflowModal from "../components/ClearanceWorkflowModal.jsx";
 import "../styles/components/ActiveSessionModal.css";
 import "../styles/pages/EMR.css";
 import { appDialog } from "../../../shared-ui/src/dialogService.js";
@@ -156,7 +157,7 @@ function ClearanceCertificateAction({ certificate, label = "View / Print Certifi
   return certificate ? <><button type="button" className="btn btn-outline btn-sm" onClick={() => setOpen(true)}>{label}</button>{open && <VerifiedClearanceCertificate certificate={certificate} onClose={() => setOpen(false)} />}</> : null;
 }
 
-function MedicalClearanceForms({ workflows = [], documents = [] }) {
+function MedicalClearanceForms({ workflows = [], documents = [], canContinue = false, onContinue }) {
   if (!workflows.length) return <div className="table-empty">No medical clearances have been created for this patient.</div>;
   return <section className="medical-clearance-forms"><div className="emr-document-list">{workflows.map((workflow) => {
     const linkedDocuments = documents.filter((document) => String(document.clearanceWorkflow?._id || document.clearanceWorkflow) === String(workflow._id));
@@ -172,7 +173,7 @@ function MedicalClearanceForms({ workflows = [], documents = [] }) {
       })}</ul></details>
       <h4>Documents submitted through this clearance</h4>
       {linkedDocuments.length ? <ul className="clearance-emr-submitted-files">{linkedDocuments.map((document) => <li key={document._id}><span><strong>{document.clearanceRequirementText || "Supporting document"}</strong><br />{document.name || document.documentTitle} · {document.status} · {formatDate(document.submittedAt)}</span>{document.name && <button type="button" className="btn btn-outline btn-sm" onClick={() => openMedicalDocument(document._id, document.name).catch((error) => appDialog.alert(error.message || "Could not open the submitted file."))}>View Submitted File</button>}</li>)}</ul> : <p>No supporting file has been uploaded for this clearance.</p>}
-      {certificate && <div className="document-actions"><ClearanceCertificateAction certificate={certificate} /></div>}
+      <div className="document-actions">{canContinue && !workflow.queueEntry && !["approved", "completed", "cancelled"].includes(workflow.status) && <button type="button" className="btn btn-primary btn-sm" onClick={() => onContinue?.(workflow)}>Continue Clearance</button>}{certificate && <ClearanceCertificateAction certificate={certificate} />}</div>
     </article>;
   })}</div></section>;
 }
@@ -476,6 +477,7 @@ export default function EMRPage() {
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
   const [record, setRecord] = useState(null);
+  const [clearanceEntry, setClearanceEntry] = useState(null);
   const [profileHistory, setProfileHistory] = useState([]);
   const [healthStatusSubmissions, setHealthStatusSubmissions] = useState([]);
   const [medicalDocumentFiles, setMedicalDocumentFiles] = useState([]);
@@ -543,6 +545,7 @@ export default function EMRPage() {
   }
 
   async function openStudent(id) {
+    setClearanceEntry(null);
     setLoadingRecord(true);
     setError(null);
     setTab("about");
@@ -789,7 +792,7 @@ export default function EMRPage() {
               <p className="page-subtitle">Clearance records and certificates, submitted documents, and other medical files are grouped below.</p>
               <details className="emr-files-section" open>
                 <summary className="section-title">Medical Clearances ({record.medicalWorkflows?.length || 0})</summary>
-                <MedicalClearanceForms workflows={record.medicalWorkflows || []} documents={record.documents || []} />
+                <MedicalClearanceForms workflows={record.medicalWorkflows || []} documents={record.documents || []} canContinue={normalizeRole(user.role) === "nurse"} onContinue={(workflow) => setClearanceEntry({ student: record.student, medicalWorkflow: workflow, createdAt: workflow.createdAt })} />
               </details>
               <details className="emr-files-section">
                 <summary className="section-title">Submitted Documents ({medicalDocumentFiles.length})</summary>
@@ -803,6 +806,10 @@ export default function EMRPage() {
           </div>
         </div>
       )}
+      {clearanceEntry && <ClearanceWorkflowModal entry={clearanceEntry} onClose={() => setClearanceEntry(null)} onUpdated={async () => {
+        try { setRecord(await getFullEmr(clearanceEntry.student._id)); }
+        catch { setError("The clearance was updated, but the Full EMR could not refresh. Reload the patient record to view the latest status."); }
+      }} />}
     </div>
   );
 }
