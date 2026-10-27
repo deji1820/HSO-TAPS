@@ -41,7 +41,7 @@ router.get("/", requireAuth, requireRole("nurse", "supervisor", "physician", "de
   const providerRole = ["physician", "doctor", "dentist"].includes(role);
   const clinicalRole = ["nurse", "supervisor", "physician", "doctor", "dentist"].includes(role);
   const queryFilter = {
-    status: { $in: providerRole ? ["in_session", "awaiting_provider", "provider_in_session"] : ["waiting", "called", "in_session", "awaiting_provider", "provider_in_session"] },
+    status: { $in: providerRole ? ["in_session"] : ["waiting", "called", "in_session"] },
   };
   if (providerRole) queryFilter.serviceType = role === "dentist" ? "Dental Consultation" : "Medical Consultation";
   else queryFilter.serviceType = { $ne: "Quick Health Screening" };
@@ -96,8 +96,8 @@ router.get("/history", requireAuth, requireRole("nurse", "supervisor", "physicia
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
   const pageSize = 50;
   const match = {
-    // Active entries stay in the live workflow until a provider completes them.
-    status: { $in: ["completed", "cancelled", "expired"] },
+    // Routed consultations leave the active queue and remain available in Queue History for provider follow-up.
+    status: { $in: ["awaiting_provider", "provider_in_session", "completed", "cancelled", "expired"] },
   };
   if (fromStart || toStart) {
     match.createdAt = {
