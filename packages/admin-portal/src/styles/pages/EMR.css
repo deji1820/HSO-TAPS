@@ -226,7 +226,15 @@
 .emr-health-declaration > .section-title { margin-top: 0; }
 .emr-health-submission { margin: 0 0 12px; border: 1px solid #d2d2d2; background: #fff; }
 .emr-health-submission > header { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid #ddd; background: #f7f7f7; color: #555; font-size: 0.76rem; }
+.emr-health-submission > header { align-items: center; flex-wrap: wrap; min-width: 0; }
+.emr-health-submission > header strong { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.emr-health-submission > header .text-input { flex: 1 1 150px; min-width: 0; max-width: 220px; }
 .emr-health-submission > header strong { color: var(--nu-blue-dark); }
+.emr-declaration-history { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #dce3ed; border-radius: 8px; background: #fff; }
+.emr-declaration-history > summary { color: var(--nu-blue-dark); font-weight: 700; cursor: pointer; }
+.emr-declaration-history[open] > summary { margin-bottom: 12px; }
+.emr-declaration-history .emr-health-submission { margin-bottom: 10px; }
+.emr-file-subsection-title { margin: 16px 0 8px; color: var(--nu-blue-dark); font-size: 1rem; }
 .emr-health-submission dl { margin: 0; padding: 4px 12px; }
 .emr-health-submission dl > div { display: grid; grid-template-columns: minmax(180px, 38%) 1fr; gap: 12px; padding: 7px 0; border-bottom: 1px solid #eee; font-size: 0.78rem; }
 .emr-health-submission dl > div:last-child { border-bottom: 0; }
@@ -242,6 +250,9 @@
   .emr-document-card-grid { grid-template-columns: 1fr; gap: 9px; }
   .emr-document-details dl > div { grid-template-columns: 1fr; gap: 2px; }
   .emr-profile-meta-edit { grid-template-columns: 1fr; }
+  .emr-health-submission > header { align-items: stretch; flex-direction: column; }
+  .emr-health-submission > header .text-input { width: 100%; max-width: none; }
+  .emr-health-submission dl > div { grid-template-columns: 1fr; gap: 3px; }
 }
 
 /* ---------- Consultation History accordion ---------- */
