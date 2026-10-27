@@ -3,6 +3,7 @@ import "../styles/screens/WalkInConsultation.css";
 
 export default function ConsultationEntryScreen({
   consultSubType,      // "Medical" | "Dental"
+  serviceLabel,
   onWalkIn,
   onBookAppointment,   // stub for now
   onBack,
@@ -15,16 +16,16 @@ export default function ConsultationEntryScreen({
       <main className="wic-content">
         <div className="wic-alert-banner">No pre-scheduled appointment today.</div>
         <div className="wic-heading-block">
-          <p className="wic-eyebrow">SERVICE: {consultSubType?.toUpperCase()} CONSULTATION</p>
+          <p className="wic-eyebrow">SERVICE: {serviceLabel || `${consultSubType?.toUpperCase()} CONSULTATION`}</p>
           <h1 className="wic-heading">How would you like to proceed?</h1>
         </div>
 
         <div className="wic-choice-row">
           <button className="wic-choice-card" onClick={onWalkIn}>
             <div className="wic-choice-icon">🧑‍⚕️</div>
-            <p className="wic-choice-title">Walk-in Consultation</p>
+            <p className="wic-choice-title">{serviceLabel ? "Walk-in Request" : "Walk-in Consultation"}</p>
             <p className="wic-choice-desc">
-              Join today's clinic walk-in queue for general {consultSubType?.toLowerCase()} assessment.
+              {serviceLabel ? "Request support from the clinic now." : `Join today's clinic walk-in queue for general ${consultSubType?.toLowerCase()} assessment.`}
             </p>
           </button>
 
@@ -32,7 +33,7 @@ export default function ConsultationEntryScreen({
             <div className="wic-choice-icon">📅</div>
             <p className="wic-choice-title">Book an Appointment</p>
             <p className="wic-choice-desc">
-              Schedule a consultation slot for a future date.
+              Schedule a clinic appointment for a future date.
             </p>
           </button>
         </div>

@@ -82,12 +82,16 @@ export default function AppointmentsPage({ user }) {
   }
 
   async function decide(appointment, decisionStatus) {
-    if (decisionStatus === "rejected" && !await appDialog.confirm("Reject this appointment? Its time slot will become available again.")) return;
+    let remark = "";
+    if (decisionStatus === "rejected") {
+      remark = String(await appDialog.prompt("Enter the reason for rejecting this appointment. The patient will receive this note by email.", "", "Reject appointment", true) || "").trim();
+      if (remark.length < 3) { if (remark) await appDialog.alert("Enter a rejection remark of at least 3 characters."); return; }
+    }
     setBusyId(appointment._id);
     setError("");
     setNotice("");
     try {
-      const result = await updateAppointmentDecision(appointment._id, decisionStatus);
+      const result = await updateAppointmentDecision(appointment._id, decisionStatus, remark);
       const recipient = appointment.notificationEmail || appointment.student?.email || "the student's saved email";
       setNotice(result.notificationSent
         ? `Appointment ${decisionStatus}. The email was sent to ${recipient}.`

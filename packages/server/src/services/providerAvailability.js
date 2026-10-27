@@ -1,15 +1,18 @@
-export const PROVIDER_SERVICES = new Set(["Medical Consultation", "Dental Consultation"]);
+export const PROVIDER_SERVICES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription & Medicine Request"]);
+export const SCHEDULE_SERVICES = new Set(["Medical Consultation", "Dental Consultation"]);
 export const LEGACY_SERVICE_WEEKDAYS = {
   "Medical Consultation": [1, 2, 3, 4, 5],
   "Dental Consultation": [3, 5],
+  "Medical Clearance": [1, 2, 3, 4, 5, 6],
+  "Prescription & Medicine Request": [1, 2, 3, 4, 5, 6],
 };
 export const CLEARANCE_WEEKDAYS = [1, 2, 3, 4, 5, 6];
 
 export function providerRoleMatches(serviceType, role) {
   const normalizedRole = String(role || "").toLowerCase();
-  return serviceType === "Dental Consultation"
-    ? normalizedRole === "dentist"
-    : serviceType === "Medical Consultation" && ["physician", "doctor"].includes(normalizedRole);
+  if (serviceType === "Dental Consultation") return normalizedRole === "dentist";
+  if (serviceType === "Medical Consultation") return ["physician", "doctor"].includes(normalizedRole);
+  return ["Medical Clearance", "Prescription & Medicine Request"].includes(serviceType) && normalizedRole === "nurse";
 }
 
 export function timeToMinutes(value) {

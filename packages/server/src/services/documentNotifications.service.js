@@ -145,7 +145,7 @@ export async function sendDocumentStatusNotification(document, status) {
   }
 }
 
-export async function sendAppointmentDecisionNotification(appointment, decisionStatus, recipient = appointment.notificationEmail || appointment.student?.email) {
+export async function sendAppointmentDecisionNotification(appointment, decisionStatus, recipient = appointment.notificationEmail || appointment.student?.email, remark = "") {
   const email = String(recipient || "").trim().toLowerCase();
   const provider = String(process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
   const apiKey = process.env.RESEND_API_KEY;
@@ -156,16 +156,20 @@ export async function sendAppointmentDecisionNotification(appointment, decisionS
     pending: "Your appointment request has been received and is pending review by the Health Services Office. Please wait for an email with the decision before coming to the clinic.",
     accepted: "Your appointment request has been accepted by the Health Services Office.",
     rejected: "Your appointment request was rejected by the Health Services Office. Please contact the office to arrange another time.",
+    reminder: "Reminder: you have an accepted Health Services appointment in one hour. Please arrive on or before your scheduled appointment time. Failure to arrive on time means forfeiture of the appointment.",
   };
   const subjects = {
     pending: "Health Services appointment request received",
     accepted: "Health Services appointment accepted",
     rejected: "Health Services appointment update",
+    reminder: "Health Services appointment reminder — 1 hour",
   };
-  const description = descriptions[decisionStatus];
+  const description = decisionStatus === "rejected" && String(remark || appointment.decisionRemark || "").trim()
+    ? `${descriptions.rejected}\n\nReason from the Health Services Office: ${String(remark || appointment.decisionRemark).trim()}`
+    : descriptions[decisionStatus];
   const subject = subjects[decisionStatus];
   if (!description || !subject) return { sent: false, reason: "Unsupported appointment notification." };
-  const type = decisionStatus === "pending" ? "booking_received" : `decision_${decisionStatus}`;
+  const type = decisionStatus === "pending" ? "booking_received" : decisionStatus === "reminder" ? "appointment_reminder" : `decision_${decisionStatus}`;
   let notification;
   try {
     notification = await AppointmentNotification.create({
@@ -182,13 +186,23 @@ export async function sendAppointmentDecisionNotification(appointment, decisionS
   return deliverAppointmentNotification(appointment, notification, { email, provider, apiKey, from, gmailUser, gmailAppPassword, description, subject });
 }
 
+export async function sendAppointmentReminderNotification(appointment) {
+  const existing = await AppointmentNotification.findOne({ appointment: appointment._id, type: "appointment_reminder" });
+  if (existing) return { sent: existing.status === "sent", reason: "The appointment reminder was already attempted." };
+  return sendAppointmentDecisionNotification(appointment, "reminder");
+}
+
 export async function retryAppointmentNotification(appointment, notification) {
   const descriptions = {
     booking_received: "Your appointment request has been received and is pending review by the Health Services Office. Please wait for an email with the decision before coming to the clinic.",
     decision_accepted: "Your appointment request has been accepted by the Health Services Office.",
     decision_rejected: "Your appointment request was rejected by the Health Services Office. Please contact the office to arrange another time.",
+    appointment_reminder: "Reminder: you have an accepted Health Services appointment in one hour. Please arrive on or before your scheduled appointment time. Failure to arrive on time means forfeiture of the appointment.",
   };
-  const description = descriptions[notification.type];
+  let description = descriptions[notification.type];
+  if (notification.type === "decision_rejected" && appointment.decisionRemark) {
+    description += `\n\nReason from the Health Services Office: ${appointment.decisionRemark}`;
+  }
   if (!description) return { sent: false, reason: "This notification type cannot be retried." };
   const provider = String(process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
   return deliverAppointmentNotification(appointment, notification, {

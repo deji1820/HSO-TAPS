@@ -21,11 +21,12 @@ import ResultScreen from "./screens/ResultScreen.jsx";
 import OfflineScreen from "./screens/OfflineScreen.jsx";
 import { connectDeviceBridge } from "./services/deviceBridge.js";
 import { supabase } from "./services/supabase.js";
-import { lookupStudent, registerRfid, completeStudentProfile, submitIntake, createAppointment } from "./services/api.js";
+import { lookupStudent, registerRfid, completeStudentProfile, submitIntake, createAppointment, getTodayKioskAppointment } from "./services/api.js";
 import { startHealthMonitor } from "./services/healthCheck.js";
 import ConsultationEntryScreen from "./screens/ConsultationEntryScreen.jsx";
 import AppointmentBookingScreen from "./screens/AppointmentBookingScreen.jsx";
 import AppointmentConfirmedScreen from "./screens/AppointmentConfirmedScreen.jsx";
+import AppointmentFoundScreen from "./screens/AppointmentFoundScreen.jsx";
 import WalkInIntakeScreen, { COMPLAINTS, classifyTemp } from "./screens/WalkInIntakeScreen.jsx";
 import WalkInResultScreen from "./screens/WalkInResultScreen.jsx";
 import ClearanceEntryScreen from "./screens/ClearanceEntryScreen.jsx";
@@ -101,6 +102,8 @@ export default function App() {
   const [consultSubType, setConsultSubType] = useState(null); // "Medical" | "Dental"
   const [checkInInfo, setCheckInInfo] = useState(null); // shown on CheckedInScreen
   const [appointmentSelection, setAppointmentSelection] = useState(null);
+  const [appointmentServiceType, setAppointmentServiceType] = useState(null);
+  const [todayAppointmentInfo, setTodayAppointmentInfo] = useState(null);
   const [clearanceAppointmentPurpose, setClearanceAppointmentPurpose] = useState(null);
   const [clearanceAppointmentRequirements, setClearanceAppointmentRequirements] = useState([]);
   const [clearanceQueueNumber, setClearanceQueueNumber] = useState(null);
@@ -786,6 +789,21 @@ export default function App() {
       }
       return;
     }
+    if (!mobileMode) {
+      try {
+        const identity = confirmedPerson?.studentId || confirmedPerson?.employeeId || confirmedPerson?.rfidTagUid;
+        if (identity) {
+          const { appointment } = await getTodayKioskAppointment(identity);
+          if (appointment) {
+            setTodayAppointmentInfo(appointment);
+            setStep("appointmentDayReminder");
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn("[Kiosk] Could not check for a scheduled appointment today:", error);
+      }
+    }
     setStep("serviceAccess");
     if (!supabase) return;
 
@@ -861,6 +879,21 @@ export default function App() {
         window.location.assign(`${window.location.pathname}?mobileServiceSession=${encodeURIComponent(sessionId)}`);
         return;
       }
+      if (!mobileMode) {
+        const identity = updatedPerson?.studentId || updatedPerson?.employeeId || updatedPerson?.rfidTagUid;
+        if (identity) {
+          try {
+            const { appointment } = await getTodayKioskAppointment(identity);
+            if (appointment) {
+              setTodayAppointmentInfo(appointment);
+              setStep("appointmentDayReminder");
+              return;
+            }
+          } catch (error) {
+            console.warn("[Kiosk] Could not check for a scheduled appointment today:", error);
+          }
+        }
+      }
       setStep("serviceAccess");
     } catch (error) {
       setProfileSaveError(error?.response?.data?.message || error?.message || "We couldn't save your profile. Please try again.");
@@ -889,12 +922,8 @@ function handleServiceSelect(value) {
     handleConsultTypeSelect("Dental");
   } else if (value === "Prescription/OTC Pickup") {
     setFlowType("medicine");
-    setReadings({});
-    setMedicineSymptoms([]);
-    setMedicineSafetyAnswers({});
-    setStep("medicineIntake");
-    serviceSensorFlowRef.current = mobileMode ? null : "medicine";
-    if (!mobileMode) triggerHardwareSensors("temperature", "Prescription/OTC Pickup");
+    setAppointmentServiceType("Prescription & Medicine Request");
+    setStep("medicineEntry");
   } else if (value === "Medical Clearance") {
     setFlowType("clearance");
     setClearanceQueueNumber(null);
@@ -974,6 +1003,15 @@ function toggleMedicineSymptom(symptom) {
     : [...current, symptom]);
 }
 
+function handleMedicineWalkIn() {
+  setReadings({});
+  setMedicineSymptoms([]);
+  setMedicineSafetyAnswers({});
+  setStep("medicineIntake");
+  serviceSensorFlowRef.current = mobileMode ? null : "medicine";
+  if (!mobileMode) triggerHardwareSensors("temperature", "Prescription/OTC Pickup");
+}
+
 async function handleManualBpSubmit({ systolicMmhg, diastolicMmhg, pulseBpm }) {
   const systolic = Number(systolicMmhg);
   const diastolic = Number(diastolicMmhg);
@@ -1019,7 +1057,7 @@ async function handleManualBpSubmit({ systolicMmhg, diastolicMmhg, pulseBpm }) {
 }
 
 async function handleMedicineSubmit() {
-  if (submittingRef.current || (!mobileMode && (readings.temperatureC == null || readings.bloodPressure == null)) || medicineSymptoms.length === 0 || Object.keys(medicineSafetyAnswers).length < 3) return;
+  if (submittingRef.current || medicineSymptoms.length === 0 || Object.keys(medicineSafetyAnswers).length < 3) return;
   submittingRef.current = true;
   const temperatureC = readings.temperatureC == null ? null : Number(readings.temperatureC);
   const temperatureClass = classifyTemp(temperatureC);
@@ -1063,13 +1101,12 @@ async function handleMedicineSubmit() {
 
 function handleBookAppointment() {
   setAppointmentSelection(null);
+  setAppointmentServiceType(flowType === "medicine" ? "Prescription & Medicine Request" : consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation");
   setStep("appointmentBooking");
 }
 
 async function handleAppointmentProceed(selection) {
-  const serviceType = clearanceAppointmentPurpose
-    ? "Medical Clearance"
-    : consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation";
+  const serviceType = clearanceAppointmentPurpose ? "Medical Clearance" : appointmentServiceType || (consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation");
   const result = await createAppointment({
     studentId: student?.studentId || student?.rfidTagUid,
     serviceType,
@@ -1078,7 +1115,7 @@ async function handleAppointmentProceed(selection) {
     timeSlot: selection.time,
     notificationEmail: selection.notificationEmail,
   });
-  setAppointmentSelection({ ...selection, appointmentId: result.appointment._id, pendingEmailSent: result.notificationSent });
+  setAppointmentSelection({ ...selection, serviceType, appointmentId: result.appointment._id, pendingEmailSent: result.notificationSent });
   setStep("appointmentConfirmed");
 }
 
@@ -1745,6 +1782,15 @@ async function handleScreeningOptionSelect(mode) {
   />
 )}
 
+{step === "medicineEntry" && <ConsultationEntryScreen
+  serviceLabel="PRESCRIPTION & MEDICINE REQUEST"
+  onWalkIn={handleMedicineWalkIn}
+  onBookAppointment={handleBookAppointment}
+  onBack={() => { setFlowType(null); setStep("service"); }}
+  onFaq={openFaq}
+  isOnline={isOnline}
+/>}
+
 {step === "clearanceEntry" && (
   <ClearanceEntryScreen
     onWalkIn={() => setStep("clearanceIntake")}
@@ -1800,11 +1846,12 @@ async function handleScreeningOptionSelect(mode) {
 {step === "appointmentBooking" && (
   <AppointmentBookingScreen
     consultSubType={consultSubType}
-    serviceType={consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation"}
+    serviceLabel={appointmentServiceType === "Prescription & Medicine Request" ? "PRESCRIPTION & MEDICINE REQUEST" : undefined}
+    serviceType={appointmentServiceType || (consultSubType === "Dental" ? "Dental Consultation" : "Medical Consultation")}
     schoolEmail={student?.email || ""}
     onProceed={handleAppointmentProceed}
     onFaq={openFaq}
-    onBack={() => setStep("consultationEntry")}
+    onBack={() => setStep(flowType === "medicine" ? "medicineEntry" : "consultationEntry")}
     isOnline={isOnline}
   />
 )}
@@ -1825,6 +1872,7 @@ async function handleScreeningOptionSelect(mode) {
 {step === "appointmentConfirmed" && appointmentSelection && !clearanceAppointmentPurpose && (
   <AppointmentConfirmedScreen
     consultSubType={consultSubType}
+    serviceLabel={appointmentSelection.serviceType === "Prescription & Medicine Request" ? "PRESCRIPTION & MEDICINE REQUEST" : undefined}
     dateLabel={appointmentSelection.date.toLocaleDateString("en-US", {
       weekday: "long",
       month: "long",
@@ -1839,6 +1887,13 @@ async function handleScreeningOptionSelect(mode) {
     isOnline={isOnline}
   />
 )}
+
+{step === "appointmentDayReminder" && todayAppointmentInfo && <AppointmentFoundScreen
+  appointment={todayAppointmentInfo}
+  onDone={onFlowDone}
+  onFaq={openFaq}
+  isOnline={isOnline}
+/>}
 
 {step === "appointmentConfirmed" && appointmentSelection && clearanceAppointmentPurpose && (
   <AppointmentConfirmedScreen

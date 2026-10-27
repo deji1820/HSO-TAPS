@@ -3,14 +3,21 @@ import KioskHeader from "../components/KioskHeader.jsx";
 import { getAppointmentAvailability, getAppointmentSchedule } from "../services/api.js";
 import "../styles/screens/Appointment.css";
 
-const MORNING = ["8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM"];
-const AFTERNOON = Array.from({ length: 18 }, (_, index) => {
-  const totalMinutes = 12 * 60 + index * 30;
+function makeSlots(timeWindows, fallbackEnd) {
+  const windows = timeWindows?.length ? timeWindows : [{ startTime: "08:00", endTime: fallbackEnd }];
+  const values = new Set();
+  windows.forEach(({ startTime, endTime }) => {
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+    const [endHour, endMinute] = endTime.split(":").map(Number);
+    for (let totalMinutes = startHour * 60 + startMinute; totalMinutes + 30 <= endHour * 60 + endMinute; totalMinutes += 30) {
   const hour24 = Math.floor(totalMinutes / 60);
   const minute = totalMinutes % 60;
   const hour = hour24 % 12 || 12;
-  return `${hour}:${String(minute).padStart(2, "0")} ${hour24 < 12 ? "AM" : "PM"}`;
-});
+      values.add(`${hour}:${String(minute).padStart(2, "0")} ${hour24 < 12 ? "AM" : "PM"}`);
+    }
+  });
+  return [...values];
+}
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const DAY_SCHEDULES = [
   { label: "Medical Consultation", days: "Monday–Friday", weekdays: [1, 2, 3, 4, 5] },
@@ -84,7 +91,7 @@ export default function AppointmentBookingScreen({
   const [email, setEmail] = useState(schoolEmail);
 
   const serviceSchedule = DAY_SCHEDULES.find(({ label }) => label === serviceType);
-  const isProviderScheduledService = ["Medical Consultation", "Dental Consultation", "Medical Clearance"].includes(serviceType);
+  const isProviderScheduledService = ["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription & Medicine Request"].includes(serviceType);
   const allowedWeekdays = isProviderScheduledService ? providerWeekdays : serviceSchedule?.weekdays;
   const scheduleDayLabel = providerWeekdays !== null
     ? providerWeekdays.length
@@ -92,6 +99,10 @@ export default function AppointmentBookingScreen({
       : "No provider days configured"
     : serviceSchedule?.days || "No days available";
   const cells = buildMonthCells(viewMonth);
+  const fallbackEnd = ["Medical Consultation", "Dental Consultation"].includes(serviceType) ? "16:00" : "21:00";
+  const slots = makeSlots(providerTimeWindows, fallbackEnd);
+  const morningSlots = slots.filter((slot) => slot.endsWith("AM"));
+  const afternoonSlots = slots.filter((slot) => slot.endsWith("PM"));
   const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase();
   const atCurrentMonth =
     viewMonth.getFullYear() === today.getFullYear() && viewMonth.getMonth() === today.getMonth();
@@ -178,9 +189,9 @@ export default function AppointmentBookingScreen({
           {/* Time slots */}
           <div className="apt-card apt-time-card">
             <p className="apt-card-title">MORNING</p>
-            <div className="apt-slot-grid">{renderSlots(MORNING)}</div>
-            <p className="apt-card-title apt-card-title--spaced">AFTERNOON &amp; EVENING · UNTIL 9:00 PM</p>
-            <div className="apt-slot-grid">{renderSlots(AFTERNOON)}</div>
+            <div className="apt-slot-grid">{renderSlots(morningSlots)}</div>
+            <p className="apt-card-title apt-card-title--spaced">AFTERNOON{fallbackEnd === "21:00" ? " & EVENING · UNTIL 9:00 PM" : " · UNTIL 4:00 PM"}</p>
+            <div className="apt-slot-grid">{renderSlots(afternoonSlots)}</div>
           </div>
 
           <aside className="apt-card apt-schedule-guide" aria-label="Appointment schedule guide">
@@ -193,7 +204,7 @@ export default function AppointmentBookingScreen({
               ))}
             </ul>
             {scheduleError && <p className="appointment-error" role="alert">{scheduleError}</p>}
-            {isProviderScheduledService && providerTimeWindows ? <p>{providerTimeWindows.length ? `Available hours: ${providerTimeWindows.map(({ startTime, endTime }) => `${displayScheduleTime(startTime)}–${displayScheduleTime(endTime)}`).join(", ")}. Time slots are 30 minutes.` : "No provider hours are configured for this service."}</p> : <p>Available appointment times are 8:00 AM–8:30 PM. The last 30-minute slot ends at 9:00 PM.</p>}
+            <p>Available appointment hours: 8:00 AM–{fallbackEnd === "16:00" ? "4:00 PM" : "9:00 PM"}. Time slots are 30 minutes.</p>
           </aside>
 
         </div>

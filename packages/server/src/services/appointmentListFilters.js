@@ -1,4 +1,4 @@
-const SERVICE_TYPES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance"]);
+const SERVICE_TYPES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription & Medicine Request"]);
 const DECISION_STATUSES = new Set(["pending", "accepted", "rejected"]);
 const APPOINTMENT_STATUSES = new Set(["scheduled", "checked_in", "cancelled", "completed", "no_show"]);
 const REGEX_META_CHARACTERS = new Set(["\\", ".", "*", "+", "?", "^", "$", "{", "}", "(", ")", "|", "[", "]"]);

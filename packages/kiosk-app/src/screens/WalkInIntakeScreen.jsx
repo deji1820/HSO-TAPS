@@ -81,7 +81,7 @@ export default function WalkInIntakeScreen({
         </div>
 
         <div className="wic-panel">
-          <p className="wic-panel-title">MANDATORY VITAL SIGNS INTAKE</p>
+          <p className="wic-panel-title">VITAL SIGN INTAKE</p>
           <p className={`wic-panel-hint wic-instruction${isAbnormal ? " wic-panel-hint--danger" : ""}`}>
             Please position your right wrist in front of the temperature sensor and your left arm into the blood pressure cuff to acquire your vital signs.
           </p>

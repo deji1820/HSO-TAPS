@@ -31,7 +31,7 @@ export const saveProviderSchedule = (payload) => api.put("/appointments/provider
 export const disableProviderSchedule = (id) => api.patch(`/appointments/provider-schedules/${encodeURIComponent(id)}/disable`).then((r) => r.data);
 export const assignAppointmentProvider = (id, providerId) => api.patch(`/appointments/${encodeURIComponent(id)}/provider`, { providerId }).then((r) => r.data);
 export const checkInAppointment = (id) => api.post(`/appointments/${encodeURIComponent(id)}/check-in`).then((r) => r.data);
-export const updateAppointmentDecision = (id, decisionStatus) => api.patch("/appointments/" + id + "/decision", { decisionStatus }).then((r) => r.data);
+export const updateAppointmentDecision = (id, decisionStatus, remark = "") => api.patch("/appointments/" + id + "/decision", { decisionStatus, remark }).then((r) => r.data);
 export const updateAppointmentNoShowException = (id, exempt, reason = "") => api.patch(`/appointments/${encodeURIComponent(id)}/no-show-exemption`, { exempt, reason }).then((r) => r.data);
 export const updateQueueStatus = (id, status, details = {}) => api.patch(`/queue/${id}/status`, { status, ...details }).then((r) => r.data);
 export const updateQueueExpirationExemption = (id, exempt, reason = "") => api.patch(`/queue/${encodeURIComponent(id)}/expiration-exemption`, { exempt, reason }).then((r) => r.data);

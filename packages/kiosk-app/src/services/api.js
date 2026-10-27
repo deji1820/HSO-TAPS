@@ -21,6 +21,9 @@ export const getAppointmentAvailability = (serviceType, date) =>
 export const getAppointmentSchedule = (serviceType) =>
   api.get("/appointments/schedule", { params: { serviceType } }).then((r) => r.data);
 
+export const getTodayKioskAppointment = (studentId) =>
+  api.get(`/appointments/kiosk/today/${encodeURIComponent(studentId)}`).then((r) => r.data);
+
 export const getClearanceRequirements = () => api.get("/appointments/clearance-requirements").then((r) => r.data);
 
 export const createAppointment = (payload) =>

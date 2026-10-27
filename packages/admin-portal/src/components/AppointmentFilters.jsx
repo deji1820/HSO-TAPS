@@ -11,7 +11,7 @@ export default function AppointmentFilters({ search, filters, onSearchChange, on
       <label>To<input className="text-input" type="date" value={filters.to} onChange={(event) => onFilterChange("to", event.target.value)} /></label>
       <label>Service
         <select className="text-input" value={filters.serviceType} onChange={(event) => onFilterChange("serviceType", event.target.value)}>
-          <option value="">All services</option><option>Medical Consultation</option><option>Dental Consultation</option><option>Medical Clearance</option>
+          <option value="">All services</option><option>Medical Consultation</option><option>Dental Consultation</option><option>Medical Clearance</option><option>Prescription &amp; Medicine Request</option>
         </select>
       </label>
       <label>Decision

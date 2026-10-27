@@ -307,7 +307,6 @@ function MedicalProfileSections({ entry, vitals = [], editable = false, onFieldC
   const latestVitals = vitals[0] || {};
   const profileField = (key, label, fallback = "") => <ProfileValue key={key} label={label} value={fields[key] ?? fallback} editable={editable} name={key} onChange={onFieldChange} />;
   return <div className="emr-profile-sections">
-    {fields.clearancePurpose && <section className="emr-profile-section emr-clearance-profile"><h3>Medical Clearance</h3><div className="emr-profile-fields"><ProfileValue label="Clearance Purpose" value={fields.clearancePurpose} /><ProfileValue label="Provider Determination" value={fields.providerStatement} /><ProfileValue label="Approved By" value={`${fields.providerRole || "Provider"} - ${entry.provider || ""}`} /><ProfileValue label="Clearance Assessment" value={[fields.clearanceAssessment?.physicalExam, fields.clearanceAssessment?.laboratoryExamination, fields.clearanceAssessment?.notes].filter(Boolean).join(" | ")} /></div><h4>Requirement Review</h4><ul>{(fields.requirementChecks || []).map((item, index) => <li key={`${item.text}-${index}`}>{item.text} - {item.status?.replaceAll("_", " ")}{item.evidence ? ` (${item.evidence})` : ""}</li>)}</ul></section>}
     <section className="emr-profile-section">
       <h3>Physical Examination</h3>
       <div className="emr-physical-layout">

@@ -13,11 +13,12 @@ import { checkInEligibility } from "../services/appointmentCheckIn.js";
 import { nextQueueNumber } from "../services/queueNumbering.service.js";
 import { createMedicalClearanceWorkflow } from "../services/medicalClearanceWorkflow.js";
 import { getAppointmentWeekdays, findAvailableProviders, isProviderSchedulingConfigured } from "../services/providerScheduling.service.js";
-import { PROVIDER_SERVICES, providerRoleMatches, slotFitsSchedule, validWeekdays } from "../services/providerAvailability.js";
+import { PROVIDER_SERVICES, SCHEDULE_SERVICES, providerRoleMatches, slotFitsSchedule, validWeekdays } from "../services/providerAvailability.js";
 import { decoratePatientYearLevel } from "../services/patientInformation.js";
 import { getConfiguredAcademicYear } from "../services/academicYearDisplay.js";
 
-const SERVICES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance"]);
+const SERVICES = new Set(["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription & Medicine Request"]);
+const SERVICE_CAPACITY = { "Medical Consultation": 1, "Dental Consultation": 1, "Medical Clearance": 2, "Prescription & Medicine Request": 2 };
 const TIMES = new Set(Array.from({ length: 26 }, (_, index) => {
   const totalMinutes = 8 * 60 + index * 30;
   const hour24 = Math.floor(totalMinutes / 60);
@@ -65,6 +66,25 @@ function timeValueIsValid(value) {
   return typeof value === "string" && /^([01]\d|2[01]):[0-5]\d$/.test(value) && Number(value.slice(3)) % 30 === 0;
 }
 
+function serviceHours(serviceType) {
+  return ["Medical Consultation", "Dental Consultation"].includes(serviceType)
+    ? { start: 8 * 60, end: 16 * 60 }
+    : { start: 8 * 60, end: 21 * 60 };
+}
+
+function slotFitsServiceHours(serviceType, timeSlot) {
+  const match = /^(\d{1,2}):(\d{2}) (AM|PM)$/.exec(String(timeSlot || ""));
+  if (!match) return false;
+  const hour = Number(match[1]) % 12 + (match[3] === "PM" ? 12 : 0);
+  const start = hour * 60 + Number(match[2]);
+  const hours = serviceHours(serviceType);
+  return start >= hours.start && start + 30 <= hours.end;
+}
+
+function appointmentCapacity(serviceType) {
+  return SERVICE_CAPACITY[serviceType] || 1;
+}
+
 function toMinutes(value) {
   const [hours, minutes] = value.split(":").map(Number);
   return hours * 60 + minutes;
@@ -75,8 +95,10 @@ export async function getAvailability(req, res) {
   if (!SERVICES.has(serviceType) || !(await serviceAllowsDate(serviceType, date)) || date < todayInManila()) {
     return res.status(400).json({ message: "Choose a valid service and a date when that service accepts appointments." });
   }
-  const appointments = await Appointment.find({ serviceType, dateKey: date, status: { $in: ["scheduled", "checked_in"] } }).select("timeSlot -_id");
-  const unavailableTimes = new Set([...appointments.map(({ timeSlot }) => timeSlot), ...[...TIMES].filter((time) => !slotIsInFuture(date, time))]);
+  const appointments = await Appointment.find({ serviceType, dateKey: date, status: { $in: activeAppointmentStatuses } }).select("timeSlot -_id").lean();
+  const counts = new Map();
+  for (const { timeSlot } of appointments) counts.set(timeSlot, (counts.get(timeSlot) || 0) + 1);
+  const unavailableTimes = new Set([...TIMES].filter((time) => !slotIsInFuture(date, time) || !slotFitsServiceHours(serviceType, time) || (counts.get(time) || 0) >= appointmentCapacity(serviceType)));
   if (PROVIDER_SERVICES.has(serviceType) && await isProviderSchedulingConfigured(serviceType)) {
     for (const timeSlot of TIMES) {
       if (unavailableTimes.has(timeSlot)) continue;
@@ -98,9 +120,33 @@ export function getClearanceRequirements(_req, res) {
   return res.json({ items: CLEARANCE_REQUIREMENTS });
 }
 
+export async function getKioskTodayAppointment(req, res) {
+  const identity = String(req.params.studentId || "").trim();
+  if (!identity || identity.length > 100) return res.status(400).json({ message: "A valid student or employee identifier is required." });
+  const student = await Student.findOne({
+    $or: [{ studentId: identity }, { employeeId: identity }, { rfidTagUid: identity.toUpperCase() }],
+    isActive: { $ne: false },
+  }).select("_id");
+  if (!student) return res.status(404).json({ message: "Patient record not found." });
+  const appointment = await Appointment.findOne({
+    student: student._id,
+    dateKey: todayInManila(),
+    status: "scheduled",
+    decisionStatus: "accepted",
+  }).select("serviceType purpose dateKey timeSlot assignedProvider").populate("assignedProvider", "name role").sort({ timeSlot: 1 });
+  if (!appointment) return res.json({ appointment: null });
+  return res.json({ appointment: {
+    serviceType: appointment.serviceType,
+    purpose: appointment.purpose || "",
+    dateKey: appointment.dateKey,
+    timeSlot: appointment.timeSlot,
+    assignedProvider: appointment.assignedProvider ? { name: appointment.assignedProvider.name, role: appointment.assignedProvider.role } : null,
+  } });
+}
+
 export async function getProviderOptions(req, res) {
   const { serviceType, date, timeSlot, excludeAppointmentId } = req.query;
-  if (!PROVIDER_SERVICES.has(serviceType)) return res.status(400).json({ message: "Provider assignment is available only for medical and dental consultations." });
+  if (!PROVIDER_SERVICES.has(serviceType)) return res.status(400).json({ message: "Provider assignment is not available for this service." });
   const configured = await isProviderSchedulingConfigured(serviceType);
   if (date || timeSlot) {
     if (!date || !timeSlot || !validDateKey(date) || !TIMES.has(timeSlot)) return res.status(400).json({ message: "Choose a valid appointment date and time." });
@@ -109,7 +155,7 @@ export async function getProviderOptions(req, res) {
     return res.json({ configured, providers: result.providers });
   }
 
-  const roles = serviceType === "Dental Consultation" ? ["dentist"] : ["physician", "doctor"];
+  const roles = serviceType === "Dental Consultation" ? ["dentist"] : serviceType === "Medical Consultation" ? ["physician", "doctor"] : ["nurse"];
   const providers = await User.find({ role: { $in: roles } }).select("name role").sort({ name: 1 });
   res.json({ configured, providers });
 }
@@ -121,7 +167,7 @@ export async function listProviderSchedules(_req, res) {
 
 export async function saveProviderSchedule(req, res) {
   const { providerId, serviceType, weekdays, startTime, endTime } = req.body || {};
-  if (!mongoose.isValidObjectId(providerId) || !PROVIDER_SERVICES.has(serviceType) || !validWeekdays(weekdays)
+  if (!mongoose.isValidObjectId(providerId) || !SCHEDULE_SERVICES.has(serviceType) || !validWeekdays(weekdays)
     || !timeValueIsValid(startTime) || !timeValueIsValid(endTime) || toMinutes(startTime) < 8 * 60
     || toMinutes(endTime) > 21 * 60 || toMinutes(startTime) >= toMinutes(endTime)) {
     return res.status(400).json({ message: "Choose a provider, service, Monday–Saturday workdays, and valid hours between 8:00 AM and 9:00 PM." });
@@ -194,7 +240,7 @@ export async function assignAppointmentProvider(req, res) {
 export async function createAppointment(req, res) {
   const { studentId, serviceType, purpose, date, timeSlot } = req.body;
   const notificationEmail = String(req.body.notificationEmail || "").trim().toLowerCase();
-  if (!SERVICES.has(serviceType) || !(await serviceAllowsDate(serviceType, date)) || date < todayInManila() || !TIMES.has(timeSlot) || !slotIsInFuture(date, timeSlot)) {
+  if (!SERVICES.has(serviceType) || !(await serviceAllowsDate(serviceType, date)) || date < todayInManila() || !TIMES.has(timeSlot) || !slotIsInFuture(date, timeSlot) || !slotFitsServiceHours(serviceType, timeSlot)) {
     return res.status(400).json({ message: "The selected service, date, or time is invalid." });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {
@@ -216,31 +262,46 @@ export async function createAppointment(req, res) {
     return res.status(400).json({ message: "Choose a medical clearance purpose that matches the patient's affiliation." });
   }
 
-  const slotUnavailable = await Appointment.exists({
+  const occupiedAppointments = await Appointment.find({
     serviceType,
     dateKey: date,
     timeSlot,
-    status: { $in: ["scheduled", "checked_in"] },
-  });
-  if (slotUnavailable) return res.status(409).json({ message: "That appointment time is no longer available. Please choose another time." });
-
-  let assignedProvider;
-  if (PROVIDER_SERVICES.has(serviceType) && await isProviderSchedulingConfigured(serviceType)) {
-    const availability = await findAvailableProviders({ serviceType, dateKey: date, timeSlot });
-    if (!availability.providers.length) return res.status(409).json({ message: "No provider is available for that time. Please choose another time." });
-    assignedProvider = availability.providers[0]._id;
-  }
+    status: { $in: activeAppointmentStatuses },
+  }).select("slotNumber").lean();
+  const occupiedSlots = new Set(occupiedAppointments.map((appointment) => appointment.slotNumber || 1));
+  const slotNumbers = Array.from({ length: appointmentCapacity(serviceType) }, (_, index) => index + 1).filter((position) => !occupiedSlots.has(position));
+  if (!slotNumbers.length) return res.status(409).json({ message: "That appointment time is no longer available. Please choose another time." });
 
   try {
-    const appointment = await Appointment.create({
-      student: student._id,
-      serviceType,
-      purpose: clearanceRequirement?.purpose || purpose?.trim(),
-      dateKey: date,
-      timeSlot,
-      ...(assignedProvider ? { assignedProvider } : {}),
-      notificationEmail,
-    });
+    let appointment;
+    for (const slotNumber of slotNumbers) {
+      try {
+        let assignedProvider;
+        if (PROVIDER_SERVICES.has(serviceType) && await isProviderSchedulingConfigured(serviceType)) {
+          const availability = await findAvailableProviders({ serviceType, dateKey: date, timeSlot });
+          if (!availability.providers.length) continue;
+          assignedProvider = availability.providers[0]._id;
+        }
+        appointment = await Appointment.create({
+          student: student._id,
+          serviceType,
+          purpose: clearanceRequirement?.purpose || purpose?.trim(),
+          dateKey: date,
+          timeSlot,
+          slotNumber,
+          ...(assignedProvider ? { assignedProvider } : {}),
+          notificationEmail,
+        });
+        break;
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+        const stillOpen = await Appointment.exists({ serviceType, dateKey: date, timeSlot, status: { $in: activeAppointmentStatuses }, slotNumber });
+        if (stillOpen) continue;
+        if (PROVIDER_SERVICES.has(serviceType)) continue;
+        throw error;
+      }
+    }
+    if (!appointment) return res.status(409).json({ message: "That appointment time was just booked. Please choose another available time." });
     student.email = notificationEmail;
     await student.save();
     await appointment.populate("student", "firstName lastName email");
@@ -465,19 +526,24 @@ export async function updateAppointmentNoShowException(req, res) {
 
 export async function updateAppointmentDecision(req, res) {
   const { decisionStatus } = req.body;
+  const decisionRemark = String(req.body?.remark || "").trim().slice(0, 1000);
   if (!["accepted", "rejected"].includes(decisionStatus)) {
     return res.status(400).json({ message: "Choose accept or reject for this appointment." });
   }
+  if (decisionStatus === "rejected" && decisionRemark.length < 3) return res.status(400).json({ message: "Enter a rejection remark of at least 3 characters." });
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) {
     return res.status(400).json({ message: "Invalid appointment ID." });
   }
 
+  const decisionAt = new Date();
   const appointmentUpdate = {
     $set: {
       decisionStatus,
-      decisionAt: new Date(),
+      decisionAt,
+      decisionRemark,
       ...(decisionStatus === "rejected" ? { status: "cancelled" } : {}),
     },
+    ...(decisionStatus === "rejected" ? { $push: { statusHistory: { from: "scheduled", to: "cancelled", actor: String(req.user.id), at: decisionAt, reason: decisionRemark } } } : {}),
   };
   const appointment = await Appointment.findOneAndUpdate(
     {
@@ -497,7 +563,7 @@ export async function updateAppointmentDecision(req, res) {
 
   const notificationEmail = appointment.notificationEmail || appointment.student?.email;
   const notification = notificationEmail
-    ? await sendAppointmentDecisionNotification(appointment, decisionStatus, notificationEmail)
+    ? await sendAppointmentDecisionNotification(appointment, decisionStatus, notificationEmail, decisionRemark)
     : { sent: false, reason: "The student has no school email address on file." };
   req.app.get("io")?.emit("appointment:update", { _id: appointment._id, decisionStatus, status: appointment.status });
 

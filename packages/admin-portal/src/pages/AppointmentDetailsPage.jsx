@@ -36,7 +36,7 @@ function Status({ value, group }) {
 }
 
 function notificationTypeLabel(type) {
-  return ({ booking_received: "Booking acknowledgment", decision_accepted: "Appointment accepted", decision_rejected: "Appointment rejected" })[type] || "Appointment email";
+  return ({ booking_received: "Booking acknowledgment", decision_accepted: "Appointment accepted", decision_rejected: "Appointment rejected", appointment_reminder: "One-hour appointment reminder" })[type] || "Appointment email";
 }
 
 function attendanceStatus(appointment) {
@@ -98,7 +98,7 @@ export default function AppointmentDetailsPage({ user }) {
 
   const canAssignProvider = ["nurse", "supervisor", "staff"].includes(normalizeRole(user?.role));
   useEffect(() => {
-    if (!appointment || !canAssignProvider || appointment.status !== "scheduled" || appointment.decisionStatus !== "accepted" || !["Medical Consultation", "Dental Consultation"].includes(appointment.serviceType)) {
+    if (!appointment || !canAssignProvider || appointment.status !== "scheduled" || appointment.decisionStatus !== "accepted" || !["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription & Medicine Request"].includes(appointment.serviceType)) {
       setProviderOptions([]);
       setProviderConfigured(false);
       return undefined;
@@ -119,9 +119,10 @@ export default function AppointmentDetailsPage({ user }) {
   const patientIdentifier = patient?.employeeId || patient?.studentId;
   const canViewEmr = ["nurse", "supervisor", "physician", "dentist"].includes(normalizeRole(user?.role));
   const decision = appointment.decisionStatus || "pending";
+  const nurseRoutedService = ["Medical Clearance", "Prescription & Medicine Request"].includes(appointment.serviceType);
   const decisionIsOpen = decision === "pending" && appointment.status === "scheduled";
   const checkInIsOpen = decision === "accepted" && appointment.status === "scheduled" && (appointment.dateKey === todayInManila() || appointment.noShowExempt === true);
-  const usesProvider = ["Medical Consultation", "Dental Consultation"].includes(appointment.serviceType);
+  const usesProvider = ["Medical Consultation", "Dental Consultation", "Medical Clearance", "Prescription & Medicine Request"].includes(appointment.serviceType);
 
   async function updateProvider(providerId) {
     setProviderBusy(true);
@@ -190,12 +191,16 @@ export default function AppointmentDetailsPage({ user }) {
   }
 
   async function decide(decisionStatus) {
-    if (decisionStatus === "rejected" && !await appDialog.confirm("Reject this appointment? Its time slot will become available again.")) return;
+    let remark = "";
+    if (decisionStatus === "rejected") {
+      remark = String(await appDialog.prompt("Enter the reason for rejecting this appointment. The patient will receive this note by email.", "", "Reject appointment", true) || "").trim();
+      if (remark.length < 3) { if (remark) await appDialog.alert("Enter a rejection remark of at least 3 characters."); return; }
+    }
     setDecisionBusy(true);
     setDecisionNotice("");
     setError("");
     try {
-      const result = await updateAppointmentDecision(appointment._id, decisionStatus);
+      const result = await updateAppointmentDecision(appointment._id, decisionStatus, remark);
       setAppointment(result.appointment);
       await loadNotifications();
       setDecisionNotice(result.notificationSent
@@ -247,6 +252,7 @@ export default function AppointmentDetailsPage({ user }) {
               <LabelValue label="Encounter status">{appointment.queueEntry?.encounterStatusLabel || "Not checked in"}</LabelValue>
               <LabelValue label="Decision"><Status value={decision} group="decision" /></LabelValue>
               <LabelValue label="Decision recorded">{displayTimestamp(appointment.decisionAt)}</LabelValue>
+              {decision === "rejected" && appointment.decisionRemark && <LabelValue label="Rejection remark">{appointment.decisionRemark}</LabelValue>}
               <LabelValue label="Created">{displayTimestamp(appointment.createdAt)}</LabelValue>
               <LabelValue label="Last updated">{displayTimestamp(appointment.updatedAt)}</LabelValue>
               {appointment.noShowAt && <LabelValue label="No-show recorded">{displayTimestamp(appointment.noShowAt)}</LabelValue>}
@@ -263,11 +269,11 @@ export default function AppointmentDetailsPage({ user }) {
             <dl className="appointment-detail-grid">
               <LabelValue label="Provider">{valueOrDash(appointment.assignedProvider?.name || "Unassigned")}</LabelValue>
               <LabelValue label="Role">{valueOrDash(appointment.assignedProvider?.role)}</LabelValue>
-              <LabelValue label="Scheduled duty days">{providerSchedule?.weekdays?.length ? providerSchedule.weekdays.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ") : "Unavailable"}</LabelValue>
-              <LabelValue label="Duty hours">{providerSchedule ? `${providerSchedule.startTime}–${providerSchedule.endTime}` : "Unavailable"}</LabelValue>
+              <LabelValue label="Scheduled duty days">{providerSchedule?.weekdays?.length ? providerSchedule.weekdays.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ") : nurseRoutedService ? "Clinic nurse rotation" : "Unavailable"}</LabelValue>
+              <LabelValue label="Duty hours">{providerSchedule ? `${providerSchedule.startTime}–${providerSchedule.endTime}` : nurseRoutedService ? "8:00 AM–9:00 PM" : appointment.serviceType === "Medical Consultation" || appointment.serviceType === "Dental Consultation" ? "8:00 AM–4:00 PM" : "Unavailable"}</LabelValue>
             </dl>
             {canAssignProvider && decision === "accepted" && appointment.status === "scheduled" && <div className="appointment-provider-editor">
-              {providerConfigured ? <label htmlFor="appointment-provider-select">Change provider<select id="appointment-provider-select" className="text-input" disabled={providerBusy} value={appointment.assignedProvider?._id || ""} onChange={(event) => updateProvider(event.target.value)}><option value="">Unassigned</option>{providerOptions.map((provider) => <option key={provider._id} value={provider._id}>{provider.name} · {provider.role}</option>)}</select></label> : <p className="appointment-detail-muted">No provider schedule is configured for this service. Existing kiosk weekday rules remain active until schedules are added.</p>}
+              {providerConfigured ? <label htmlFor="appointment-provider-select">Change provider<select id="appointment-provider-select" className="text-input" disabled={providerBusy} value={appointment.assignedProvider?._id || ""} onChange={(event) => updateProvider(event.target.value)}><option value="">Unassigned</option>{providerOptions.map((provider) => <option key={provider._id} value={provider._id}>{provider.name} · {provider.role}</option>)}</select></label> : <p className="appointment-detail-muted">No eligible provider account is available for this service.</p>}
               {normalizeRole(user?.role) === "supervisor" && <Link className="btn btn-outline btn-sm" to="/appointment-schedules">Manage provider schedules</Link>}
               {providerConfigured && !providerOptions.length && <p className="appointment-detail-muted">No eligible provider is free for this appointment slot.</p>}
             </div>}

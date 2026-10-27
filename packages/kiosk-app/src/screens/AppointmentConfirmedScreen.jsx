@@ -45,7 +45,7 @@ export default function AppointmentConfirmedScreen({
             : `We could not send the pending confirmation email to ${notificationEmail || "your school address"}. The request is saved; please contact the Health Services Office if you need confirmation.`} Please wait for the decision before coming to the clinic.</p>
           <p className="apt-reminders-title">IF ACCEPTED:</p>
           <p>Take a picture of the appointment details before you leave the kiosk.</p>
-          <p>Arrive on or before the appointment time and check in at the kiosk before entering the clinic{purposeLabel ? " with the complete requirements." : "."}</p>
+          <p>Arrive on or before the appointment time. On the appointment day, tap your ID at the kiosk; if your accepted appointment is displayed, you may skip the walk-in queue and go inside the clinic at the scheduled time{purposeLabel ? " with the complete requirements." : "."}</p>
         </div>
 
         <button className="apt-btn apt-btn--end" onClick={onDone}>
