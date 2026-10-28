@@ -1,0 +1,2 @@
+affiliation,studentId,employeeId,firstName,lastName,dateOfBirth,sex,program,department,yearLevel,guardianContact,schoolYear,email
+Employee,,EMP-SAMPLE-001,Jordan,Sample,1990-06-20,Prefer not to say,,Health Services Office,,,09170000001,jordan.sample@example.com

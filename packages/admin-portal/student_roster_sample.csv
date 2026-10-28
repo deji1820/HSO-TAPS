@@ -1,0 +1,2 @@
+affiliation,studentId,employeeId,firstName,lastName,dateOfBirth,sex,program,department,yearLevel,guardianContact,schoolYear,email
+Student,2026-000001,,Alex,Sample,2006-01-15,Prefer not to say,BS Information Technology,College of Computing,1st Year,09170000000,2026-2027,alex.sample@example.com
