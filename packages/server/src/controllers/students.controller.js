@@ -5,6 +5,7 @@ import ExternalDocument from "../models/ExternalDocument.js";
 import QueueEntry from "../models/QueueEntry.js";
 import { SyncLog } from "../models/FormPipeline.js";
 import Appointment from "../models/Appointment.js";
+import AppointmentNotification from "../models/AppointmentNotification.js";
 import MedicalProfile from "../models/MedicalProfile.js";
 import MedicalWorkflow from "../models/MedicalWorkflow.js";
 import PatientHistory from "../models/PatientHistory.js";
@@ -63,13 +64,14 @@ async function findRosterPerson(personId) {
 }
 
 async function getLinkedRecordCounts(id) {
-  const [vitals, consultations, documents, queueEntries, appointments, medicalProfiles, patientHistories, formSubmissions] = await Promise.all([
+  const [vitals, consultations, documents, queueEntries, appointments, medicalProfiles, patientHistories, formSubmissions, medicalWorkflows] = await Promise.all([
     VitalsLog.countDocuments({ student: id }), ConsultationRecord.countDocuments({ student: id }),
     ExternalDocument.countDocuments({ student: id }), QueueEntry.countDocuments({ student: id }),
     Appointment.countDocuments({ student: id }), MedicalProfile.countDocuments({ student: id }),
     PatientHistory.countDocuments({ student: id }), SyncLog.countDocuments({ matchedStudent: id }),
+    MedicalWorkflow.countDocuments({ student: id }),
   ]);
-  return { vitals, consultations, documents, queueEntries, appointments, medicalProfiles, patientHistories, formSubmissions };
+  return { vitals, consultations, documents, queueEntries, appointments, medicalProfiles, patientHistories, formSubmissions, medicalWorkflows };
 }
 
 function hasLinkedRecords(counts) {
@@ -145,16 +147,52 @@ export async function restoreRosterRecord(req, res) {
   res.json({ ok: true, message: "Roster record restored. The person can use kiosk lookup again; their RFID may need to be registered again." });
 }
 
-// DELETE /api/students/roster/:personId (superadmin; only when no linked history exists)
+// DELETE /api/students/roster/:personId (superadmin; permanently removes the roster record and HSO-TAP records linked to it)
 export async function deleteRosterRecord(req, res) {
   const person = await findRosterPerson(req.params.personId);
   if (!person) return res.status(404).json({ message: "Roster record not found." });
-  const linkedRecords = await getLinkedRecordCounts(person._id);
-  if (hasLinkedRecords(linkedRecords)) {
-    return res.status(409).json({ message: "This record has linked clinical history. Archive it to remove it from the active roster while preserving that history.", linkedRecords });
+  const confirmPersonId = String(req.body?.confirmPersonId || "").trim();
+  const personId = String(person.employeeId || person.studentId || "");
+  if (!confirmPersonId || confirmPersonId !== personId) {
+    return res.status(400).json({ message: "Type the exact student or employee ID to confirm permanent deletion." });
   }
-  await person.deleteOne();
-  res.json({ ok: true, message: "Roster record permanently deleted." });
+
+  const appointmentIds = await Appointment.find({ student: person._id }).distinct("_id");
+  const linkedRecords = await getLinkedRecordCounts(person._id);
+  const deletedRecords = {};
+  const remove = async (key, operation) => {
+    const result = await operation;
+    deletedRecords[key] = result.deletedCount || 0;
+  };
+
+  // Remove dependent records first and the patient record last. If a collection
+  // delete fails, the roster record remains so a superadmin can safely retry.
+  await remove("appointmentNotifications", AppointmentNotification.deleteMany({ appointment: { $in: appointmentIds } }));
+  await remove("consultations", ConsultationRecord.deleteMany({ student: person._id }));
+  await remove("documents", ExternalDocument.deleteMany({ student: person._id }));
+  await remove("medicalWorkflows", MedicalWorkflow.deleteMany({ student: person._id }));
+  await remove("medicalProfiles", MedicalProfile.deleteMany({ student: person._id }));
+  await remove("vitals", VitalsLog.deleteMany({ student: person._id }));
+  await remove("queueEntries", QueueEntry.deleteMany({ student: person._id }));
+  await remove("appointments", Appointment.deleteMany({ student: person._id }));
+  await remove("patientHistories", PatientHistory.deleteMany({ student: person._id }));
+  await remove("formSubmissions", SyncLog.deleteMany({
+    $or: [
+      { matchedStudent: person._id },
+      ...(person.studentId ? [{ studentIdRaw: person.studentId }] : []),
+      ...(person.employeeId ? [{ studentIdRaw: person.employeeId }] : []),
+    ],
+  }));
+  await remove("rosterRecord", Student.deleteOne({ _id: person._id }));
+
+  const linkedTotal = Object.values(linkedRecords).reduce((sum, count) => sum + count, 0);
+  res.json({
+    ok: true,
+    message: linkedTotal
+      ? "The roster record and its linked HSO-TAP records were permanently deleted."
+      : "Roster record permanently deleted.",
+    deletedRecords,
+  });
 }
 
 // GET /api/students/lookup/:studentId  (kiosk "Is this your profile?" screen by studentId or rfidTagUid)

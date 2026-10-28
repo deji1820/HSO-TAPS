@@ -185,14 +185,22 @@ export default function AdminPage() {
   async function runRosterAction(action) {
     if (!rosterRecord || rosterAction) return;
     const person = rosterRecord.person;
+    let deleteConfirmation = "";
     const prompts = {
       resetProfile: `Reset ${person.firstName} ${person.lastName}'s profile details and RFID link? Their roster ID and clinical history will be preserved.`,
       resetRfid: `Unlink the RFID card from ${person.firstName} ${person.lastName}?`,
       archive: `Archive ${person.firstName} ${person.lastName} from the active roster? Their clinical history will be preserved.`,
       restore: `Restore ${person.firstName} ${person.lastName} to the active roster? They may need to register their RFID card again.`,
-      delete: `Permanently delete ${person.firstName} ${person.lastName}'s roster record? This cannot be undone.`,
+      delete: `Permanently delete ${person.firstName} ${person.lastName}'s roster record and all linked HSO-TAP clinical records, documents, appointments, and history? This cannot be undone. Copies previously sent by email or stored outside HSO-TAP are not removed.`,
     };
     if (!await appDialog.confirm(prompts[action], "Confirm roster action")) return;
+    if (action === "delete") {
+      deleteConfirmation = String(await appDialog.prompt(`Type ${person.personId} exactly to permanently delete this person and all linked HSO-TAP records.`, "", "Confirm permanent deletion") || "").trim();
+      if (deleteConfirmation !== person.personId) {
+        if (deleteConfirmation) setRosterError("The ID did not match. Nothing was deleted.");
+        return;
+      }
+    }
 
     setRosterAction(true);
     setRosterError("");
@@ -202,8 +210,8 @@ export default function AdminPage() {
         : action === "resetRfid" ? await resetRosterRfid(person.personId)
           : action === "archive" ? await archiveRosterRecord(person.personId)
             : action === "restore" ? await restoreRosterRecord(person.personId)
-              : await deleteRosterRecord(person.personId);
-      setRosterNotice(result.message);
+              : await deleteRosterRecord(person.personId, deleteConfirmation);
+      setRosterNotice(result.message + (result.deletedRecords ? ` Removed ${Object.values(result.deletedRecords).reduce((sum, count) => sum + count, 0)} linked records.` : ""));
       if (action === "delete") setRosterRecord(null);
       else setRosterRecord(await getRosterRecord(person.personId));
     } catch (actionError) {
@@ -375,7 +383,7 @@ export default function AdminPage() {
 
       <h2 className="section-title roster-management-title">Manage Roster Records</h2>
       <section className="card roster-management" aria-label="Roster record management">
-        <p>Search by student or employee ID to reset RFID enrollment, clear profile details, archive or restore a record, or permanently delete a record without linked history.</p>
+        <p>Search by student or employee ID to reset RFID enrollment, clear profile details, archive or restore a record, or permanently delete a record and its linked HSO-TAP history.</p>
         <form className="roster-search-form" onSubmit={searchRosterRecord}>
           <label htmlFor="roster-person-id">Student or employee ID</label>
           <div className="roster-search-row">
@@ -394,7 +402,7 @@ export default function AdminPage() {
               {rosterRecord.person.affiliation === "Student" && <span>Expected year level: {rosterRecord.person.expectedYearLevel || "Unavailable"} · Displayed: {rosterRecord.person.displayYearLevel || "Not assigned"}</span>}
               {rosterRecord.person.yearLevelOverride && <span>Authorized override: {rosterRecord.person.yearLevelOverride} · {rosterRecord.person.yearLevelOverrideReason}</span>}
             </div>
-            {rosterRecord.hasLinkedRecords && <p className="roster-history-note">This record has linked clinical history. Permanent deletion is disabled; archive it to remove it from the active roster.</p>}
+            {rosterRecord.hasLinkedRecords && <p className="roster-history-note">This record has linked clinical history. Permanent deletion removes this person and their linked HSO-TAP records, including documents and clinical history. Email copies and files retained in external systems are not removed.</p>}
             <div className="roster-actions">
               {rosterRecord.person.affiliation === "Student" && <button className="btn btn-outline" type="button" disabled={rosterAction} onClick={editYearLevelOverride}>{rosterRecord.person.yearLevelOverride ? "Edit / remove year-level override" : "Set year-level override"}</button>}
               <button className="btn btn-outline" type="button" disabled={rosterAction || !rosterRecord.person.isActive} onClick={() => runRosterAction("resetProfile")}>{rosterAction ? "Working…" : "Reset profile &amp; RFID"}</button>
@@ -402,7 +410,7 @@ export default function AdminPage() {
               {rosterRecord.person.isActive
                 ? <button className="btn btn-outline" type="button" disabled={rosterAction} onClick={() => runRosterAction("archive")}>Archive</button>
                 : <button className="btn btn-outline" type="button" disabled={rosterAction} onClick={() => runRosterAction("restore")}>Restore to active roster</button>}
-              <button className="btn btn-danger" type="button" disabled={rosterAction || rosterRecord.hasLinkedRecords} onClick={() => runRosterAction("delete")}>Delete permanently</button>
+              <button className="btn btn-danger" type="button" disabled={rosterAction} onClick={() => runRosterAction("delete")}>Delete permanently</button>
             </div>
           </div>
         )}
